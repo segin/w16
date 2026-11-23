@@ -27,6 +27,7 @@ _hInst   dw 0
 vddentry dd 0
 
 extern _grab_init                       ; int __cdecl far grab_init(void)
+extern _grab_exit                       ; void __cdecl far grab_exit(void)
 
 segment ENTRY_TEXT public align=16 class=CODE use16
 
@@ -44,9 +45,20 @@ grab_libentry:
         pop ds
         retf
 
-; WEP(nExitType): nothing to give back
+; WEP(nExitType): free the selectors grab_init allocated
 global WEP
 WEP:
+        push ds
+        push si
+        push di
+        push es
+        mov ax, seg _hInst
+        mov ds, ax
+        call far _grab_exit
+        pop es
+        pop di
+        pop si
+        pop ds
         mov ax, 1
         retf 2
 

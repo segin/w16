@@ -239,12 +239,14 @@ ENABLE:
         push di
         mov ax, DGROUP
         mov ds, ax
+        cli
         les ax, [bp + 10]
         mov [event_proc wrt DGROUP], ax
         mov [event_proc + 2 wrt DGROUP], es
         les di, [bp + 6]
         mov [key_state wrt DGROUP], di
         mov [key_state + 2 wrt DGROUP], es
+        sti
         push ds
         mov ax, __0040H
         mov ds, ax
@@ -549,19 +551,20 @@ xlat_str:
         xlatb
         pop ds
         stosb
+        or al, al
+        jz .done
         or si, si
         jnz .s
         mov dx, ds
         add dx, __AHINCR
         mov ds, dx
 .s:     or di, di
-        jnz .d
+        jnz .l
         mov dx, es
         add dx, __AHINCR
         mov es, dx
-.d:     or al, al
-        jnz .l
-        mov ax, -1
+        jmp .l
+.done:  mov ax, -1
         pop di
         pop si
         pop ds
@@ -856,6 +859,7 @@ GETKEYNAMETEXT:
 .look:  mov ax, seg names
         mov ds, ax
         mov si, names
+        cld
 .n:     mov al, [si]
         cmp al, 0FFh
         je .char
@@ -892,7 +896,6 @@ GETKEYNAMETEXT:
         mov bx, dx
 .cp2:   push cx
         mov cx, bx
-        cld
         rep movsb
         pop cx
         mov byte [es:di], 0
@@ -1023,8 +1026,10 @@ TOASCII:
         xlatb
         pop ds
         cmp al, 0FFh
-        je .chr
-        ; a digit
+        jne .digit
+        mov ax, [bp + 18]
+        jmp .chr
+.digit: ; a digit
         mov cx, DGROUP
         push ds
         mov ds, cx
@@ -1418,6 +1423,7 @@ isr9:
         push es
         mov ax, DGROUP
         mov ds, ax
+        cld
         in al, 60h
         ; the controller's answers (ACK, resend, echo, overrun) are the
         ; BIOS's (DDK: "a command byte"): the BIOS waits for them
@@ -1596,14 +1602,14 @@ key:
         cmp bl, SC_SYSREQ
         jne .ignore
         ; Alt+Print Screen (the enhanced keyboard's 54h): VK_SNAPSHOT, BX
-        ; 0 (the active window; DDK, "Keyboard-Interrupt Handler").
+        ; 1 (the active window; DDK, "Keyboard-Interrupt Handler").
         ; UNVERIFIED: DOSBox under the harness sends no Print Screen.
         test byte [es:KB_FLAG], F_CTRL
         jnz .sr
         test byte [es:KB_FLAG], F_ALT
         jz .sr
         mov al, VK_SNAPSHOT
-        xor bx, bx
+        mov bx, 1
         jmp event
 .sr:
         ; Ctrl+Alt+SysReq: the debugger (EnableKBSysReq), on the make
@@ -1631,16 +1637,22 @@ key:
         ; key that is not a keypad cursor key
         cmp byte [fake_shift wrt DGROUP], 0
         je .nofake
+        or bh, bh
+        jnz .unfake
         cmp bl, 47h
         jb .unfake
         cmp bl, 53h
-        jbe .nofake
+        ja .unfake
+        cmp bl, 4Ah
+        je .unfake
+        cmp bl, 4Eh
+        jne .nofake
 .unfake:
         call restore_shift
 .nofake:
         cmp al, VK_SNAPSHOT
         jne .nosnap
-        mov bx, 1                       ; the whole screen (DDK; UNVERIFIED)
+        xor bx, bx                      ; the whole screen (DDK; UNVERIFIED)
         jmp event
 .nosnap:
         cmp al, VK_CONTROL

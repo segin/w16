@@ -127,7 +127,7 @@ static void dib_read(const BYTE __far *row, LPBITMAPINFOHEADER bi, int x, int n,
             v = row[px];
             break;
         case 24: {
-            const BYTE __far *q = row + px * 3;
+            const BYTE __far *q = row + (WORD)((DWORD)px * 3);
             COLORREF c = RGB(q[2], q[1], q[0]);
             ibuf[i] = (BYTE)(mono ? rgb_mono(c) : rgb_index(c));
             continue;
@@ -203,14 +203,14 @@ static int is_rle(LPBITMAPINFOHEADER bi)
    y + shift (DIBScreenBlt: as if the stream started at line 0) */
 typedef struct {
     SURF *D;
-    int xbase, ybase, shift;
-    int x0, y0, x1, y1;
+    long xbase, ybase, shift;
+    long x0, y0, x1, y1;
     const BYTE *map;
 } RLEDST;
 
 static void rle_put(RLEDST *t, int line, int x, int n)
 {
-    long sx = (long)t->xbase + x, y = (long)t->ybase - line;
+    long sx = t->xbase + x, y = t->ybase - line;
     int a = 0;
     if (y + t->shift < t->y0 || y + t->shift >= t->y1 || y < 0 || y >= t->D->height ||
         sx >= t->x1 || sx + n <= t->x0)
@@ -312,7 +312,7 @@ static void rle_line(const BYTE *vals, int n, int rle4, int w)
         r = 1;
         while (i + r < n && r < (rle4 ? 127 : 255) && vals[i + r] == vals[i])
             r++;
-        if (r >= 2 && pend && pend < 3 && pend + r > 250) {
+        if (r >= 2 && pend && pend < 3 && pend + r > (rle4 ? 120 : 250)) {
             /* too long to take in: the one or two as runs of 1 */
             rle_abs(vals + i - pend, pend, rle4, rle4 ? 2 * pend : pend);
             pend = 0;
@@ -331,7 +331,10 @@ static void rle_line(const BYTE *vals, int n, int rle4, int w)
         pend += r;
         i += r;
         if (pend >= (rle4 ? 120 : 250)) {
-            rle_abs(vals + i - pend, pend, rle4, rle4 ? 2 * pend : pend);
+            int px = rle4 ? 2 * pend : pend;
+            if (rle4 && i == n && (w & 1))
+                px--;
+            rle_abs(vals + i - pend, pend, rle4, px);
             pend = 0;
         }
     }
@@ -354,29 +357,31 @@ static BYTE dib_value(int v, int planes, int bpp)
 static WORD rle_get(SURF *S, LPBYTE bits, LPBITMAPINFOHEADER bi, WORD start, WORD scans, int w)
 {
     static BYTE vals[CHUNK];
-    int rle4 = bi->biCompression == BI_RLE4, y, k, n, i;
+    int rle4 = bi->biCompression == BI_RLE4, step = rle4 ? 2 * CHUNK : CHUNK;
+    int y, x, cw, k, n, i;
     WORD j;
     rle_out = 0;
     rle_bits = bits;
-    if (w > (rle4 ? 2 * CHUNK : CHUNK))
-        w = rle4 ? 2 * CHUNK : CHUNK;   /* UNVERIFIED: wider lines cut */
     for (j = 0; j < scans; j++) {
         y = S->height - 1 - (start + j);
-        n = 0;
-        for (k = 0; k < w; k += CHUNK) {
-            int m = w - k > CHUNK ? CHUNK : w - k;
-            get_indices(S, y, k, m);
-            for (i = 0; i < m; i++) {
-                BYTE v = dib_value(ibuf[i], S->planes, bi->biBitCount);
-                if (!rle4)
-                    vals[n++] = v;
-                else if ((k + i) & 1)
-                    vals[n - 1] |= v;
-                else
-                    vals[n++] = (BYTE)(v << 4);
+        for (x = 0; x < w; x += step) {
+            cw = w - x > step ? step : w - x;
+            n = 0;
+            for (k = 0; k < cw; k += CHUNK) {
+                int m = cw - k > CHUNK ? CHUNK : cw - k;
+                get_indices(S, y, x + k, m);
+                for (i = 0; i < m; i++) {
+                    BYTE v = dib_value(ibuf[i], S->planes, bi->biBitCount);
+                    if (!rle4)
+                        vals[n++] = v;
+                    else if ((k + i) & 1)
+                        vals[n - 1] |= v;
+                    else
+                        vals[n++] = (BYTE)(v << 4);
+                }
             }
+            rle_line(vals, n, rle4, cw);
         }
-        rle_line(vals, n, rle4, w);
         rle_emit(0);
         rle_emit(0);
     }
@@ -431,8 +436,8 @@ WORD EXPORT DeviceBitmapBits(LPVOID lpBitmap, WORD get, WORD start, WORD scans, 
     w = (int)bi->biWidth < S.width ? (int)bi->biWidth : S.width;
     if (start >= (WORD)S.height)
         return 0;
-    if (start + scans > (WORD)S.height)
-        scans = S.height - start;
+    if (scans > (WORD)S.height - start)
+        scans = (WORD)S.height - start;
     if (!get && is_rle(bi)) {
         RLEDST t;
         build_map(bi);
@@ -470,10 +475,14 @@ WORD EXPORT DeviceBitmapBits(LPVOID lpBitmap, WORD get, WORD start, WORD scans, 
         DWORD off = (DWORD)j * stride;
         y = S.height - 1 - (start + j);
         /* the pixels past the width: 0 */
-        for (k = 0; k < (int)stride; k += sizeof lbuf) {
-            WORD m = stride - k > sizeof lbuf ? sizeof lbuf : stride - k;
-            memsetf(lbuf, 0, m);
-            dib_copy(bits, off + k, lbuf, m, 1);
+        {
+            WORD kw = 0;
+            while (kw < stride) {
+                WORD m = stride - kw > sizeof lbuf ? sizeof lbuf : stride - kw;
+                memsetf(lbuf, 0, m);
+                dib_copy(bits, off + kw, lbuf, m, 1);
+                kw += m;
+            }
         }
         for (k = 0; k < w; k += CHUNK) {
             WORD b0, nb;
@@ -506,9 +515,10 @@ WORD EXPORT DeviceBitmapBits(LPVOID lpBitmap, WORD get, WORD start, WORD scans, 
                     break;
                 case 24: {
                     COLORREF c = index_rgb(v);
-                    row[px * 3] = GetBValue(c);
-                    row[px * 3 + 1] = GetGValue(c);
-                    row[px * 3 + 2] = GetRValue(c);
+                    WORD o = (WORD)((DWORD)px * 3);
+                    row[o] = GetBValue(c);
+                    row[o + 1] = GetGValue(c);
+                    row[o + 2] = GetRValue(c);
                     break;
                 }
                 }
@@ -549,47 +559,82 @@ WORD EXPORT DIBScreenBlt(LPVOID lpDev, short X, short Y, WORD scan, WORD scans, 
         return 0;
     stride = dib_stride(bi);
     h = (int)bi->biHeight;
-    r.left = X;
-    r.right = X + (int)bi->biWidth;
-    if (rle) {
-        RLEDST t;
-        r.top = Y;
-        r.bottom = Y + h;
-        if (!clip_rect(&r, clip, 0))
+    {
+        long rl = X, rr = (long)X + bi->biWidth;
+        long rt, rb;
+        if (rle) {
+            RLEDST t;
+            rt = Y;
+            rb = (long)Y + bi->biHeight;
+            if (clip) {
+                if (rl < clip->left) rl = clip->left;
+                if (rt < clip->top) rt = clip->top;
+                if (rr > clip->right) rr = clip->right;
+                if (rb > clip->bottom) rb = clip->bottom;
+            }
+            if (rl >= rr || rt >= rb)
+                return 1;
+            build_map(bi);
+            t.D = &D;
+            t.xbase = X;
+            t.ybase = (long)Y + bi->biHeight - 1;
+            t.shift = scan;
+            t.x0 = rl < 0 ? 0 : rl;
+            t.y0 = rt;
+            t.x1 = rr > D.width ? D.width : rr;
+            t.y1 = rb;
+            t.map = D.planes == 1 ? map_mono : map_idx;
+            if (t.x0 >= t.x1)
+                return 1;
+            {
+                int began = 0;
+                if (D.screen) {
+                    long sy0 = rt - scan, sy1 = rb;
+                    if (sy0 < 0) sy0 = 0;
+                    if (sy1 > D.height) sy1 = D.height;
+                    if (sy0 < sy1) {
+                        scr_begin((int)t.x0, (int)sy0, (int)t.x1, (int)sy1);
+                        began = 1;
+                    }
+                }
+                rle_decode(bits, bi, scan, scan + h, &t);
+                if (began)
+                    scr_end();
+            }
             return 1;
-        build_map(bi);
-        t.D = &D;
-        t.xbase = X;
-        t.ybase = Y + h - 1;
-        t.shift = scan;
-        t.x0 = r.left < 0 ? 0 : r.left;
-        t.y0 = r.top;
-        t.x1 = r.right > D.width ? D.width : r.right;
-        t.y1 = r.bottom;
-        t.map = D.planes == 1 ? map_mono : map_idx;
-        if (D.screen)
-            scr_begin(t.x0, r.top - (int)scan < 0 ? 0 : r.top - (int)scan, t.x1, r.bottom);
-        rle_decode(bits, bi, scan, scan + h, &t);
-        if (D.screen)
-            scr_end();
-        return 1;
+        }
+        rb = (long)Y + bi->biHeight - scan;
+        rt = rb - scans;
+        if (clip) {
+            if (rl < clip->left) rl = clip->left;
+            if (rt < clip->top) rt = clip->top;
+            if (rr > clip->right) rr = clip->right;
+            if (rb > clip->bottom) rb = clip->bottom;
+        }
+        if (rl < 0) rl = 0;
+        if (rt < 0) rt = 0;
+        if (rr > D.width) rr = D.width;
+        if (rb > D.height) rb = D.height;
+        if (rl >= rr || rt >= rb)
+            return 0;
+        r.left = (short)rl;
+        r.top = (short)rt;
+        r.right = (short)rr;
+        r.bottom = (short)rb;
     }
-    r.bottom = Y + h - scan;
-    r.top = r.bottom - scans;
-    if (!clip_rect(&r, clip, &D))
-        return 0;
     build_map(bi);
     if (D.screen)
         scr_begin(r.left, r.top, r.right, r.bottom);
     x0 = r.left;
     x1 = r.right;
     for (j = 0; j < scans; j++) {
-        y = Y + h - 1 - (scan + j);
-        if (y < r.top || y >= r.bottom)
+        long yl = (long)Y + bi->biHeight - 1 - ((long)scan + j);
+        if (yl < r.top || yl >= r.bottom)
             continue;
+        y = (int)yl;
         for (k = x0; k < x1; k += CHUNK) {
             n = x1 - k > CHUNK ? CHUNK : x1 - k;
-            dib_read_at(bits, (DWORD)j * stride, bi, k - X, n, D.planes == 1);
+            dib_read_at(bits, (DWORD)j * stride, bi, (int)((long)k - X), n, D.planes == 1);
             put_indices(&D, y, k, n, ibuf);
         }
     }

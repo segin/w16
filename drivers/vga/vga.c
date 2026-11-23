@@ -128,7 +128,6 @@ WORD EXPORT Enable(LPVOID lpDevice, WORD style, LPCSTR type, LPCSTR file, LPVOID
         trail_boot();
     }
     hw_enable();
-    enabled = 1;
     background = 0;
     cursor_init();
     if (winflags & WF_ENHANCED)
@@ -151,9 +150,9 @@ WORD EXPORT Disable(LPVOID lpDevice)
 {
     (void)lpDevice;
     unhook2f();
+    enabled = 0;
     cursor_off();
     save_discard();
-    enabled = 0;
     background = 0;
     hw_disable();
     return 1;
@@ -418,16 +417,15 @@ void __cdecl __far scr_switch(WORD ax)
     if (ax == 0x4001) {
         if (!enabled)
             return;
-        cursor_off();
-        save_discard();
         enabled = 0;
         background = 1;
+        cursor_off();
+        save_discard();
     } else if (ax == 0x4002) {
         /* also without a 4001h before it (the DDK: after errors) */
         if (!enabled && !background)
             return;
         background = 0;
-        enabled = 1;
         scr_reset();
         cursor_init();
         if (repaint_off)

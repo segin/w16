@@ -125,6 +125,7 @@ disable_save:
 
 ; BL: the swap drive's letter (FFh none); ES:DI the swap files' template
 set_swap_drive:
+        cld
         push si
         push di
         push cx
@@ -204,6 +205,7 @@ mode_kind:
 ; further fields in the reserved part, as 3.1's grabber fills them) at
 ; ES:DI; AX 1 in a text mode, 0 in a graphics mode
 get_info:
+        cld
         push bx
         push cx
         push si
@@ -307,6 +309,7 @@ GR_YEXT  equ 7
 GR_STYLE equ 8
 
 get_block:
+        cld
         push bx
         push cx
         push dx
@@ -336,7 +339,10 @@ get_block:
         mov ds, ax
         mov cx, [4Ah]           ; columns
         mov dl, [84h]           ; rows - 1
-        inc dl
+        or dl, dl
+        jnz .rows
+        mov dl, 24
+.rows:  inc dl
         mov si, [4Eh]           ; the page's start
         push cs
         pop ds
@@ -735,8 +741,10 @@ save_screen:
         cmp cx, TEXTMAX
         jbe .tl
         mov cx, TEXTMAX
-.tl:    mov ax, 0B800h
-        cmp byte [es:SV_MODE], 7
+.tl:    mov al, [es:SV_MODE]
+        and al, 7Fh
+        cmp al, 7
+        mov ax, 0B800h
         jne .ts
         mov ax, 0B000h
 .ts:    push ds
@@ -818,6 +826,8 @@ make_file:
         mov bx, di
 .c1:    or al, al
         jnz .c
+        cmp bx, SV_FILE + 80 - 13
+        ja .no
         push ds
         mov ax, 40h
         mov ds, ax

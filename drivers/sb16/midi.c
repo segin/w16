@@ -137,7 +137,7 @@ static void shortmsg(DWORD m)
     n = datalen(s);
     for (i = 0; i < n; i++)
         mpu_out(d[i] & 0x7F);
-    if ((s & 0xF0) == 0x90 && d[1])
+    if ((s & 0xF0) == 0x90 && (d[1] & 0x7F))
         mo.on[s & 15][(d[0] & 0x7F) >> 3] |= (BYTE)(1 << (d[0] & 7));
     else if ((s & 0xF0) == 0x80 || (s & 0xF0) == 0x90)
         mo.on[s & 15][(d[0] & 0x7F) >> 3] &= (BYTE)~(1 << (d[0] & 7));
@@ -259,8 +259,10 @@ static void sysexbyte(BYTE b, DWORD t)
     LPMHDR h = mi.head;
     if (!h)
         return;                         /* no buffer: the byte is lost */
-    sb_hcopy((LPSTR)&b, h->lpData, h->dwBytesRecorded, 1, 1);
-    h->dwBytesRecorded++;
+    if (h->dwBytesRecorded < h->dwBufferLength) {
+        sb_hcopy((LPSTR)&b, h->lpData, h->dwBytesRecorded, 1, 1);
+        h->dwBytesRecorded++;
+    }
     if (b == 0xF7 || h->dwBytesRecorded >= h->dwBufferLength)
         longdone(t);
 }
@@ -402,12 +404,22 @@ DWORD ENTRY MIDMESSAGE(WORD dev, WORD msg, DWORD user, DWORD p1, DWORD p2)
         mi.sysex = 0;
         return 0;
     case MIDM_RESET:
-        f = sb_cli();
-        mi.started = 0;
-        mi.sysex = 0;
-        sb_sti(f);
-        while (mi.head)
-            longdone(TIMEGETTIME() - mi.t0);
+        {
+            LPMHDR list, next;
+            f = sb_cli();
+            mi.started = 0;
+            mi.sysex = 0;
+            list = mi.head;
+            mi.head = mi.tail = 0;
+            sb_sti(f);
+            while (list) {
+                next = list->lpNext;
+                list->lpNext = 0;
+                list->dwFlags = (list->dwFlags & ~MHDR_INQUEUE) | MHDR_DONE;
+                notify(&mi.cb, MM_MIM_LONGDATA, (DWORD)list, TIMEGETTIME() - mi.t0);
+                list = next;
+            }
+        }
         return 0;
     }
     return MMSYSERR_NOTSUPPORTED;
