@@ -28,22 +28,32 @@
  *   of the ink within a zone goes to the zone's reference line rounded to
  *   the pixel grid, or to its overshoot line, which is the reference plus
  *   the overshoot rounded: under half a pixel it is suppressed.
- * - Stem widths: rounded to whole pixels, at least one; a stem within a
- *   fifth of the font's standard width (the stems of l or I across x, of o
- *   across y) takes the standard width first, so equal stems come out
- *   equal. A stem with one edge already placed has the other at that
- *   width from it; a free stem is centred where it was, its edges on the
- *   grid; edges that are not linked are interpolated between the placed
- *   ones and rounded.
+ * - Stem widths: whole pixels, at least one; a stem within a fifth of the
+ *   font's standard width (the stems of l or I across x, of o across y)
+ *   takes the standard width first, so equal stems come out equal. Rounded
+ *   up only from 0.66 of a pixel in a regular face (1.5-pixel stems made 2
+ *   would set it in bold), from 0.375 in a bold one (OS/2 weight 600 or
+ *   more), so that it stays bolder. A stem with one edge already placed
+ *   has the other at that width from it; a free stem is centred where it
+ *   was, its edges on the grid; across x a free stem after the first keeps
+ *   its distance from the one before, rounded (so that a round glyph's two
+ *   sides do not both go outward). Edges that are not linked are
+ *   interpolated between the placed ones and rounded.
  * - The edges stay in order (an edge is never moved below the one under
  *   it), and inside the glyph's pixel box (the unhinted outline's, which
  *   is within ttfx_GetGlyphBitmapBox's): advance widths and boxes never
  *   change, the hinting only moves points within the box.
- * - Every point (on the curve or a control point) then moves by the
- *   piecewise-linear map that takes the edges' positions to their fitted
- *   ones: a point on an edge lands exactly on it, points between edges
- *   are interpolated, points outside them shift with the nearest. The map
- *   is monotonic, so the outline never folds.
+ * - The points: those of an edge's segments move with the edge; the rest
+ *   of their contour is interpolated between them along it, as TrueType's
+ *   IUP instruction does (in proportion between the two touched points on
+ *   either side when between them, else moved with the nearer); a contour
+ *   without any follows the piecewise-linear map that takes the edges'
+ *   positions to their fitted ones. Interpolating along the contour keeps
+ *   a round stroke's outer curve with its own extreme, where the map would
+ *   pull it toward the inner edge's move.
+ * - With TTFX_HINT_DROPOUT the scan converter (ttfx.c) adds rule 3 along
+ *   rows: a stroke thinner than a pixel that holds no pixel centre turns
+ *   on the pixel its middle is in.
  *
  * All integer: font units, 26.6 pixels and 8.24 scales; 80286 code
  * (tests/ttf/cpu286.sh). Memory: the scaled points (16 bytes a vertex) and
@@ -56,6 +66,7 @@
 #define HMAXSEG 160                     /* segments (and edges) a direction */
 #define HMAXPPEM 255
 #define HEND 0xFFFFu                    /* the end of a contour in the order */
+#define HNEXT(i, m) ((i) + 1 == (m) ? 0 : (i) + 1)  /* (i + 1) mod m, no division */
 
 typedef struct {
     ttfx_i16 pos, lo, hi;               /* across; the extent along (font units) */
@@ -161,7 +172,7 @@ static int hpiece(const ttfx_vertex TTFX_FAR *v, ttfx_u16 p, ttfx_u16 q, int a)
    minlen the shortest kept */
 static void hsegments(hctx *h, int a, ttfx_i32 minlen)
 {
-    unsigned k = 0, s, m, j, k0, jfirst = 0, jlast = 0;
+    unsigned k = 0, s, m, j, k0, kj, kfirst = 0, jfirst = 0, jlast = 0;
     h->nseg = 0;
     while (k < h->nord) {
         int dir = 0, cl, prev;
@@ -175,17 +186,17 @@ static void hsegments(hctx *h, int a, ttfx_i32 minlen)
             continue;
         /* start after a break: a piece across, or a change of direction */
         for (k0 = 0; k0 < m; k0++)
-            if (hpiece(h->v, h->ord[s + k0], h->ord[s + (k0 + 1) % m], a) == 2)
+            if (hpiece(h->v, h->ord[s + k0], h->ord[s + HNEXT(k0, m)], a) == 2)
                 break;
         if (k0 == m) {
             prev = 0;
             for (j = 0; j < m; j++) {
-                cl = hpiece(h->v, h->ord[s + j], h->ord[s + (j + 1) % m], a);
+                cl = hpiece(h->v, h->ord[s + j], h->ord[s + HNEXT(j, m)], a);
                 if (cl)
                     prev = cl;
             }
             for (k0 = 0; k0 < m; k0++) {
-                cl = hpiece(h->v, h->ord[s + k0], h->ord[s + (k0 + 1) % m], a);
+                cl = hpiece(h->v, h->ord[s + k0], h->ord[s + HNEXT(k0, m)], a);
                 if (cl && cl != prev)
                     break;
                 if (cl)
@@ -194,12 +205,12 @@ static void hsegments(hctx *h, int a, ttfx_i32 minlen)
             if (k0 == m)
                 continue;               /* all one way: nothing */
         }
-        for (j = 0; j <= m; j++) {
+        for (j = 0, kj = k0; j <= m; j++, kj = HNEXT(kj, m)) {
             ttfx_u16 p = 0, q = 0;
             cl = 2;
             if (j < m) {
-                p = h->ord[s + (k0 + j) % m];
-                q = h->ord[s + (k0 + j + 1) % m];
+                p = h->ord[s + kj];
+                q = h->ord[s + HNEXT(kj, m)];
                 cl = hpiece(h->v, p, q, a);
                 if (!cl)
                     continue;
@@ -224,7 +235,7 @@ static void hsegments(hctx *h, int a, ttfx_i32 minlen)
                 g->link = g->edge = -1;
                 g->cs = (ttfx_u16)s;
                 g->cm = (ttfx_u16)m;
-                g->first = (ttfx_u16)((k0 + jfirst) % m);
+                g->first = (ttfx_u16)kfirst;
                 g->npts = (ttfx_u16)(jlast - jfirst + 2);
             }
             dir = 0;
@@ -233,6 +244,7 @@ static void hsegments(hctx *h, int a, ttfx_i32 minlen)
                 ttfx_i32 pl = hcoord(h->v, p, !a), ql = hcoord(h->v, q, !a);
                 dir = cl;
                 jfirst = jlast = j;
+                kfirst = kj;
                 amin = pa < qa ? pa : qa;
                 amax = pa < qa ? qa : pa;
                 lmin = pl < ql ? pl : ql;
@@ -345,6 +357,7 @@ static void hfit(hctx *h, int a, ttfx_scale s, ttfx_i32 o, ttfx_i32 lo, ttfx_i32
     const ttfx_font *f = h->f;
     hedge TTFX_FAR *e = h->edge;
     int n = h->nedge, i, z, more;
+    ttfx_i32 shift = 0;                 /* (x) how far the last free stem moved */
     ttfx_i32 sw = f->stdw[a] ? ttfx_Scale26(f->stdw[a], s) : 0;
     ttfx_i32 fuzz = f->unitsPerEm / 40;
     /* the blue zones: an edge on the zone's side of the ink, from a little
@@ -376,7 +389,11 @@ static void hfit(hctx *h, int a, ttfx_scale s, ttfx_i32 o, ttfx_i32 lo, ttfx_i32
             }
         }
     /* stems: from an edge placed to its link (either way), until none
-       moves; then the lowest free stem centred, and again */
+       moves; then the lowest free stem centred, and again. Across x a
+       free stem after the first keeps its distance from the one before,
+       rounded (it moves by as much as that one did, then to the grid):
+       rounding each on its own could widen a glyph by a pixel, its sides
+       going out both ways */
     do {
         do {
             more = 0;
@@ -399,8 +416,10 @@ static void hfit(hctx *h, int a, ttfx_scale s, ttfx_i32 o, ttfx_i32 lo, ttfx_i32
             if (l >= 0 && !(e[i].flags & HE_SET) && !(e[l].flags & HE_SET)) {
                 hedge TTFX_FAR *p = e[i].g < e[l].g ? &e[i] : &e[l], TTFX_FAR *q = p == &e[i] ? &e[l] : &e[i];
                 ttfx_i32 w = hwidth(q->g - p->g, sw, f->hint_up);
-                p->fit = hround((p->g + q->g - w) >> 1);
+                p->fit = hround(((p->g + q->g - w) >> 1) + shift);
                 q->fit = p->fit + w;
+                if (!a)
+                    shift = ((p->fit + q->fit) - (p->g + q->g)) >> 1;
                 p->flags |= HE_SET | HE_ANCHOR;
                 q->flags |= HE_SET | HE_ANCHOR;
                 more = 1;
@@ -539,9 +558,9 @@ static void hdim(hctx *h, ttfx_point TTFX_FAR *pt, int nv, int a, ttfx_scale s, 
         for (i = 0; i < h->nseg; i++) {
             const hseg TTFX_FAR *g = &h->seg[i];
             ttfx_i32 d = h->edge[g->edge].fit - h->edge[g->edge].g;
-            unsigned t;
-            for (t = 0; t < g->npts; t++) {
-                ttfx_u16 p = h->ord[g->cs + (g->first + t) % g->cm];
+            unsigned t, u;
+            for (t = 0, u = g->first; t < g->npts; t++, u = HNEXT(u, g->cm)) {
+                ttfx_u16 p = h->ord[g->cs + u];
                 hset(pt, p, a, org[p] + d);
                 tch[p] = 1;
             }
@@ -567,10 +586,10 @@ static void hdim(hctx *h, ttfx_point TTFX_FAR *pt, int nv, int a, ttfx_scale s, 
             t = t0;
             do {
                 ttfx_u16 p1 = h->ord[cs + t], p2;
-                for (t2 = (t + 1) % m; !tch[h->ord[cs + t2]]; t2 = (t2 + 1) % m)
+                for (t2 = HNEXT(t, m); !tch[h->ord[cs + t2]]; t2 = HNEXT(t2, m))
                     ;
                 p2 = h->ord[cs + t2];
-                for (u = (t + 1) % m; u != t2; u = (u + 1) % m) {
+                for (u = HNEXT(t, m); u != t2; u = HNEXT(u, m)) {
                     ttfx_u16 p = h->ord[cs + u];
                     hset(pt, p, a, hiup(org[p], org[p1], hget(pt, p1, a), org[p2], hget(pt, p2, a)));
                 }

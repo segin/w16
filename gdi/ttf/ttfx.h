@@ -63,7 +63,8 @@ typedef unsigned (*ttfx_readfn)(void *user, ttfx_u32 off, void TTFX_FAR *dst, un
 /* the autohinter's flags (ttfx_font.hint, ttfx_SetHinting) */
 #define TTFX_HINT_Y 1                   /* vertical: blue zones, horizontal stems */
 #define TTFX_HINT_X 2                   /* horizontal: vertical stems */
-#define TTFX_HINT_DEFAULT (TTFX_HINT_Y | TTFX_HINT_X)
+#define TTFX_HINT_DROPOUT 4             /* the scan converter's rule 3, along rows */
+#define TTFX_HINT_DEFAULT (TTFX_HINT_Y | TTFX_HINT_X | TTFX_HINT_DROPOUT)
 #define TTFX_HINT_ZONES 5
 
 typedef struct ttfx_font {
@@ -165,8 +166,12 @@ void ttfx_FreeShape(const ttfx_font *f, ttfx_vertex TTFX_FAR *v);
 
 /* render-time hinting (ttfhint.c): flags TTFX_HINT_* (0: off). Hinting
    moves outline points only, within the pixel box ttfx_GetGlyphBitmapBox
-   gives; metrics (advance widths, boxes) never change. It applies to
-   ttfx_Flatten, ttfx_Rasterize and ttfx_RenderGlyph */
+   gives; metrics (advance widths, boxes) never change. X and Y apply to
+   ttfx_Flatten, ttfx_Rasterize and ttfx_RenderGlyph; DROPOUT to the last
+   two: a run of a row between two pixel centres, inside the outline but
+   holding no centre (a stroke thinner than a pixel), turns on the pixel
+   its middle is in (the TrueType specification's rule 3 along rows, as a
+   font's instructions would ask for at small sizes) */
 void ttfx_SetHinting(ttfx_font *f, int flags);
 
 /* the pixel box a glyph's outline can touch, at scale sx, sy and shift
