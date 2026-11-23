@@ -113,18 +113,28 @@ static void close_font(void)
 }
 
 /* /G: the font added to Windows (3.1 and later), through a .FOT made for
-   it; 0 if it cannot be */
+   it: 1, else 0 and why in g_fotwhy. (GDI's exported names are upper
+   case, as the NE format keeps them) */
 typedef BOOL (FAR PASCAL *CSFR)(UINT, LPCSTR, LPCSTR, LPCSTR);
+static const char *g_fotwhy = "";
 static int add_font(void)
 {
-    FARPROC p = GetProcAddress(GetModuleHandle("GDI"), "CreateScalableFontResource");
+    FARPROC p = GetProcAddress(GetModuleHandle("GDI"), "CREATESCALABLEFONTRESOURCE");
     OFSTRUCT of;
-    if (!p)
+    if (!p) {
+        g_fotwhy = "no CreateScalableFontResource";
         return 0;
+    }
     OpenFile(FOT, &of, OF_DELETE);
-    if (!((CSFR)p)(0, FOT, g_path, NULL))
+    if (!((CSFR)p)(0, FOT, g_path, NULL)) {
+        g_fotwhy = "CreateScalableFontResource failed";
         return 0;
-    return AddFontResource(FOT) > 0;
+    }
+    if (AddFontResource(FOT) <= 0) {
+        g_fotwhy = "AddFontResource failed";
+        return 0;
+    }
+    return 1;
 }
 
 /* the page, hinted or not, g_reps times; the time it took */
@@ -287,7 +297,7 @@ static void write_log(void)
     lg(" ms, unhinted ");
     lgnum(g_msu);
     lg(" ms\r\nshown ");
-    lg(g_gdi ? (g_fot ? "Windows' TextOut" : "nothing: no CreateScalableFontResource")
+    lg(g_gdi ? (g_fot ? "Windows' TextOut" : g_fotwhy)
              : g_unhinted ? "unhinted" : "hinted");
     lg("\r\n");
     h = _lcreat("C:\\TTVIEW.LOG", 0);

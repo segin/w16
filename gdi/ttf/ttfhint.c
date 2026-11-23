@@ -90,6 +90,7 @@ typedef struct {
 typedef struct {
     const ttfx_font *f;
     const ttfx_vertex TTFX_FAR *v;
+    const ttfx_i16 TTFX_FAR *uc;        /* point p's font units: [2p] x, [2p + 1] y */
     ttfx_u16 TTFX_FAR *ord;             /* points in contour order: 2i vertex i's, 2i+1 its control */
     unsigned nord;
     hseg TTFX_FAR *seg;
@@ -109,12 +110,32 @@ static ttfx_i32 hround(ttfx_i32 v)
 }
 
 /* a coordinate of point p in font units: axis 0 x, 1 y */
-static ttfx_i32 hcoord(const ttfx_vertex TTFX_FAR *v, ttfx_u16 p, int axis)
+#define HC(h, p, axis) ((ttfx_i32)(h)->uc[2 * (unsigned)(p) + (axis)])
+
+/* the points' font units in one array (hctx.uc): 8 bytes a vertex */
+static ttfx_i16 TTFX_FAR *hunits(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv)
 {
-    const ttfx_vertex TTFX_FAR *q = v + (p >> 1);
-    if (p & 1)
-        return axis ? q->cy : q->cx;
-    return axis ? q->y : q->x;
+    ttfx_i16 TTFX_FAR *u = (ttfx_i16 TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)nv * 8);
+    int i;
+    if (u)
+        for (i = 0; i < nv; i++) {
+            u[4 * i] = v[i].x;
+            u[4 * i + 1] = v[i].y;
+            u[4 * i + 2] = v[i].type == TTFX_vcurve ? v[i].cx : v[i].x;
+            u[4 * i + 3] = v[i].type == TTFX_vcurve ? v[i].cy : v[i].y;
+        }
+    return u;
+}
+
+/* a * b / c (c > 0) to nearest: in one multiply and one divide when the
+   product is small (the 80286 has no 32-bit ones: each is a call) */
+static ttfx_i32 hmuldiv(ttfx_i32 a, ttfx_i32 b, ttfx_i32 c)
+{
+    ttfx_i32 p;
+    if (a > 0x7FFFL || a < -0x7FFFL || b > 0x7FFFL || b < -0x7FFFL)
+        return ttfx_MulDivRound(a, b, c);
+    p = a * b;
+    return (p >= 0 ? p + (c >> 1) : p - (c >> 1)) / c;
 }
 
 /* the contours' points in order, each contour ended by HEND; the start
@@ -148,7 +169,7 @@ static int hflip(const hctx *h)
     while (k < h->nord) {
         for (s = k; h->ord[k] != HEND; k++) {
             ttfx_u16 p = h->ord[k], q = h->ord[h->ord[k + 1] == HEND ? s : k + 1];
-            a += ((hcoord(h->v, p, 0) + hcoord(h->v, q, 0)) >> 4) * ((hcoord(h->v, q, 1) - hcoord(h->v, p, 1)) >> 4);
+            a += ((HC(h, p, 0) + HC(h, q, 0)) >> 4) * ((HC(h, q, 1) - HC(h, p, 1)) >> 4);
         }
         k++;
     }
@@ -158,12 +179,13 @@ static int hflip(const hctx *h)
 
 /* the piece from p to q across axis a: 0 nothing (no length), +1 or -1
    along (its direction along), 2 across */
-static int hpiece(const ttfx_vertex TTFX_FAR *v, ttfx_u16 p, ttfx_u16 q, int a)
+static int hpiece(const hctx *h, ttfx_u16 p, ttfx_u16 q, int a)
 {
-    ttfx_i32 da = hcoord(v, q, a) - hcoord(v, p, a), dl = hcoord(v, q, !a) - hcoord(v, p, !a);
+    ttfx_i32 da = HC(h, q, a) - HC(h, p, a), dl = HC(h, q, !a) - HC(h, p, !a);
     if (!da && !dl)
         return 0;
-    if (habs(da) * 12 <= habs(dl))
+    da = habs(da);
+    if ((da << 3) + (da << 2) <= habs(dl))      /* |da| * 12, no multiply */
         return dl > 0 ? 1 : -1;
     return 2;
 }
@@ -186,17 +208,17 @@ static void hsegments(hctx *h, int a, ttfx_i32 minlen)
             continue;
         /* start after a break: a piece across, or a change of direction */
         for (k0 = 0; k0 < m; k0++)
-            if (hpiece(h->v, h->ord[s + k0], h->ord[s + HNEXT(k0, m)], a) == 2)
+            if (hpiece(h, h->ord[s + k0], h->ord[s + HNEXT(k0, m)], a) == 2)
                 break;
         if (k0 == m) {
             prev = 0;
             for (j = 0; j < m; j++) {
-                cl = hpiece(h->v, h->ord[s + j], h->ord[s + HNEXT(j, m)], a);
+                cl = hpiece(h, h->ord[s + j], h->ord[s + HNEXT(j, m)], a);
                 if (cl)
                     prev = cl;
             }
             for (k0 = 0; k0 < m; k0++) {
-                cl = hpiece(h->v, h->ord[s + k0], h->ord[s + HNEXT(k0, m)], a);
+                cl = hpiece(h, h->ord[s + k0], h->ord[s + HNEXT(k0, m)], a);
                 if (cl && cl != prev)
                     break;
                 if (cl)
@@ -211,12 +233,12 @@ static void hsegments(hctx *h, int a, ttfx_i32 minlen)
             if (j < m) {
                 p = h->ord[s + kj];
                 q = h->ord[s + HNEXT(kj, m)];
-                cl = hpiece(h->v, p, q, a);
+                cl = hpiece(h, p, q, a);
                 if (!cl)
                     continue;
             }
             if (dir && cl == dir) {     /* the run goes on */
-                ttfx_i32 qa = hcoord(h->v, q, a), ql = hcoord(h->v, q, !a);
+                ttfx_i32 qa = HC(h, q, a), ql = HC(h, q, !a);
                 if (qa < amin) amin = qa;
                 if (qa > amax) amax = qa;
                 if (ql < lmin) lmin = ql;
@@ -240,8 +262,8 @@ static void hsegments(hctx *h, int a, ttfx_i32 minlen)
             }
             dir = 0;
             if (cl == 1 || cl == -1) {  /* a new run */
-                ttfx_i32 pa = hcoord(h->v, p, a), qa = hcoord(h->v, q, a);
-                ttfx_i32 pl = hcoord(h->v, p, !a), ql = hcoord(h->v, q, !a);
+                ttfx_i32 pa = HC(h, p, a), qa = HC(h, q, a);
+                ttfx_i32 pl = HC(h, p, !a), ql = HC(h, q, !a);
                 dir = cl;
                 jfirst = jlast = j;
                 kfirst = kj;
@@ -440,7 +462,7 @@ static void hfit(hctx *h, int a, ttfx_scale s, ttfx_i32 o, ttfx_i32 lo, ttfx_i32
                 for (next = i + 1; next < n && !(e[next].flags & HE_ANCHOR); next++)
                     ;
             if (prev >= 0 && next < n && e[next].g != e[prev].g)
-                fit = e[prev].fit + ttfx_MulDivRound(e[i].g - e[prev].g, e[next].fit - e[prev].fit,
+                fit = e[prev].fit + hmuldiv(e[i].g - e[prev].g, e[next].fit - e[prev].fit,
                                                      e[next].g - e[prev].g);
             else if (prev >= 0)
                 fit = e[i].g + e[prev].fit - e[prev].g;
@@ -478,22 +500,12 @@ static ttfx_i32 hmap(const hedge TTFX_FAR *e, int n, ttfx_i32 g)
         else
             r = m;
     }
-    return e[l].fit + ttfx_MulDivRound(g - e[l].g, e[r].fit - e[l].fit, e[r].g - e[l].g);
+    return e[l].fit + hmuldiv(g - e[l].g, e[r].fit - e[l].fit, e[r].g - e[l].g);
 }
 
 /* a point's coordinate a on the grid with y up (-y) */
-static ttfx_i32 hget(const ttfx_point TTFX_FAR *pt, unsigned i, int a)
-{
-    return a ? -pt[i].y : pt[i].x;
-}
-
-static void hset(ttfx_point TTFX_FAR *pt, unsigned i, int a, ttfx_i32 c)
-{
-    if (a)
-        pt[i].y = -c;
-    else
-        pt[i].x = c;
-}
+#define hget(pt, i, a) ((a) ? -(pt)[i].y : (pt)[i].x)
+#define hset(pt, i, a, c) ((a) ? ((pt)[i].y = -(c)) : ((pt)[i].x = (c)))
 
 /* c, between points at a1 and a2 that moved to n1 and n2: in proportion
    between them, else with the nearer */
@@ -511,7 +523,7 @@ static ttfx_i32 hiup(ttfx_i32 c, ttfx_i32 a1, ttfx_i32 n1, ttfx_i32 a2, ttfx_i32
         return c + n1 - a1;
     if (c >= a2)
         return c + n2 - a2;
-    return n1 + ttfx_MulDivRound(c - a1, n2 - n1, a2 - a1);
+    return n1 + hmuldiv(c - a1, n2 - n1, a2 - a1);
 }
 
 /* hint one direction: a 0 x (vertical stems), 1 y (horizontal ones and
@@ -676,9 +688,10 @@ static ttfx_i16 hstdw(ttfx_font *f, const char *cs, int a)
         return 0;
     h.f = f;
     h.v = v;
+    h.uc = hunits(f, v, nv);
     h.ord = (ttfx_u16 TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)nv * 6 + 2);
     h.seg = (hseg TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)HMAXSEG * sizeof(hseg));
-    if (h.ord && h.seg) {
+    if (h.uc && h.ord && h.seg) {
         h.nord = horder(v, nv, h.ord);
         h.flip = hflip(&h);
         hsegments(&h, a, f->unitsPerEm / 100);
@@ -694,6 +707,8 @@ static ttfx_i16 hstdw(ttfx_font *f, const char *cs, int a)
         ttfx_free(f->alloc, h.seg);
     if (h.ord)
         ttfx_free(f->alloc, h.ord);
+    if (h.uc)
+        ttfx_free(f->alloc, (void TTFX_FAR *)h.uc);
     ttfx_FreeShape(f, v);
     return (ttfx_i16)w;
 }
@@ -754,10 +769,11 @@ ttfx_point TTFX_FAR *ttfx__HintPoints(const ttfx_font *cf, const ttfx_vertex TTF
         hfont(f);
     h.f = f;
     h.v = v;
+    h.uc = hunits(f, v, nv);
     h.ord = (ttfx_u16 TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)nv * 6 + 2);
     h.seg = (hseg TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)HMAXSEG * sizeof(hseg));
     h.edge = (hedge TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)HMAXSEG * sizeof(hedge));
-    if (h.ord && h.seg && h.edge) {
+    if (h.uc && h.ord && h.seg && h.edge) {
         h.nord = horder(v, nv, h.ord);
         h.flip = hflip(&h);
         if (f->hint & TTFX_HINT_Y)
@@ -771,5 +787,7 @@ ttfx_point TTFX_FAR *ttfx__HintPoints(const ttfx_font *cf, const ttfx_vertex TTF
         ttfx_free(f->alloc, h.seg);
     if (h.ord)
         ttfx_free(f->alloc, h.ord);
+    if (h.uc)
+        ttfx_free(f->alloc, (void TTFX_FAR *)h.uc);
     return pt;
 }
