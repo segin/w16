@@ -103,7 +103,7 @@
 #              (DOSBox's own DOS), `WIN /3` (WIN.COM's logo, no /B), the DOS
 #              Prompt full screen must be a text screen, EXIT, then Exit
 #              Windows must bring the DOS prompt back (dosbox386plain.txt)
-#   win386audit  the WIN386 audit's probes (docs/notes/win386-audit-triage.md):
+#   win386audit  the WIN386 audit's probes (its triage file, in git history):
 #              VX11 (tests/apps/vx11.c) as the shell in 386 Enhanced mode
 #              under Windows 3.1's WIN386 and under w16's, the OBS lines
 #              identical (runs main, E, L, M); runs P and S, which 3.1 does
@@ -124,6 +124,10 @@
 #              against Microsoft's WIN386
 #   win386dospif  the MS-DOS Prompt from a PIF that starts windowed (mkpif.py
 #              windowed=1): the window, VER, full screen, VER, window, EXIT
+#   win386hdd  w16's WIN386 on MS-DOS 4.00 (INPUTRUN_HDD), WIN /3 with VX11
+#              as the shell: Windows starts (MS-DOS 4.00 takes interrupts
+#              inside DOS calls, unlike DOSBox's DOS) and VX11's observations,
+#              440Dh's track I/O (M8) among them, are Windows 3.1's there
 #   win386dosprobe  VX12 in the MS-DOS Prompt (V86 API entries, 80x50 and
 #              40x25 windows) against Microsoft's WIN386; A20 off through
 #              the 8042 and port 92h must not end w16 (it ends 3.1)
@@ -916,7 +920,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386idle win386xms vsd bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms vsd bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1883,6 +1887,39 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
         fi
         if [ "$r" = ok ]; then echo "ok   win386audit: VX11 as under Windows 3.1's WIN386, its P and S runs survived; VXP's callback chain as 3.1's"
         else echo "FAIL win386audit: $r"; fails=$((fails + 1)); fi ;;
+    win386hdd)
+        k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+        sed 's/^run=\r\{0,1\}$/run=C:\\VX11.EXE\r/' "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" > "$out/win386hdd.ini"
+        # TK.LOG and BOOTLOG.TXT's last line to the output, not the 64 MB image
+        hddvx11() {
+            _hn=$1; shift
+            rm -rf "$out/$_hn"
+            INPUTRUN_HDD=1 INPUTRUN_KEYDELAY=150 DROPIN_MACHINE=svga_s3 timeout 400 "$root/tests/inputrun.sh" -b 120 -t 200 \
+                "$root/tests/scripts/input/wait40.txt" "$out/$_hn" -r -p 386 -c "WIN /3 /B" \
+                -f "$k386=WINDOWS/SYSTEM/KRNL386.EXE" -f "$root/build/dos/VX11.EXE=VX11.EXE" \
+                -f "$out/win386hdd.ini=WINDOWS/WIN.INI" "$@" > "$out/$_hn.run" 2>&1 || true
+            tr -d '\r' < "$out/$_hn/work/c/TK.LOG" 2>/dev/null
+            grep -a '^INITDONE=Final USER' "$out/$_hn/work/c/WINDOWS/BOOTLOG.TXT" 2>/dev/null | tr -d '\r'
+            rm -f "$out/$_hn/work/hdd.img"
+        }
+        refrun win386hdd-ref win386hdd hddvx11 win386hdd-ref
+        hddvx11 win386hdd-w16 -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" > "$out/win386hdd-w16.txt"
+        grep '^OBS [^~]' "$out/win386hdd-ref.txt" > "$out/win386hdd-ref.obs" || true
+        grep '^OBS [^~]' "$out/win386hdd-w16.txt" > "$out/win386hdd-w16.obs" || true
+        r=ok
+        if ! grep -q '^INITDONE=Final USER' "$out/win386hdd-w16.txt"; then
+            r="Windows did not start under w16's WIN386 on MS-DOS 4.00 ($out/win386hdd-w16.run)"
+        elif ! grep -q '^VX11 done' "$out/win386hdd-w16.txt"; then
+            r="VX11 did not finish ($out/win386hdd-w16.txt)"
+        elif ! grep -q '^OBS io.61.data=0001' "$out/win386hdd-w16.obs"; then
+            r="440Dh 61h read no data ($out/win386hdd-w16.obs)"
+        elif [ ! -s "$out/win386hdd-ref.obs" ]; then
+            r="no reference observations ($out/win386hdd-ref.txt)"
+        elif ! cmp -s "$out/win386hdd-ref.obs" "$out/win386hdd-w16.obs"; then
+            r="$(diff "$out/win386hdd-ref.obs" "$out/win386hdd-w16.obs" | grep -c '^[<>]') observation line(s) differ from 3.1's ($out/win386hdd-ref.obs, win386hdd-w16.obs)"
+        fi
+        if [ "$r" = ok ]; then echo "ok   win386hdd: Windows on MS-DOS 4.00 under w16's WIN386, VX11 (440Dh track I/O too) as under 3.1's"
+        else echo "FAIL win386hdd: $r"; fails=$((fails + 1)); fi ;;
     win386woa)
         # w16's WINOA386.MOD (and WIN386) on Windows 3.1 against Microsoft's
         # (the same references as win386switch and win386exitbox)

@@ -1,6 +1,7 @@
 ; vx12.asm - VX12.COM: what a DOS program in a DOS box sees in 386
-; Enhanced mode, for the WIN386 audit's last items (docs/notes/
-; win386-audit-triage.md); run in the MS-DOS Prompt by the input scripts
+; Enhanced mode, for the WIN386 audit's last items (its triage file,
+; docs/notes/win386-audit-triage.md, is in git history); run in the
+; MS-DOS Prompt by the input scripts
 ; tests/scripts/input/vx12*.txt under Windows 3.1's WIN386 and w16's.
 ; Black box: what ports, interrupts and memory give back (ARCHITECTURE.md
 ; 3). Each run prints its lines and writes them to VX12.LOG in the current

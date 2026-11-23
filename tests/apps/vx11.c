@@ -1,8 +1,9 @@
 /*
  * vx11.c - VX11.EXE: what Windows 3.1's DPMI host in 386 Enhanced mode
- * does with the calls the WIN386 audit asked about
- * (docs/notes/win386-audit-triage.md). Run as the shell (tests/refrun.sh
- * VX11.EXE /3) under Windows 3.1's WIN386 and under w16's; logs to TK.LOG.
+ * does with the calls the WIN386 audit asked about (its triage file,
+ * docs/notes/win386-audit-triage.md, is in git history). Run as the shell
+ * (tests/refrun.sh VX11.EXE /3) under Windows 3.1's WIN386 and under
+ * w16's; logs to TK.LOG.
  * The file name picks the run: VX11.EXE the main one (calls a program may
  * make); VX11E, VX11P, VX11L, VX11S, VX11M the ones that might end
  * Windows (a freed selector in ES, a pointer into nothing, past a limit,

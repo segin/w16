@@ -292,7 +292,8 @@ void make_user(u32 lin, u32 size)
  * writable when write)? The VMM's own accesses to a client's memory go
  * through this first, so that a bad pointer fails the call instead of
  * faulting in ring 0 (where Windows 3.1 itself ends: probe VX11 runs P
- * and S, docs/notes/win386-audit-triage.md). */
+ * and S; the WIN386 audit's triage file, docs/notes/
+ * win386-audit-triage.md, in git history). */
 int lin_user_ok(u32 lin, u32 len, int write)
 {
     u32 a, end, pde, pte, need = write ? 7 : 5;
@@ -426,8 +427,11 @@ struct execctx {
     u16 saved_refsp;
     struct cregs res;
     struct cregs *v;
+    struct vm *vm;                      /* the VM the call runs in */
+    u16 sp0;                            /* its frame's SP on the reflection stack (0: elsewhere) */
 };
 static struct execctx *cur_exec;
+#define REFSTK_GAP 256                  /* trap(): below a call that left the reflection stack */
 int exec_trace;
 int vm_trace;                           /* [w16] vmmtrace=2: the DOS VMs' trace */
 
@@ -443,8 +447,10 @@ void exec_v86(struct cregs *v)
     c.saved_hw_r = hw_r;
     if (!k_setjmp((u32 *)c.jb)) {
         cur_exec = (struct execctx *)&c;
-        if ((u16)v->ss == cur_vm->refstk_seg && (u16)v->esp < cur_vm->refsp)
-            cur_vm->refsp = (u16)v->esp;
+        c.vm = cur_vm;
+        c.sp0 = (u16)v->ss == cur_vm->refstk_seg ? (u16)v->esp : 0;
+        if (c.sp0 && c.sp0 < cur_vm->refsp)
+            cur_vm->refsp = c.sp0;
         kesp0 = ((u32)&c - 512) & ~15u;
         tss_set_esp0(kesp0);
         cur_vm->r = *v;
@@ -993,6 +999,17 @@ void __cdecl trap(struct tframe *f)
      * boots under load, while fonts loaded). */
     if ((r->eflags & EFL_VM) && (u16)r->ss == cur_vm->refstk_seg && (u16)r->esp < cur_vm->refsp)
         cur_vm->refsp = (u16)r->esp;
+    /* the same when the code has left the reflection stack: MS-DOS 4.00
+     * saves its caller's registers on the caller's stack, switches to its
+     * own and enables interrupts. A hardware interrupt taken there whose
+     * protected-mode handler reflects an interrupt of its own (the display
+     * driver's INT 2Fh 4003h/4004h) built that frame at the nested call's
+     * start, over DOS's saved registers: the call came back with garbage
+     * in them and KRNL386 faulted after closing BOOTLOG.TXT. A gap below
+     * the call's frame keeps what the code pushed before switching. */
+    else if ((r->eflags & EFL_VM) && cur_exec && cur_exec->vm == cur_vm && cur_exec->sp0
+             && (u16)(cur_exec->sp0 - REFSTK_GAP) < cur_vm->refsp)
+        cur_vm->refsp = (u16)(cur_exec->sp0 - REFSTK_GAP);
     /* the state VPICD simulates interrupts into, for the whole trap: a
      * device called during it (an I/O handler, a hot key) may set a
      * request, which must go to this state (taken now if it has
