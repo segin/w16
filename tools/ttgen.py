@@ -52,6 +52,7 @@ sys.path.insert(0, os.path.join(ROOT, 'fonts', 'tt'))
 import w16ttf  # noqa: E402
 import ttgeom as G  # noqa: E402
 import design  # noqa: E402
+import tthint  # noqa: E402
 
 REF = os.path.join(ROOT, 'tests', 'fonts', 'fn4ref.txt')
 VERSION = '1.00'
@@ -59,6 +60,7 @@ VERSION = '1.00'
 CREATED = 2082844800 + 1795305600
 
 PREP = os.environ.get('W16TT_PREP', '1') != '0'
+HINT = os.environ.get('W16TT_HINT', '1') != '0'
 CC0_URL = 'https://creativecommons.org/publicdomain/zero/1.0/'
 LICENSE = 'CC0 1.0 Universal public domain dedication: no rights reserved.'
 
@@ -337,6 +339,26 @@ class Face:
         sh = G.move(sh, L - x0, 0)
         return G.fit(self.clamp(sh, ch, L, R))
 
+    def hint(self, f):
+        """TrueType instructions for every glyph (tools/tthint.py): blue
+        zones from the design's heights, stems from the outlines"""
+        s = self.s
+        ov = s.ov
+        zones = [(0, -ov, -1), (s.desc, s.desc - ov, -1), (s.xh, s.xh + ov, 1),
+                 (s.cap, s.cap + ov, 1)]
+        if abs(s.asc - s.cap) > 8:
+            zones.append((s.asc, s.asc + ov, 1))
+        maxw_y = max(s.sv, s.svc, s.sh, s.shc) * 1.6
+        maxw_x = max(s.sv, s.svc) * 1.6
+        h = tthint.Hinter(self.em, zones, maxw_y, maxw_x, do_x=True)
+        h.learn([g.contours for g in f.glyphs])
+        for g in f.glyphs:
+            g.instructions = h.glyph(g.contours)
+        f.cvt = h.cvt
+        f.prep = h.prep()
+        f.fpgm = tthint.fpgm()
+        self.hinter = h
+
     def clamp(self, sh, ch, L, R):
         """keep the ink within the reference's (L..R; an accented letter:
         its own reference's, which counts the accent) by narrowing the
@@ -393,6 +415,8 @@ class Face:
             f.cmap[ord(ch)] = gid
             dev[gid] = self.device_widths(ch)
         f.cmap[0x2219] = f.cmap[0xB7]
+        if HINT:
+            self.hint(f)
         self.gid = {ch: f.cmap[ord(ch)] for ch in self.chars}
         # metrics
         # 3.1 reports these negative values one nearer zero than the file
@@ -436,7 +460,7 @@ class Face:
         # rasterizer's dropout control on at every size (PUSHW 511,
         # SCANCTRL; PUSHB 1, SCANTYPE: simple dropout control), so thin
         # strokes stay at small sizes in 3.1's monochrome rendering
-        if PREP:
+        if PREP and not HINT:
             f.prep = bytes([0xB8, 0x01, 0xFF, 0x85, 0xB0, 0x01, 0x8D])
         f.revision = float(VERSION)
         full = self.family if self.style == 'Regular' else '%s %s' % (self.family, self.style)

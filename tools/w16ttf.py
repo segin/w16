@@ -11,8 +11,8 @@ code is used. Used by tools/ttgen.py (w16's TrueType fonts, ARCHITECTURE.md
 Writing: build a Font (glyphs with quadratic contours, metrics, names) and
 call Font.build() for the file's bytes. Only what w16 needs:
 
-  - simple glyphs (no composites, no glyph instructions), loca long;
-    optionally a prep table (given as bytes);
+  - simple glyphs (no composites; instructions as given), loca long;
+    optionally prep and cvt tables (given);
   - cmap: one (3,1) format 4 subtable (Unicode BMP);
   - OS/2 version 1, hhea, hmtx, maxp 1.0, head, name (platform 3,
     Unicode, US English), post 2.0 (glyph names), gasp 1, kern 0
@@ -55,6 +55,7 @@ class Glyph:
         self.name = name
         self.advance = int(advance)
         self.contours = [list(c) for c in contours if len(c) >= 2]
+        self.instructions = b''                 # TrueType bytecode
 
     def bbox(self):
         pts = [p for c in self.contours for p in c]
@@ -78,7 +79,7 @@ class Glyph:
             n += len(c)
             ends.append(n - 1)
         out += struct.pack('>%dH' % len(ends), *ends)
-        out += struct.pack('>H', 0)            # no instructions
+        out += struct.pack('>H', len(self.instructions)) + self.instructions
         flags = []
         xs = b''
         ys = b''
@@ -161,6 +162,9 @@ class Font:
         self.bbox_min = None      # head bbox at least this (x0, y0, x1, y1)
         self.typo_metrics = False
         self.prep = b''            # control value program (bytecode)
+        self.cvt = []              # control values (FWORDs)
+        self.fpgm = b''            # font program
+        self.max_stack = 32
 
     # ------------------------------------------------------------ tables
     def _head(self, bbox, loca_long):
@@ -190,7 +194,8 @@ class Font:
         return struct.pack('>IHHHHHHHHHHHHHH', 0x00010000, len(self.glyphs),
                            max(g.npoints() for g in self.glyphs),
                            max(len(g.contours) for g in self.glyphs),
-                           0, 0, 2, 0, 0, 0, 0, 8 if self.prep else 0, 0, 0, 0)
+                           0, 0, 2, 0, 0, 2 if self.fpgm else 0, 0, self.max_stack,
+                           max(len(g.instructions) for g in self.glyphs), 0, 0)
 
     def _os2(self):
         if self.avg_width is not None:
@@ -384,6 +389,10 @@ class Font:
             tables[b'VDMX'] = self._vdmx()
         if self.prep:
             tables[b'prep'] = self.prep
+        if self.fpgm:
+            tables[b'fpgm'] = self.fpgm
+        if self.cvt:
+            tables[b'cvt '] = struct.pack('>%dh' % len(self.cvt), *self.cvt)
         return assemble(tables)
 
 
@@ -401,6 +410,8 @@ def assemble(tables):
     body = b''
     for t in tags:
         d = tables[t]
+        if t == b'head':
+            d = d[:8] + b'\0\0\0\0' + d[12:]     # checkSumAdjustment set below
         dirs += struct.pack('>4sIII', t, checksum(d), off + len(body), len(d))
         body += _pad4(d)
     font = bytearray(head + dirs + body)
@@ -714,8 +725,6 @@ def check(b, expect_glyphs=None):
             for c in cs:
                 if len(c) < 3:
                     errs.append('glyph %d has a contour of %d points' % (i, len(c)))
-        if g.get('instructions'):
-            errs.append('glyph %d has instructions' % i)
     if hd['xmin'] > bx[0] or hd['ymin'] > bx[1] or hd['xmax'] < bx[2] or hd['ymax'] < bx[3]:
         errs.append('head bbox %s does not hold the glyphs %s' % ((hd['xmin'], hd['ymin'], hd['xmax'], hd['ymax']), bx))
     if f['maxp']['maxpoints'] != mp or f['maxp']['maxcontours'] != mc:

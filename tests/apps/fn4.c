@@ -608,6 +608,41 @@ static void show_col(HDC dc, const char *face, int x, int w, int top, int bottom
     }
 }
 
+/* pages 4-15: one face (Arial, Arial Bold, Arial Italic, Arial Bold
+   Italic, then Times New Roman's and Courier New's four), a line at each
+   of 8, 9, 10, 11, 12, 14, 16, 18 and 24 pt in Microsoft's face and below
+   it the same line in w16's */
+static void show_sizes(HDC dc, int f, int width)
+{
+    static const int pts[] = { 8, 9, 10, 11, 12, 14, 16, 18, 24, 0 };
+    static const char line[] = "The quick brown fox jumps over the lazy dog. HOMBURG 0123456789";
+    char label[64];
+    int y = 2, i, k;
+    HFONT h, old;
+    TEXTMETRIC t;
+    SetBkMode(dc, TRANSPARENT);
+    lstrcpy(label, msfaces[f].face);
+    lstrcat(label, " / ");
+    lstrcat(label, ours[f].face);
+    lstrcat(label, msfaces[f].wt == 700 ? (msfaces[f].it ? " bold italic" : " bold") : (msfaces[f].it ? " italic" : ""));
+    TextOut(dc, 4, y, label, lstrlen(label));
+    y += 18;
+    for (i = 0; pts[i]; i++) {
+        for (k = 0; k < 2; k++) {
+            const facespec *fs = k ? &ours[f] : &msfaces[f];
+            h = mkfont(-MulDiv(pts[i], 96, 72), fs->face, fs->wt, fs->it);
+            old = SelectObject(dc, h);
+            GetTextMetrics(dc, &t);
+            TextOut(dc, 4, y, line, lstrlen(line));
+            y += t.tmHeight;
+            SelectObject(dc, old);
+            DeleteObject(h);
+        }
+        y += 3;
+    }
+    (void)width;
+}
+
 LRESULT CALLBACK _export show_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     static const char *const ms[] = { "Arial", "Times New Roman", "Courier New" };
@@ -619,8 +654,12 @@ LRESULT CALLBACK _export show_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         int half;
         GetClientRect(h, &rc);
         half = rc.right / 2;
-        show_col(dc, ms[showpage], 6, half - 12, 4, rc.bottom);
-        show_col(dc, w16[showpage], half + 6, half - 12, 4, rc.bottom);
+        if (showpage >= 3)
+            show_sizes(dc, showpage - 3, rc.right);
+        else {
+            show_col(dc, ms[showpage], 6, half - 12, 4, rc.bottom);
+            show_col(dc, w16[showpage], half + 6, half - 12, 4, rc.bottom);
+        }
         EndPaint(h, &ps);
         return 0;
     }
@@ -682,8 +721,11 @@ int __cdecl tmain(void)
         tail += 4;
         while (*tail == ' ')
             tail++;
-        if (*tail >= '1' && *tail <= '3')
-            page = *tail - '1';
+        while (*tail >= '0' && *tail <= '9')
+            page = page * 10 + *tail++ - '0';
+        if (page < 1 || page > 15)
+            page = 1;
+        page--;
         out("FN4 show\r\n");
         i = show(page);
         remove_ours();
