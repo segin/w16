@@ -708,7 +708,16 @@ void vm_event(struct vm *v, void (*fn)(struct vm *, void *), void *arg)
         ;
     *pp = e;
     v->idle = 0;
+    hb_ev_q++;
     if (v != cur_vm) { boost = v; resched = 1; }
+}
+
+u32 vm_events_waiting(void)
+{
+    struct vmev *e;
+    u32 n = 0;
+    for (e = events; e; e = e->next) n++;
+    return n;
 }
 
 int dpmi_in_handler(void);
@@ -779,6 +788,7 @@ static void run_events(struct cregs *r)
         if (e->vm != cur_vm || !events_ok(r)) { pp = &e->next; continue; }
         *pp = e->next;
         o = vmm_trap_state(r);
+        hb_ev_run++;
         e->fn(e->vm, e->arg);
         vmm_trap_state(o);
         kfree(e);

@@ -92,6 +92,17 @@ struct vm_cb {
 
 /* The virtual machines: the System VM (sysvm), which alone runs a DPMI
  * client (KRNL386), and the DOS VMs (vm.c). */
+/* a VM's channel 0 of the 8254 (VTD, vxd.c); all 0: the BIOS's (65536
+ * counts, mode 3, both bytes) */
+struct vtimer {
+    u32 count;              /* its period in counts (0: not written yet) */
+    u32 acc;                /* counts since its period began */
+    u16 latch;              /* a latched count */
+    u8 mode, rw;            /* the control word's mode and access (1 low, 2 high, 3 both) */
+    u8 wstate, wlow;        /* a count's low byte written, waiting for the high */
+    u8 rstate, latched;     /* the next byte read is the high one; latched bytes left */
+};
+
 struct vm {
     struct cregs r;         /* the current state */
     int pm;                 /* a DPMI client exists */
@@ -142,6 +153,7 @@ struct vm {
     u32 exit_code;          /* its program's exit code (VM stub) */
     int ended;              /* its program has ended */
     struct vm *free_next;   /* destroyed, kept for the next VM */
+    struct vtimer vt;       /* its timer (VTD) */
 };
 
 extern struct w386_info *info;
@@ -266,6 +278,12 @@ void vm_release(void);              /* Release_Time_Slice, INT 2Fh 1680h */
 #define IDLE_WAKE 7000              /* ms: a released Background VM runs again (Windows 3.1: ~7 s) */
 u32 vmm_system_time(void);          /* vxd.c: Get_System_Time, ms */
 u32 vmm_last_time(void);            /* Get_Last_Updated_System_Time */
+u32 vtd_io(u32 port, u32 out, u32 data);    /* vxd.c: a VM's byte at port 40h or 43h */
+/* the heartbeat's counts of timing work since the last (vxd.c, vm.c):
+ * time-outs set and run, device events queued and run, nested far calls */
+extern u32 hb_tmo_set, hb_tmo_run, hb_ev_q, hb_ev_run, hb_nest;
+u32 vtd_heartbeat(u32 *tmos);       /* the real timer's period in counts */
+u32 vm_events_waiting(void);
 void vm_set_focus(struct vm *v);    /* the execution focus */
 extern struct vm *vm_focus;
 int vm_service(u32 svc, struct svcregs *s);

@@ -42,10 +42,15 @@ struct loc { struct loc *next; u32 vm; };
 struct ioh { u32 port, proc; int on; struct loc *off; };
 static struct ioh *iohs;
 static u32 n_iohs, max_iohs;
+/* each port's handler (its index + 1, 0 none): a trap found it by
+ * searching every installed port (VDMAD's, VSBD's ...: a hundred), a
+ * fifth of a trapped IN's time (ARCHITECTURE.md 12.14) */
+static u16 *port_ix;
 
 static struct ioh *find(u32 port)
 {
     u32 i;
+    if (port_ix) return port <= 0xFFFF && port_ix[port] ? &iohs[port_ix[port] - 1] : NULL;
     for (i = 0; i < n_iohs; i++)
         if (iohs[i].port == port) return &iohs[i];
     return NULL;
@@ -53,7 +58,9 @@ static struct ioh *find(u32 port)
 
 static int install(u32 port, u32 proc)
 {
-    if (port > 0xFFFF || find(port)) return 0;
+    /* 40h and 43h are VTD's (vxd.c): Windows 3.1 refused them too (VSD's
+     * probe, ARCHITECTURE.md 12.8) */
+    if (port > 0xFFFF || find(port) || port == 0x40 || port == 0x43) return 0;
     if (n_iohs == max_iohs) {           /* no fixed limit (ZOI): grow */
         u32 n = max_iohs ? max_iohs * 2 : 32;
         struct ioh *t = kmalloc(n * sizeof(*t));
@@ -67,6 +74,12 @@ static int install(u32 port, u32 proc)
     iohs[n_iohs].on = 1;
     iohs[n_iohs].off = NULL;
     n_iohs++;
+    if (!port_ix && (port_ix = kmalloc(65536 * sizeof(u16))) != NULL) {
+        u32 i;
+        memset(port_ix, 0, 65536 * sizeof(u16));
+        for (i = 0; i < n_iohs; i++) port_ix[iohs[i].port] = (u16)(i + 1);
+    } else if (port_ix)
+        port_ix[port] = (u16)n_iohs;
     io_trap_bit(port, 1);
     return 1;
 }
@@ -180,8 +193,12 @@ static u32 simulate(u32 port, u32 type, u32 data, struct client_regs *c)
 /* one access: the port's handler if it is trapped, else Simulate_IO */
 static u32 dispatch(u32 port, u32 type, u32 data, struct client_regs *c)
 {
-    struct ioh *h = find(port);
+    struct ioh *h;
     struct svcregs s;
+    /* the 8254's channel 0: VTD's virtual timer (a byte at a time) */
+    if ((port == 0x40 || port == 0x43) && !(type & (IO_SIZE | IO_STRING)))
+        return vtd_io(port, type & IO_OUTPUT, data);
+    h = find(port);
     if (!h || !trapped(h, vm_handle())) return simulate(port, type, data, c);
     memset(&s, 0, sizeof(s));
     s.eax = data;

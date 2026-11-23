@@ -284,6 +284,9 @@ static void deliver_pending(void)
     int irq;
     vu32 vm = CUR();
     struct vpic *vp = VP(vm);
+    /* nothing requested and unmasked: at once (every trap ends here; the
+     * priority walk was a third of a trapped IN's time, 12.14) */
+    if (!((vp->req | vp->def_req) & ~vp->imr & 0xFFFF)) return;
     while ((irq = next_irq(vp)) >= 0) {
         struct virq *v = owner[irq];
         int want_iret = v && v->d.iret_proc;
@@ -453,6 +456,14 @@ static int has_pending(void)
     struct vpic *vp = VP(CUR());
     if (!((vp->req | vp->def_req) & ~vp->imr)) return 0;   /* nothing asked: at once */
     return next_irq(vp) >= 0;
+}
+
+/* the heartbeat's look at a VM's PIC */
+static void pic_state(vu32 vm, vu32 *o)
+{
+    struct vpic *vp = VP(vm);
+    o[0] = vp->imr; o[1] = vp->isr; o[2] = vp->req; o[3] = vp->def_req;
+    o[4] = phys_isr; o[5] = (vu32)vp->n_irets;
 }
 
 /* the VMM is about to resume the VM */
@@ -726,6 +737,7 @@ void __cdecl vpicd_control(struct vregs *r)
         sys_vm = r->ebx;
         cb_off = vmm_alloc_cb_area(sizeof(struct vpic), 0);
         vpicd_link.pending = has_pending;
+        vpicd_link.state = pic_state;
         /* the 8259s keep their masks until the System VM is set up */
         dos_masks = inb(0x21) | (inb(0xA1) << 8);
         VP(sys_vm)->base[0] = vpicd_link.rm_base1;

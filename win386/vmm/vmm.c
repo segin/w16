@@ -91,10 +91,16 @@ static void set_gate(int vec, u32 handler, int dpl)
 }
 
 /* ---- small library ---- */
+/* dwords, then the bytes left (REP STOSD, REP STOSB): every trap clears a
+ * struct svcregs or two, byte by byte before (ARCHITECTURE.md 12.14) */
+static void fill_fast(void *d, u32 v, u32 n);
+#pragma aux fill_fast = \
+    "mov edx, ecx" "shr ecx, 2" "rep stosd" "mov ecx, edx" "and ecx, 3" "rep stosb" \
+    parm [edi] [eax] [ecx] modify exact [ecx edx edi];
+
 void memset(void *d, int c, u32 n)
 {
-    u8 *p = d;
-    while (n--) *p++ = (u8)c;
+    fill_fast(d, (u8)c * 0x01010101u, n);
 }
 
 /* dwords, then the bytes left (REP MOVSD, REP MOVSB) */
@@ -647,6 +653,11 @@ static void exit_windows(struct cregs *r)
 {
     trace("VMM: exit, code %x\n", AX(r) & 0xFF);
     vxd_exit(r);
+    /* the timer's channel 0 as the BIOS keeps it (VTD ran it in mode 2,
+     * at whatever period the VMs needed) */
+    outb(0x43, 0x36);
+    outb(0x40, 0);
+    outb(0x40, 0);
     info->exit_code = AX(r);
     info->ret_ss = (u16)r->ss;
     info->ret_sp = (u16)r->esp;
@@ -950,7 +961,7 @@ static int cli_sti_fast(struct tframe *f)
     return 1;
 }
 
-/* A heartbeat in the trace every 20 s of timer ticks (BIOS rate): where the
+/* A heartbeat in the trace every 20 s of system time: where the
  * System VM is, how deep the nested calls go and how many of each
  * hardware interrupt came, so that a hang shows where it is. */
 static u32 irq_count[16], hb_ticks, hb_n;
@@ -958,12 +969,29 @@ static u32 irq_count[16], hb_ticks, hb_n;
 static void heartbeat(struct cregs *r)
 {
     int i;
-    hb_ticks = 0;
+    hb_ticks = vmm_last_time();
     trace("VMM: heartbeat %d in VM %d at %s %x:%x fl %x, depth %d, PM last %x:%x, irqs",
           ++hb_n, cur_vm->id, (r->eflags & EFL_VM) ? "V86" : "PM", r->cs, r->eip, r->eflags,
           exec_depth(), sysvm.last_cs, sysvm.last_ip);
     for (i = 0; i < 16; i++) if (irq_count[i]) trace(" %d:%d", i, irq_count[i]);
-    trace(", PIC masks %x %x, trapped I/O %d, traps", inb(0x21), inb(0xA1), io_traps);
+    trace(", PIC masks %x %x, trapped I/O %d", inb(0x21), inb(0xA1), io_traps);
+    {   /* the timing work: the real timer's period, time-outs (set, run,
+         * waiting), device events (queued, run, waiting), nested far
+         * calls, whether a handler runs on the host stack */
+        u32 nt, pc = vtd_heartbeat(&nt);
+        trace(", timer %d, tmo %d/%d/%d, events %d/%d/%d, nest %d, handler %d", pc,
+              hb_tmo_set, hb_tmo_run, nt, hb_ev_q, hb_ev_run, vm_events_waiting(), hb_nest,
+              dpmi_in_handler());
+        hb_tmo_set = hb_tmo_run = hb_ev_q = hb_ev_run = hb_nest = 0;
+    }
+    if (vpicd && vpicd->state) {
+        /* the System VM's virtual PIC: mask, in service, requests
+         * (devices', VPICD's), physically in service, IRETs waited for */
+        u32 o[6];
+        vpicd->state(VMH(&sysvm), o);
+        trace(", vpic %x/%x/%x/%x phys %x irets %d", o[0], o[1], o[2], o[3], o[4], o[5]);
+    }
+    trace(", traps");
     for (i = 0; i < TK_N; i++)
         if (tk_count[i]) {
             if (i < 512) trace(" %c%x:%d", i < 256 ? 'v' : 'p', i & 0xFF, tk_count[i]);
@@ -1077,18 +1105,20 @@ void __cdecl trap(struct tframe *f)
         u32 irq = vec - IRQ_BASE;
         irq_count[irq]++;
         if (vm_trace && irq == 1) trace("(K%d)", cur_vm->id);
-        if (irq == 0 && ++hb_ticks >= 182 * 2) heartbeat(r);
+        /* (by the system time: the real timer may run faster than the
+         * BIOS's 18.2 Hz, VTD) */
+        if (irq == 0 && vmm_last_time() - hb_ticks >= 20000) heartbeat(r);
         vpicd->hw_int(irq);
     } else if (vec == 13 && !(r->eflags & EFL_VM) && (op = code_ptr(r)) == NULL) {
         dpmi_exception(r, 13, f->err);  /* code the VMM cannot read: the client's fault */
     } else if (vec == 13) {
         if (f->err & 2) {
             /* INT n through a DPL 0 gate: CD n, CC (INT 3) or CE (INTO) */
-            op = code_ptr(r);
+            if (r->eflags & EFL_VM) op = code_ptr(r);  /* (protected mode: above) */
             r->eip += (op[0] == 0xCD) ? 2 : 1;
             software_int(r, f->err >> 3);
         } else {
-            op = code_ptr(r);
+            if (r->eflags & EFL_VM) op = code_ptr(r);
             if (op[0] == 0xF4) {
                 if (!(r->eflags & EFL_VM) && r->cs == SEL_PMBP) {
                     tk_count[TK_PMBP]++;

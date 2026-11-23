@@ -110,6 +110,10 @@ struct vpicd_link {
     /* VPICD's (set at Sys_Critical_Init): has the current VM a request it
      * would take once its interrupts are on (the VMM's CLI/STI fast path) */
     int (*pending)(void);
+    /* VPICD's: VM vm's virtual PIC for the VMM's heartbeat (out: its
+     * mask, in service, devices' requests, VPICD's own requests; the
+     * IRQs physically in service; IRETs waited for) */
+    void (*state)(vu32 vm, vu32 *out);
 };
 
 /* The VMM and w16's REBOOT: the DDB's reference data points at a struct

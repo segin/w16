@@ -162,14 +162,35 @@ static u32 vtd_requests[16], vtd_nreq;
 /* VTD takes IRQ 0 through VPICD (VPICD_Virtualize_IRQ, then
  * VPICD_Physically_Unmask: the ticks keep coming whatever the VM masks),
  * ends each tick on the hardware at once (VPICD_Phys_EOI) and passes it
- * to the System VM (VPICD_Set_Int_Request); the VM's EOI clears the
- * request (VID_EOI_Proc). The timer is not reprogrammed yet: the System
- * VM sees every tick, unless several come while it is still in its
- * handler (they are one request). Each tick also runs the VMM's
- * time-outs. */
+ * to the VMs whose own timer has run out (VPICD_Set_Int_Request); a VM's
+ * EOI clears its request (VID_EOI_Proc).
+ *
+ * The 8254's channel 0 is virtual (ARCHITECTURE.md 12.14): ports 40h and
+ * 43h are trapped (as Windows 3.1's VTD has them: VSD's probe could not
+ * install a handler there, 12.8), each VM programs a timer of its own
+ * (struct vtimer: the BIOS's 65536 counts, mode 3, until it writes one),
+ * and the real channel 0 runs at the shortest period anyone needs: a
+ * VM's timer or a device's VTD_Begin_Min_Int_Period. Each real interrupt
+ * adds its counts to every VM's timer and to the system time, and a VM
+ * gets a tick when its own period is over (one request at most: a VM
+ * that has not taken the last loses the next, UNVERIFIED what Windows
+ * 3.1 does). A read of port 40h gives the VM its own counter. Channels 1
+ * and 2 (43h's control words for them, the speaker's 42h) go to the
+ * hardware. Before, the ports were the hardware's: w16's TIMER.DRV set
+ * the real timer to 1 ms, the VMM counted every interrupt as 54.9 ms
+ * (time-outs, VPICD's IRET time-outs, the scheduler's slices all 55
+ * times too fast), and a device's VTD_Begin_Min_Int_Period changed
+ * nothing: Windows 3.1's VTDAPI.386, whose events are VMM time-outs, then
+ * called them at most every 55 ms. */
 extern u8 vtd_hw_entry[], vtd_eoi_entry[];
 static struct vid vtd_vid;
 static u32 vtd_irq;                     /* VPICD's handle */
+#define PIT_HZ      1193182u            /* the 8254's input clock */
+static u32 phys_count = 65536;          /* the real channel 0's period (counts) */
+static u32 phys_ms = VTD_SLOWEST;       /* that in ms for VTD_Get_Interrupt_Period */
+static u32 phys_skip;                   /* the next interrupt belongs to the old period */
+static u32 tot_lo, tot_hi;              /* counts since the start (VTD_Get_Real_Time) */
+static u32 sched_acc;                   /* counts toward the scheduler's next 54.9 ms */
 
 static u32 svc_slot(u32 dev, u32 svc)
 {
@@ -196,6 +217,203 @@ static void vpicd_call(u32 svc, u32 eax, u32 ebx)
     vmm_call_proc(svc_slot(3, svc), &s);
 }
 
+/* ---- the VMM's time-outs (Set_Global_Time_Out, Cancel_Time_Out; the
+ * DDK's descriptions), looked at on every real timer interrupt (every
+ * millisecond while someone has asked for VTD_Begin_Min_Int_Period 1);
+ * the callback gets EBX the current VM, ECX the milliseconds since it was
+ * due, EDX its reference data, EBP the client registers ---- */
+struct tmo { struct tmo *next; u32 magic, due, proc, ref, tick; };
+static u32 tmo_ticks;                       /* real timer interrupts so far */
+#define TMO_MAGIC 0x4F4D4954u               /* "TIMO" */
+static struct tmo *tmos;
+static u32 sys_ms, sys_frac;                /* time since start: ms, and counts x 1000 */
+u32 hb_tmo_set, hb_tmo_run, hb_ev_q, hb_ev_run, hb_nest;
+
+static void tmo_tick(void)
+{
+    struct tmo **pp, *t;
+    struct svcregs s;
+    tmo_ticks++;
+    for (pp = &tmos; (t = *pp) != NULL; ) {
+        /* one set during this tick (by a callback here: a 0 ms time-out
+         * set again each time ran for ever) waits for the next */
+        if ((s32)(sys_ms - t->due) < 0 || t->tick == tmo_ticks) { pp = &t->next; continue; }
+        *pp = t->next;                      /* done: unlinked before it runs */
+        t->magic = 0;
+        hb_tmo_run++;
+        memset(&s, 0, sizeof(s));
+        s.ebx = VMH(cur_vm);
+        s.ecx = sys_ms - t->due;
+        s.edx = t->ref;
+        s.ebp = (u32)cur_vm->client;
+        vmm_call_proc(t->proc, &s);
+        kfree(t);
+        pp = &tmos;                         /* the callback may have changed the list */
+    }
+}
+
+/* the real channel 0: counts gone in its period (interrupts off) */
+static u32 phys_elapsed(void)
+{
+    u32 c;
+    if (phys_skip) return 0;                /* restarted; its old interrupt still waits */
+    outb(0x43, 0x00);                       /* latch counter 0 */
+    c = inb(0x40);
+    c |= inb(0x40) << 8;
+    if (!c) c = 65536;
+    return c > phys_count ? 0 : phys_count - c;
+}
+
+/* IRQ 0 requested on the 8259 and not yet taken (its IRR; VPICD leaves
+ * port 20h reading the IRR) */
+static int irq0_waiting(void)
+{
+    outb(0x20, 0x0A);
+    return inb(0x20) & 1;
+}
+
+static u32 vt_count(struct vm *v) { return v->vt.count ? v->vt.count : 65536; }
+
+/* n counts have passed: the system time, the scheduler's ticks, every
+ * VM's timer (a VM whose period is over gets its tick) */
+static void vtd_counts(u32 n)
+{
+    struct vm *v;
+    u32 q;
+    if (!n) return;
+    tot_lo += n;
+    if (tot_lo < n) tot_hi++;
+    sys_frac += n * 1000;
+    q = sys_frac / PIT_HZ;
+    sys_ms += q;
+    sys_frac -= q * PIT_HZ;
+    sched_acc += n;
+    vm_tick_wakes(1);                   /* an idle VM's release penalty holds */
+    for (v = vm_list; v; v = v->next) {
+        u32 c = vt_count(v);
+        if (v->ended) continue;
+        v->vt.acc += n;
+        if (v->vt.acc >= c) {
+            v->vt.acc %= c;
+            vpicd_call(0x02, vtd_irq, VMH(v));      /* VPICD_Set_Int_Request */
+        }
+    }
+    vm_tick_wakes(0);
+}
+
+/* the period the real channel 0 should have: the shortest VM timer or
+ * device minimum, at most the BIOS's 65536 counts, at least VTD's
+ * fastest, 1 ms */
+static u32 phys_wanted(void)
+{
+    struct vm *v;
+    u32 c = 65536, m;
+    for (v = vm_list; v; v = v->next)
+        if (!v->ended && vt_count(v) < c) c = vt_count(v);
+    if (vtd_min_period < VTD_SLOWEST) {
+        m = vtd_min_period * PIT_HZ / 1000;
+        if (m < c) c = m;
+    }
+    m = VTD_FASTEST * PIT_HZ / 1000;
+    return c < m ? m : c;
+}
+
+/* the real channel 0 to count c from now (mode 2) */
+static void phys_program(u32 c)
+{
+    phys_count = c;
+    phys_ms = c >= 65536 ? VTD_SLOWEST : (c * 1000 + PIT_HZ / 2) / PIT_HZ;
+    if (!phys_ms) phys_ms = 1;
+    outb(0x43, 0x34);
+    outb(0x40, c & 0xFF);
+    outb(0x40, (c >> 8) & 0xFF);
+    /* an interrupt of the old period already waiting is not counted again */
+    phys_skip = irq0_waiting();
+}
+
+/* the same, what passed of the old period counted first */
+static void phys_set(u32 c)
+{
+    vtd_counts(phys_elapsed());
+    phys_program(c);
+}
+
+static void phys_update(void)
+{
+    u32 c = phys_wanted();
+    if (c != phys_count) phys_set(c);
+}
+
+/* a VM's virtual counter now (8254: mode 3 counts down by two, twice a
+ * period; the others once) */
+static u32 vt_value(struct vm *v)
+{
+    u32 c = vt_count(v), e = (v->vt.acc + phys_elapsed()) % c, r;
+    if (!v->vt.count || (v->vt.mode & 3) == 3) {
+        r = c - ((2 * e) % c);
+        r &= ~1u;
+        if (!r) r = c & ~1u;
+    } else
+        r = c - e;
+    return r & 0xFFFF;
+}
+
+/* a VM's IN or OUT on port 40h or 43h (io.c), a byte (wider accesses
+ * come here byte by byte) */
+u32 vtd_io(u32 port, u32 out, u32 data)
+{
+    struct vtimer *t = &cur_vm->vt;
+    u32 b = data & 0xFF, rw = t->count ? t->rw : 3, c;
+    if (port == 0x43) {
+        if (!out) return data;          /* write-only (the 8254) */
+        if ((b >> 6) != 0) {            /* channels 1 and 2, read-back: the hardware */
+            outb(0x43, b);
+            return data;
+        }
+        if (!(b & 0x30)) {              /* counter latch */
+            if (!t->latched) {
+                t->latch = (u16)vt_value(cur_vm);
+                t->latched = rw == 3 ? 2 : 1;
+            }
+            return data;
+        }
+        if (!t->count) t->count = 65536;
+        t->rw = (u8)((b >> 4) & 3);
+        t->mode = (u8)((b >> 1) & 7);
+        t->wstate = t->rstate = 0;
+        t->latched = 0;
+        return data;
+    }
+    if (out) {
+        if (rw == 3 && !t->wstate) {
+            t->wlow = (u8)b;
+            t->wstate = 1;
+            return data;
+        }
+        c = rw == 1 ? b : rw == 2 ? b << 8 : (t->wlow | (b << 8));
+        t->wstate = 0;
+        /* the count restarts: what passed so far counted with the old
+         * one, the real timer started again with the new shortest */
+        vtd_counts(phys_elapsed());
+        if (!t->count) { t->rw = 3; t->mode = 3; }
+        t->count = c ? c : 65536;
+        t->acc = 0;
+        phys_program(phys_wanted());
+        return data;
+    }
+    if (t->latched) {
+        u32 v = t->latch;
+        t->latched--;
+        if (rw == 2 || (rw == 3 && !t->latched)) return (data & ~0xFFu) | (v >> 8);
+        return (data & ~0xFFu) | (v & 0xFF);
+    }
+    c = vt_value(cur_vm);
+    if (rw == 1) return (data & ~0xFFu) | (c & 0xFF);
+    if (rw == 2) return (data & ~0xFFu) | (c >> 8);
+    t->rstate ^= 1;
+    return (data & ~0xFFu) | (t->rstate ? (c & 0xFF) : (c >> 8));
+}
+
 static void vtd_init(void)
 {
     struct svcregs s;
@@ -208,65 +426,43 @@ static void vtd_init(void)
     vmm_call_proc(svc_slot(3, 0x01), &s);     /* VPICD_Virtualize_IRQ */
     if (s.eflags & EFL_CF) panic("VTD: VPICD would not give IRQ 0");
     vtd_irq = s.eax;
+    /* the real channel 0 in mode 2 (a count read back is linear), the
+     * BIOS's period; the VMs' channel 0 trapped from now on */
+    outb(0x43, 0x34);
+    outb(0x40, 0);
+    outb(0x40, 0);
+    phys_count = 65536;
+    io_trap_bit(0x40, 1);
+    io_trap_bit(0x43, 1);
     vpicd_call(0x09, vtd_irq, 0);             /* VPICD_Physically_Unmask */
 }
 
-/* ---- the VMM's time-outs (Set_Global_Time_Out, Cancel_Time_Out; the
- * DDK's descriptions), counted in timer ticks (54.925 ms: the BIOS rate,
- * not reprogrammed yet); the callback gets EBX the current VM, ECX the
- * milliseconds since it was due, EDX its reference data, EBP the client
- * registers ---- */
-struct tmo { struct tmo *next; u32 magic, due, proc, ref, tick; };
-static u32 tmo_ticks;                       /* timer ticks so far (tmo_tick) */
-#define TMO_MAGIC 0x4F4D4954u               /* "TIMO" */
-static struct tmo *tmos;
-static u32 sys_ms, sys_us;                  /* time since start */
-
-static void tmo_tick(void)
+/* for the heartbeat: the time-outs waiting, the real period */
+u32 vtd_heartbeat(u32 *n)
 {
-    struct tmo **pp, *t;
-    struct svcregs s;
-    sys_us += 54925;
-    sys_ms += sys_us / 1000;
-    sys_us %= 1000;
-    tmo_ticks++;
-    for (pp = &tmos; (t = *pp) != NULL; ) {
-        /* one set during this tick (by a callback here: a 0 ms time-out
-         * set again each time ran for ever) waits for the next */
-        if ((s32)(sys_ms - t->due) < 0 || t->tick == tmo_ticks) { pp = &t->next; continue; }
-        *pp = t->next;                      /* done: unlinked before it runs */
-        t->magic = 0;
-        memset(&s, 0, sizeof(s));
-        s.ebx = VMH(cur_vm);
-        s.ecx = sys_ms - t->due;
-        s.edx = t->ref;
-        s.ebp = (u32)cur_vm->client;
-        vmm_call_proc(t->proc, &s);
-        kfree(t);
-        pp = &tmos;                         /* the callback may have changed the list */
-    }
+    struct tmo *t;
+    *n = 0;
+    for (t = tmos; t; t = t->next) (*n)++;
+    return phys_count;
 }
 
 /* Get_Last_Updated_System_Time: as of the last tick */
+static u32 clock_ms;                    /* the clock: the last tick's time, or a later
+                                         * time Get_System_Time gave */
 u32 vmm_last_time(void)
 {
-    return sys_ms;
+    return (s32)(clock_ms - sys_ms) > 0 ? clock_ms : sys_ms;
 }
 
-/* Get_System_Time (the DDK: to the millisecond): the last tick's time
- * plus what the timer's counter 0 has counted down since (1193182 Hz,
- * 65536 a tick); never less than a time given before */
+/* Get_System_Time (the DDK: to the millisecond, and it "must call the
+ * timer device to update the clock"): the last tick's time plus what the
+ * real channel 0 has counted since, never less than a time given before;
+ * the clock time-outs are set from goes on to it */
 u32 vmm_system_time(void)
 {
-    static u32 last;
-    u32 c, t;
-    /* (the VMM runs with interrupts off) */
-    outb(0x43, 0x00);                   /* latch counter 0 */
-    c = inb(0x40);
-    c |= inb(0x40) << 8;
-    t = sys_ms + ((c ? 65536u - c : 0) * 55u >> 16);
-    if ((s32)(t - last) < 0) t = last;
-    last = t;
+    u32 t = sys_ms + (sys_frac + phys_elapsed() * 1000) / PIT_HZ;
+    if ((s32)(t - clock_ms) < 0) t = clock_ms;
+    clock_ms = t;
     return t;
 }
 
@@ -279,7 +475,19 @@ static int tmo_service(u32 svc, struct svcregs *s)
         if (!t) { s->esi = 0; return 1; }
         t->magic = TMO_MAGIC;
         t->tick = tmo_ticks;
-        t->due = sys_ms + s->eax;
+        hb_tmo_set++;
+        /* from the clock: the last tick, or the time Get_System_Time
+         * gave since (not now: VTDAPI.386's 10 ms periodic event, set
+         * again a little after each tick, came a tick late, every 20 ms;
+         * VX16 tev 200 in 4 s, Windows 3.1 399). Not before what
+         * Get_System_Time said: VTDAPI sets an MMSYSTEM event's time-out
+         * from it; one that came a millisecond before the event's time
+         * (from the last tick, when Get_System_Time had moved past it)
+         * found the event not due, set no other, and Windows 3.1's
+         * TIMER.DRV's events stopped for good: QuickTime's movie with
+         * sound stopped at "play" (sbaudio.sh qtw16e, ARCHITECTURE.md
+         * 12.14) */
+        t->due = vmm_last_time() + s->eax;
         t->proc = s->esi;
         t->ref = s->edx;
         t->next = tmos;
@@ -302,17 +510,19 @@ static int tmo_service(u32 svc, struct svcregs *s)
 /* VID_Hw_Int_Proc for IRQ 0 (vmmasm.asm calls it with the registers) */
 void __cdecl vtd_hw(struct svcregs *r)
 {
-    struct vm *v;
+    u32 n = 4;
     vpicd_call(0x04, vtd_irq, 0);             /* VPICD_Phys_EOI */
-    /* every VM gets the tick (a request each: one pending at most; a VM
-     * that does not run meanwhile misses ticks. UNVERIFIED: Windows 3.1's
-     * VTD catches a VM's clock up) */
-    vm_tick_wakes(1);                   /* an idle VM's release penalty holds */
-    for (v = vm_list; v; v = v->next)
-        if (!v->ended) vpicd_call(0x02, vtd_irq, VMH(v));  /* VPICD_Set_Int_Request */
-    vm_tick_wakes(0);
+    if (phys_skip) phys_skip = 0;           /* the old period's: counted already */
+    else vtd_counts(phys_count);
     tmo_tick();
-    vm_tick();
+    /* the scheduler's slices and the VDD's look at the screens: every
+     * 54.9 ms, as the BIOS tick (a few at most at once) */
+    while (sched_acc >= 65536 && n--) {
+        sched_acc -= 65536;
+        vm_tick();
+    }
+    if (sched_acc >= 65536) sched_acc %= 65536;
+    phys_update();                          /* a VM that ended had the shortest */
     r->eflags &= ~EFL_CF;
 }
 
@@ -334,28 +544,23 @@ static void vtd_service(u32 svc, struct svcregs *s)
         return;
     case 0x0001:                        /* VTD_Update_System_Clock: kept at each tick */
     case 0x0005:                        /* VTD_Disable_Trapping, VTD_Enable_Trapping: */
-    case 0x0006:                        /* the timer's ports are not trapped */
+    case 0x0006:                        /* UNVERIFIED what they change; nothing here */
         return;
     case 0x0007: {                      /* VTD_Get_Real_Time: EDX:EAX in the timer's */
-        u32 c, lo;                      /* 1.19 MHz clocks (the DDK: 0.8 us) since the start */
-        outb(0x43, 0x00);
-        c = inb(0x40);
-        c |= inb(0x40) << 8;
-        lo = (tmo_ticks << 16) + (c ? 65536u - c : 0);
-        s->eax = lo;
-        s->edx = tmo_ticks >> 16;
+        u32 e = phys_elapsed();         /* 1.19 MHz clocks (the DDK: 0.8 us) since the start */
+        s->eax = tot_lo + e;
+        s->edx = tot_hi + (s->eax < e);
         return;
     }
     case 0x0002:                        /* VTD_Get_Interrupt_Period */
-        s->eax = VTD_SLOWEST;
+        s->eax = phys_ms;
         return;
-    case 0x0003:                        /* VTD_Begin_Min_Int_Period */
-        /* the period is noted but the timer is not reprogrammed yet: the
-         * System VM keeps its 54 ms tick (UNVERIFIED what Windows 3.1
-         * does to the VM's INT 08h rate when it speeds the timer up) */
+    case 0x0003:                        /* VTD_Begin_Min_Int_Period: the real */
+        /* timer at least that fast from now (the VMs' ticks keep their rate) */
         if (s->eax < VTD_FASTEST || s->eax > VTD_SLOWEST || vtd_nreq == 16) { s->eflags |= EFL_CF; return; }
         vtd_requests[vtd_nreq++] = s->eax;
         if (s->eax < vtd_min_period) vtd_min_period = s->eax;
+        phys_update();
         return;
     case 0x0004:                        /* VTD_End_Min_Int_Period */
         for (i = 0; i < vtd_nreq && vtd_requests[i] != s->eax; i++)
@@ -365,6 +570,7 @@ static void vtd_service(u32 svc, struct svcregs *s)
         vtd_min_period = VTD_SLOWEST;
         for (i = 0; i < vtd_nreq; i++)
             if (vtd_requests[i] < vtd_min_period) vtd_min_period = vtd_requests[i];
+        phys_update();
         return;
     }
     panic("VTD service %x is not implemented yet (called from %x)", svc, *(u32 *)(s + 1));
@@ -713,13 +919,14 @@ static int list_service(u32 svc, struct svcregs *s)
  * device runs code in the System VM with the client registers (EBP's
  * Client_Reg_Struc, w16's sys_client) and gets them back. w16 runs it
  * synchronously in V86 mode on the VMM's reflection stack (the client's
- * segment registers taken as V86 segments). UNVERIFIED: protected-mode
- * nested execution (Begin_Nest_Exec in a PM client), which w16 runs in
- * V86 mode too ---- */
+ * segment registers taken as V86 segments); a far call in a
+ * Begin_Nest_Exec block of a VM with a protected-mode program runs in
+ * protected mode, on the host stack. UNVERIFIED: Exec_Int in such a block
+ * (w16 runs it in V86 mode) ---- */
 static int nest_level;
 
 static u16 nest_args[16];
-static int nest_nargs, nest_call;
+static int nest_nargs, nest_call, nest_pm;
 static u32 nest_sel, nest_off;
 static int nest_service(u32 svc, struct svcregs *s)
 {
@@ -727,7 +934,13 @@ static int nest_service(u32 svc, struct svcregs *s)
     struct client_regs *c = cur_vm->client;
     switch (svc) {
     case 0x82:                          /* Begin_Nest_V86_Exec */
-    case 0x83:                          /* Begin_Nest_Exec */
+        nest_pm = 0;
+        nest_level++;
+        return 1;
+    case 0x83:                          /* Begin_Nest_Exec: protected mode */
+        /* when the VM runs a protected-mode program, whatever mode it was
+         * interrupted in (the DDK) */
+        nest_pm = cur_vm == &sysvm && sysvm.pm;
         nest_level++;
         return 1;
     case 0x84: {                        /* Exec_Int: EAX the vector */
@@ -765,12 +978,23 @@ static int nest_service(u32 svc, struct svcregs *s)
                                          * (VTDAPI.386's timer callbacks: Begin_Nest_Exec,
                                          * Simulate_Push, Simulate_Far_Call, Resume_Exec,
                                          * End_Nest_Exec) */
-        if (nest_call && !(c->eflags & EFL_VM) && cur_vm == &sysvm && sysvm.pm) {
+        /* also when the VM was in V86 mode (a DOS or BIOS call, an
+         * interrupt reflected there): Begin_Nest_Exec's call is in
+         * protected mode all the same, with the DS it last had there.
+         * Before, it was dropped ("not done"): under Windows 3.1's
+         * TIMER.DRV and VTDAPI.386 an MMSYSTEM timer event lost so, when
+         * the tick came during a DOS call, stopped QuickTime's movie with
+         * sound at "play" for good (sbaudio.sh qtw16e, ARCHITECTURE.md
+         * 12.14) */
+        if (nest_call && (nest_pm || !(c->eflags & EFL_VM)) && cur_vm == &sysvm && sysvm.pm) {
             struct cregs in, out;
+            int v86 = (c->eflags & EFL_VM) != 0;
             memset(&in, 0, sizeof(in));
             in.eax = c->eax; in.ebx = c->ebx; in.ecx = c->ecx; in.edx = c->edx;
             in.esi = c->esi; in.edi = c->edi; in.ebp = c->ebp;
-            in.ds = c->ds; in.es = c->es;
+            in.ds = v86 ? sysvm.last_ds : c->ds;
+            in.es = v86 ? sysvm.last_ds : c->es;
+            hb_nest++;
             dpmi_pm_farcall_regs(&in, nest_sel, nest_off, nest_args, nest_nargs, &out);
             c->eax = out.eax; c->ebx = out.ebx; c->ecx = out.ecx; c->edx = out.edx;
             c->esi = out.esi; c->edi = out.edi;
@@ -781,6 +1005,7 @@ static int nest_service(u32 svc, struct svcregs *s)
         return 1;
     case 0x86:                          /* End_Nest_Exec */
         if (nest_level) nest_level--;
+        nest_pm = 0;
         nest_call = 0;
         nest_nargs = 0;
         return 1;
