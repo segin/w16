@@ -88,7 +88,10 @@ _woa_memtop:
         retf
 
 ; DWORD woa_diskfree(int drive): free bytes on a drive (1 = A:), INT 21h
-; AH=36h; 0 if the drive is invalid
+; AH=36h; 0 if the drive is invalid, FFFFFFFFh if more than that. The
+; cluster's bytes can be 10000h (128 sectors of 512: Windows 3.1's WINOLDAP
+; then switches without the disk-space warning, tests/winoldap.sh
+; bigclust), so the product is taken in 32 bits.
 extern DOS3CALL
 global _woa_diskfree
 _woa_diskfree:
@@ -96,17 +99,32 @@ _woa_diskfree:
         mov bp, sp
         push bx
         push cx
+        push di
         mov dl, [bp + 6]
         mov ah, 36h
         call far DOS3CALL
         cmp ax, 0FFFFh
         je .bad
-        mul cx                          ; sectors a cluster * bytes a sector
-        mul bx                          ; * free clusters (fits for 3.1's sizes)
+        mul cx                          ; DX:AX = bytes a cluster
+        mov di, dx
+        mul bx                          ; low word * free clusters
+        mov cx, dx                      ; CX:AX = that
+        xchg ax, di                     ; AX = high word, DI = result's low
+        mul bx                          ; high word * free clusters
+        test dx, dx
+        jnz .max
+        add cx, ax
+        jc .max
+        mov ax, di
+        mov dx, cx
+        jmp .r
+.max:   mov ax, 0FFFFh
+        mov dx, ax
         jmp .r
 .bad:   xor ax, ax
         xor dx, dx
-.r:     pop cx
+.r:     pop di
+        pop cx
         pop bx
         pop bp
         retf
