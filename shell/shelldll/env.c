@@ -43,6 +43,11 @@ DWORD SHAPI DoEnvironmentSubst(LPSTR s, UINT cb)
     WORD i = 0, n = sh_len(s);
     /* first the length, then the text */
     int pass;
+    /* NULL: Windows 3.1 answers as for a string of 2 characters, (2, 1)
+       when cb is 3 or more, else (2, 0), and does not fault (SH15 e: cb
+       0-10 and 100, both modes). UNVERIFIED: which 2 characters */
+    if (!s)
+        return MAKELONG(2, cb >= 3);
     for (pass = 0; pass < 2; pass++) {
         len = 0;
         i = 0;

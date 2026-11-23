@@ -149,10 +149,18 @@ static void hwstop(struct wdev *w)
 /* the bytes of the half under way that the card has done */
 static WORD progress(struct wdev *w)
 {
-    WORD into = (w->half << 1) - dma_left(ch(w));
+    WORD total = w->half << 1;
+    WORD left = dma_left(ch(w));
+    WORD into;
+    if (left >= total)
+        return 0;
+    into = total - left;
     if (w->khalf == 0)
         return into > w->half ? w->half : into;
-    return into >= w->half ? into - w->half : w->half;
+    if (into < w->half)
+        return w->half;
+    into -= w->half;
+    return into > w->half ? w->half : into;
 }
 
 /* ---- output ---- */
@@ -339,19 +347,24 @@ static DWORD wo_close(void)
 {
     LPWHDR h;
     DWORD bytes = 0, until;
+    WORD f = sb_cli();
     if (wo.head) {
-        if (wo.paused || !wo.running)
+        if (wo.paused || !wo.running) {
+            sb_sti(f);
             return WAVERR_STILLPLAYING;
+        }
         for (h = wo.head; h; h = h->lpNext)
             bytes += h->dwBufferLength;
-        until = GetTickCount() + bytes * 1000 / wo.avg + 1000;
+        sb_sti(f);
+        until = GetTickCount() + (bytes / wo.avg) * 1000 + (bytes % wo.avg) * 1000 / wo.avg + 1000;
         while (wo.head && (long)(GetTickCount() - until) < 0)
             ;
         if (wo.head)
             return WAVERR_STILLPLAYING;
-    }
+    } else
+        sb_sti(f);
     if (wo.running) {
-        WORD f = sb_cli();
+        f = sb_cli();
         hwstop(&wo);
         sb_sti(f);
     }
@@ -552,24 +565,28 @@ static void wi_halt(void)
    waveInStop); RESET returns them all */
 static void wi_return(int all)
 {
-    LPWHDR h;
-    WORD f;
-    for (;;) {
-        f = sb_cli();
-        h = wi.head;
-        if (!h || (!all && !h->dwBytesRecorded)) {
-            sb_sti(f);
-            return;
-        }
+    LPWHDR h, next;
+    WORD f = sb_cli();
+    h = wi.head;
+    if (!h || (!all && !h->dwBytesRecorded)) {
+        sb_sti(f);
+        return;
+    }
+    if (all) {
+        wi.head = wi.tail = 0;
+    } else {
         wi.head = h->lpNext;
         if (!wi.head)
             wi.tail = 0;
-        sb_sti(f);
+        h->lpNext = 0;
+    }
+    sb_sti(f);
+    while (h) {
+        next = h->lpNext;
         h->lpNext = 0;
         h->dwFlags = (h->dwFlags & ~WHDR_INQUEUE) | WHDR_DONE;
         notify(&wi.cb, MM_WIM_DATA, (DWORD)h, 0);
-        if (!all)
-            return;
+        h = next;
     }
 }
 

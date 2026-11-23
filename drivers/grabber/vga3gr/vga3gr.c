@@ -44,9 +44,17 @@ static const BYTE defpal[16] = {
 
 int __far __cdecl grab_init(void)
 {
-    int i;
-    for (i = 0; i < 4; i++)
+    int i, j;
+    for (i = 0; i < 4; i++) {
         flatsel[i] = AllocSelector(SELECTOROF((void __far *)&vr));
+        if (!flatsel[i]) {
+            for (j = 0; j < i; j++) {
+                FreeSelector(flatsel[j]);
+                flatsel[j] = 0;
+            }
+            return 0;
+        }
+    }
     for (i = 0; i < 256; i++) {
         WORD w = 0;
         int b;
@@ -56,6 +64,16 @@ int __far __cdecl grab_init(void)
         dbl[i] = w;
     }
     return 1;
+}
+
+void __far __cdecl grab_exit(void)
+{
+    int i;
+    for (i = 0; i < 4; i++)
+        if (flatsel[i]) {
+            FreeSelector(flatsel[i]);
+            flatsel[i] = 0;
+        }
 }
 
 /* the VDD's memory at linear address a (64 KB from there) through
@@ -339,6 +357,8 @@ static void src_line(LPEPS p, DWORD __far *mem, GMODE *g, int y)
    application's palette (as Microsoft's grabber shows them). */
 static const BYTE slot[4] = { 2, 1, 0, 3 };     /* VGA plane -> bitmap */
 
+static void free_gfx(LPEPS p);
+
 static void paint_bands(LPEPS p, DWORD __far *mem, GMODE *g, int y0, int y1, RECT *rc)
 {
     HDC hdc = p->ps.hdc, mdc;
@@ -356,8 +376,10 @@ static void paint_bands(LPEPS p, DWORD __far *mem, GMODE *g, int y0, int y1, REC
         p->hBits = GlobalAlloc(GMEM_MOVEABLE, (DWORD)BANDBYTES);
         p->lastmode = 0x1200 | p->state.mode;
     }
-    if (!p->hMemDC || !p->hBitmap || !p->hBits)
+    if (!p->hMemDC || !p->hBitmap || !p->hBits) {
+        free_gfx(p);
         return;
+    }
     ob = SelectObject(p->hMemDC, p->hBitmap);
     bits = GlobalLock(p->hBits);
     mdc = p->hMemDC;
@@ -824,7 +846,7 @@ DWORD EXPORT RENDERSELECTION(LPEPS p, WORD wParam, DWORD lParam)
     int x0 = p->SelctSRect.l, y0 = p->SelctSRect.t;
     int x1 = p->SelctSRect.r, y1 = p->SelctSRect.b, t;
     int grab = wParam != 0xFFFF;
-    int c0, r0, c1, r1, cols, r, c, n;
+    int c0, r0, c1, r1, cols, rows, r, c, n;
     HGLOBAL h;
     BYTE __far *s;
     BYTE __far *vram;
@@ -850,10 +872,30 @@ DWORD EXPORT RENDERSELECTION(LPEPS p, WORD wParam, DWORD lParam)
     }
     vram = (BYTE __far *)flat(0, membuf[0] + membuf[4]);
     cols = text_cols(p);
+    rows = text_rows(p);
+    if (!p->FntWid || !p->FntHgt) {
+        PNTFONT __far *f = text_font(p);
+        p->FntWid = f->width;
+        p->FntHgt = f->height;
+    }
+    if (!p->FntWid || !p->FntHgt) {
+        if (!grab)
+            vdd(p, VDD_FREE_MEM, 0, 0);
+        return 0;
+    }
     c0 = x0 / p->FntWid;
     r0 = y0 / p->FntHgt;
     c1 = x1 / p->FntWid;
     r1 = y1 / p->FntHgt;
+    if (c0 < 0) c0 = 0;
+    if (c1 > cols) c1 = cols;
+    if (r0 < 0) r0 = 0;
+    if (r1 > rows) r1 = rows;
+    if (c0 >= c1 || r0 >= r1) {
+        if (!grab)
+            vdd(p, VDD_FREE_MEM, 0, 0);
+        return 0;
+    }
     p->SelCells[0] = (BYTE)c0;
     p->SelCells[1] = (BYTE)r0;
     p->SelCells[2] = (BYTE)c1;
@@ -895,18 +937,27 @@ static BYTE dibline[320];
 
 static HBITMAP render_bitmap(LPEPS p, int x0, int y0, int x1, int y1)
 {
-    HDC hdc = GetDC(p->WindHand), mdc;
-    HBITMAP hb, ob = 0;
+    HDC hdc;
+    HBITMAP hb;
     GMODE g;
-    int w = x1 - x0, h = y1 - y0, y, x, sx, v, i;
+    int ow, oh, w, h, y, x, sx, v, i;
     COLORREF c;
+    gmode(p->state.mode, &g);
+    ow = g.w * g.xs;
+    oh = g.h * g.ys;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > ow) x1 = ow;
+    if (y1 > oh) y1 = oh;
+    w = x1 - x0;
+    h = y1 - y0;
+    if (w <= 0 || h <= 0)
+        return 0;
+    hdc = GetDC(p->WindHand);
     if (!hdc)
         return 0;
-    gmode(p->state.mode, &g);
     hb = CreateCompatibleBitmap(hdc, w, h);
-    mdc = CreateCompatibleDC(hdc);
-    if (hb && mdc) {
-        ob = SelectObject(mdc, hb);
+    if (hb) {
         dib.h.biSize = sizeof dib.h;
         dib.h.biWidth = w;
         dib.h.biHeight = h;
@@ -933,12 +984,9 @@ static HBITMAP render_bitmap(LPEPS p, int x0, int y0, int x1, int y1)
                         v |= 1 << i;
                 dibline[x >> 1] |= (x & 1) ? v : v << 4;
             }
-            SetDIBits(mdc, hb, h - 1 - y, 1, dibline, (BITMAPINFO __far *)&dib, DIB_RGB_COLORS);
+            SetDIBits(hdc, hb, h - 1 - y, 1, dibline, (BITMAPINFO __far *)&dib, DIB_RGB_COLORS);
         }
-        SelectObject(mdc, ob);
     }
-    if (mdc)
-        DeleteDC(mdc);
     ReleaseDC(p->WindHand, hdc);
     return hb;
 }

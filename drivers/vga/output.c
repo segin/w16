@@ -85,8 +85,10 @@ static int style_next(void)
    line's upper end (the start when y0 <= y1, else the end). */
 static void line(int x0, int y0, int x1, int y1, BYTE rop, int fg, BYTE bgrop, int bg)
 {
-    int dx = x1 - x0, dy = y1 - y0, sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
-    int i, n, dmaj, dmin, base = 0, rem = 0, off, x, y, up = y0 > y1;
+    long dx = (long)x1 - x0, dy = (long)y1 - y0;
+    long sx = dx < 0 ? -1L : 1L, sy = dy < 0 ? -1L : 1L;
+    long i, n, dmaj, dmin, base = 0, rem = 0, off, x, y;
+    int up = y0 > y1;
     if (dx < 0)
         dx = -dx;
     if (dy < 0)
@@ -113,9 +115,9 @@ static void line(int x0, int y0, int x1, int y1, BYTE rop, int fg, BYTE bgrop, i
             x = x0 + sx * off;
         }
         if (style_next())
-            put_pixel(x, y, rop, fg);
+            put_pixel((int)x, (int)y, rop, fg);
         else if (bg >= 0)
-            put_pixel(x, y, bgrop, bg);
+            put_pixel((int)x, (int)y, bgrop, bg);
         rem += dmin;
         if (rem >= dmaj) {
             rem -= dmaj;
@@ -181,7 +183,10 @@ WORD EXPORT Output(LPVOID lpDev, WORD ostyle, WORD count, LPPOINT pts, LPPPEN pe
                 return 1;
             pattern_planes(brush, dm, D.planes == 1, pat, mask, &transp);
         } else if (pen) {
-            int c = D.planes == 1 ? pen->mono * 15 : pen->color;
+            int c;
+            if (pen->style == LS_NOLINE)
+                return 1;
+            c = D.planes == 1 ? pen->mono * 15 : pen->color;
             for (p = 0; p < 4; p++)
                 for (k = 0; k < 8; k++)
                     pat[p][k] = (BYTE)((c >> p) & 1 ? 0xFF : 0);

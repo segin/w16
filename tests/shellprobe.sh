@@ -13,7 +13,9 @@
 # probe left at C:\ as R*.DAT (REG.DAT snapshots), *.BMP and SH*.TXT to
 # DIR/<mode>/. Each probe gets the files and environment it needs (SH5.EXE
 # for SH4 and SH11, icon files for SH6 from tools/mkshfiles.py, variables
-# for SH7; SH12 runs without REG.DAT). Exit status: the number of FAIL lines.
+# for SH7; SH12 runs without REG.DAT; SH15 the damaged files of
+# tools/mkshaudit.py in C:\SHA and a D: drive, and leaves out the sections
+# $SHASKIP lists). Exit status: the number of FAIL lines.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -50,6 +52,14 @@ SH11) files="$files $d/SH5.EXE=SH5.EXE $d/SH5.EXE=NOPEDIR/NOPE.EXE $d/SH5.EXE=NO
 SH12) pre="$pre
 DEL C:\\WINDOWS\\REG.DAT" ;;
 SH13) modes=${modes%% *} ;;           # File Manager's layout: Standard mode only
+SH15) python3 -B "$root/tools/mkshaudit.py" "$d/PROGMAN.EXE" "$root/build/shell/res/stock00.ico" \
+          "$out/files"
+      for f in "$out"/files/*; do files="$files $f=SHA/$(basename "$f")"; done
+      files="$files $d/SH5.EXE=SH5.EXE"
+      [ -n "${SHASKIP:-}" ] && printf '%s' "$SHASKIP" > "$out/skip.txt" &&
+          files="$files $out/skip.txt=SHASKIP.TXT"
+      mkdir -p "$out/ddrive/SUB"; echo x > "$out/ddrive/SUB/X.TXT"
+      export REFRUN_DDRIVE="$out/ddrive" ;;
 esac
 get=
 for n in 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20; do

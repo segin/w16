@@ -46,6 +46,7 @@ extern GETPRIVATEPROFILEINT             ; KERNEL.127
 extern GETPRIVATEPROFILESTRING          ; KERNEL.128
 extern __0040H                          ; KERNEL.193
 extern CREATESYSTEMTIMER                ; SYSTEM.2
+extern KILLSYSTEMTIMER                  ; SYSTEM.3
 extern GETSYSTEMMSECCOUNT               ; SYSTEM.6
 
 ; ---- the interface's constants (SDK windows.h, DDK) ----
@@ -238,6 +239,7 @@ irqref          times 16 db 0       ; open ports per IRQ
 oldvec          times 16 dd 0       ; the handlers before ours
 oldmask         times 16 db 0       ; the IRQ's PIC mask bit before
 postmsg         dd 0                ; USER's PostMessage
+timer_id        dw 0                ; system timer handle
 usermod         db "USER", 0
 postname        db "POSTMESSAGE", 0
 s386enh         db "386Enh", 0
@@ -260,6 +262,7 @@ libentry:
         push cs
         push word timer
         call far CREATESYSTEMTIMER
+        mov [timer_id], ax
         mov ax, 1
         pop di
         pop si
@@ -339,9 +342,11 @@ INICOM:
         mov [si + P.rxcnt], ax
         mov [si + P.rxin], ax
         mov [si + P.rxout], ax
+        mov [si + P.rxsize], ax
         mov [si + P.txcnt], ax
         mov [si + P.txin], ax
         mov [si + P.txout], ax
+        mov [si + P.txsize], ax
         cmp byte [si + P.isopen], 0
         jne .again
         ; the FIFO as it was, for trmcom (CM1: the FIFO after a close is
@@ -351,11 +356,18 @@ INICOM:
         in al, dx
         and al, 0C0h
         mov [si + P.savefifo], al
+        mov dx, [si + P.base]
+        add dx, U_IER
+        xor al, al
+        out dx, al
+        mov byte [si + P.fresh], 1
+        call program
         mov byte [si + P.isopen], 1
         call hook
+        jmp .ok
 .again: mov byte [si + P.fresh], 1
         call program
-        xor ax, ax
+.ok:    xor ax, ax
         jmp .ret
 .lpt:   call copydcb
         xor ax, ax
@@ -676,8 +688,8 @@ program:
         add dx, U_FCR
         xor al, al
         out dx, al
-.mcr:   call setmcr
-        cli
+.mcr:   cli
+        call setmcr
         cmp byte [si + P.fresh], 0
         je .ier
         mov byte [si + P.fresh], 0
@@ -689,6 +701,7 @@ program:
         in al, dx
         sub dx, U_LSR
         in al, dx                       ; nothing old waiting
+        call holds
 .ier:   call setier
         sti
         ret
@@ -872,7 +885,9 @@ isr_common:
         jne .skip
         push ax
         push cx
+        push di
         call service
+        pop di
         pop cx
         pop ax
         or di, bx
@@ -914,15 +929,21 @@ service:
         je .rx
         cmp al, 2
         je .tx
+        push bx
         call modem
+        pop bx
         jmp .again
 .ls:    add dx, U_LSR - U_IIR
         in al, dx
         call linestat
         jmp .again
-.rx:    call receive
+.rx:    push bx
+        call receive
+        pop bx
         jmp .again
-.tx:    call transmit
+.tx:    push bx
+        call transmit
+        pop bx
         jmp .again
 .ret:   ret
 
@@ -1228,6 +1249,7 @@ timer:
         push di
         push ds
         push es
+        cld
         mov ax, DGROUP
         mov ds, ax
         mov si, ports
@@ -1275,7 +1297,9 @@ notify:
         mov ax, [si + P.txcnt]
         cmp ax, [si + P.outtrig]
         jae .rx
+        cli
         and byte [si + P.notify], ~NS_TXARM
+        sti
         mov cx, CN_TRANSMIT
         call post
 .rx:    cmp word [si + P.intrig], -1
@@ -1283,30 +1307,44 @@ notify:
         mov ax, [si + P.rxcnt]
         cmp ax, [si + P.intrig]
         jb .below
+        cli
         test byte [si + P.notify], NS_RXPOSTED
-        jnz .ret
+        jnz .rx_sti
         or byte [si + P.notify], NS_RXPOSTED
         and byte [si + P.notify], ~NS_RXARM
+        sti
         jmp .rxpost
-.below: and byte [si + P.notify], ~NS_RXPOSTED
+.below: cli
+        and byte [si + P.notify], ~NS_RXPOSTED
         test byte [si + P.notify], NS_RXARM
-        jz .ret
+        jz .rx_sti
         test ax, ax
-        jz .ret
+        jz .rx_sti
+        mov bx, [si + P.lastrx]
+        mov cx, [si + P.lastrx + 2]
+        sti
         call getms
-        sub ax, [si + P.lastrx]
-        sbb dx, [si + P.lastrx + 2]
+        sub ax, bx
+        sbb dx, cx
+        js .ret
         jnz .to
         cmp ax, RX_TIMEOUT
         jb .ret
-.to:    and byte [si + P.notify], ~NS_RXARM
+.to:    cli
+        and byte [si + P.notify], ~NS_RXARM
+        sti
 .rxpost:
         mov cx, CN_RECEIVE
         call post
+        ret
+.rx_sti:
+        sti
 .ret:   ret
 
 ; post: WM_COMMNOTIFY(cid, CX) to the port's window
 post:
+        cmp word [postmsg + 2], 0
+        je .ret
         call cidof
         push word [si + P.hwnd]
         push word WM_COMMNOTIFY
@@ -1314,7 +1352,7 @@ post:
         push word 0
         push cx
         call far [postmsg]
-        ret
+.ret:   ret
 
 ; event: CX = events -> those in the event mask into the event word
 ; (CM1: the word holds only events in the mask; a new mask leaves it as
@@ -1866,8 +1904,12 @@ drain:
         mov di, [si + P.txcnt]
 .wait:  mov ax, [si + P.txcnt]
         test ax, ax
+        jnz .chk
+        cmp byte [si + P.sendx], 0
+        jne .chk
+        test byte [si + P.stat], CS_TXIM
         jz .shift
-        cmp ax, di
+.chk:   cmp ax, di
         je .same
         mov di, ax
         mov word [bp - 2], 0            ; it moved
@@ -1899,12 +1941,37 @@ drain:
         jb .wait
         mov ax, -2
         jmp .end
-.shift: mov dx, [si + P.base]
+.shift: mov word [bp - 2], 0
+        call getms
+        mov bx, ax
+        mov cx, dx
+.t:     mov dx, [si + P.base]
         add dx, U_LSR
-.t:     in al, dx
+        in al, dx
         test al, LSR_TEMT
-        jz .t
-        xor ax, ax
+        jnz .ok
+        push cx
+        push bx
+        call getms
+        pop bx
+        pop cx
+        push ax
+        push dx
+        sub ax, bx
+        sbb dx, cx
+        jnz .tnext
+        cmp ax, 5000
+        ja .tnext
+        add [bp - 2], ax
+        jnc .tnext
+        mov word [bp - 2], 0FFFFh
+.tnext: pop cx
+        pop bx
+        cmp word [bp - 2], TX_TIMEOUT
+        jb .t
+        mov ax, -2
+        jmp .end
+.ok:    xor ax, ax
 .end:   mov sp, bp
         pop bp
         ret
@@ -2046,14 +2113,30 @@ CEXTFCN:
         jae .ret
         mov ax, [bp + 8]
         call port
-        mov ax, [bp + 8]
-        call findport
-        mov ax, -1
-        mov dx, -1
-        jc .ret
+        cmp byte [si + P.isopen], 0
+        je .bi_closed
         mov ax, [si + P.base]
         mov dl, [si + P.irq]
         xor dh, dh
+        jmp .ret
+.bi_closed:
+        push word [si + P.base]
+        mov al, [si + P.irq]
+        push ax
+        mov ax, [bp + 8]
+        call findport
+        mov bx, [si + P.base]
+        mov dl, [si + P.irq]
+        pop ax
+        mov [si + P.irq], al
+        pop word [si + P.base]
+        mov ax, -1
+        jc .bi_err
+        mov ax, bx
+        xor dh, dh
+        jmp .ret
+.bi_err:
+        mov dx, -1
 .ret:   LEAVE 4
 
 ; ---- 10: int cflush(cid, queue): 0 transmit, 1 receive ----
@@ -2182,10 +2265,14 @@ ENABLENOTIFICATION:
         push ds
         push word usermod
         call far GETMODULEHANDLE
+        test ax, ax
+        jz .have
         push ax
         push ds
         push word postname
         call far GETPROCADDRESS
+        test dx, dx
+        jz .have
         mov [postmsg], ax
         mov [postmsg + 2], dx
 .have:  cli
@@ -2223,9 +2310,6 @@ REACTIVATEOPENCOMMPORTS:
 .next:  cmp byte [si + P.isopen], 0
         je .skip
         push cx
-        cli
-        call holds
-        sti
         mov byte [si + P.fresh], 1
         call program
         cli
@@ -2239,8 +2323,31 @@ REACTIVATEOPENCOMMPORTS:
 ; ---- 16: int WEP(int) ----
 global WEP
 WEP:
+        ENTER
+        mov ax, [timer_id]
+        test ax, ax
+        jz .ports
+        mov word [timer_id], 0
+        push ax
+        call far KILLSYSTEMTIMER
+.ports: mov si, ports
+        mov cx, NCOM
+.next:  cmp byte [si + P.isopen], 0
+        je .skip
+        push cx
+        cli
+        mov byte [si + P.isopen], 0
+        mov dx, [si + P.base]
+        add dx, U_IER
+        xor al, al
+        out dx, al
+        sti
+        call unhook
+        pop cx
+.skip:  add si, P.size
+        loop .next
         mov ax, 1
-        retf 2
+        LEAVE 2
 
 ; ---- 101: no name in Windows 3.1's driver ----
 ; It takes nothing off the stack and leaves AX as it was (CM1: what it
