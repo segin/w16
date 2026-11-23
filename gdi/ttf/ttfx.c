@@ -325,7 +325,14 @@ int ttfx_InitFont(ttfx_font *f, ttfx_readfn read, void *user, void *alloc,
     f->unitsPerEm = ttUSHORT(f->head + 18);
     if (!f->unitsPerEm)
         return 0;
+    f->hint = TTFX_HINT_DEFAULT;
+    f->hint_done = 0;
     return 1;
+}
+
+void ttfx_SetHinting(ttfx_font *f, int flags)
+{
+    f->hint = flags & TTFX_HINT_DEFAULT;
 }
 
 /* ---- characters to glyphs ---- */
@@ -965,6 +972,7 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
     int i, n = 0, pass;
     unsigned start = 0;
     ttfx_i32 ox = shift_x - (ttfx_i32)off_x * 64, oy = shift_y - (ttfx_i32)off_y * 64;
+    ttfx_point TTFX_FAR *hp = 0;        /* the points grid-fitted (ttfhint.c) */
     *pts = 0;
     *counts = 0;
     *ncontours = 0;
@@ -973,9 +981,14 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
             ++n;
     if (!n)
         return 1;
+    if (f->hint)
+        hp = ttfx__HintPoints(f, v, nv, sx, sy, ox, oy);
     *counts = (int TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)n * sizeof(int));
-    if (!*counts)
+    if (!*counts) {
+        if (hp)
+            ttfx_free(f->alloc, hp);
         return 0;
+    }
     fl.points = 0;
     for (pass = 0; pass < 2; ++pass) {
         ttfx_i32 x = 0, y = 0;          /* 26.6 */
@@ -988,7 +1001,14 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
         fl.n = 0;
         fl.overflow = 0;
         for (i = 0; i < nv; ++i) {
-            ttfx_i32 X = ttfx_Scale26(v[i].x, sx) + ox, Y = -ttfx_Scale26(v[i].y, sy) + oy;
+            ttfx_i32 X, Y;
+            if (hp) {
+                X = hp[2 * i].x;
+                Y = hp[2 * i].y;
+            } else {
+                X = ttfx_Scale26(v[i].x, sx) + ox;
+                Y = -ttfx_Scale26(v[i].y, sy) + oy;
+            }
             switch (v[i].type) {
             case TTFX_vmove:
                 if (c >= 0)
@@ -1001,7 +1021,14 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
                 ttfx__add_point(&fl, X, Y);
                 break;
             case TTFX_vcurve: {
-                ttfx_i32 CX = ttfx_Scale26(v[i].cx, sx) + ox, CY = -ttfx_Scale26(v[i].cy, sy) + oy;
+                ttfx_i32 CX, CY;
+                if (hp) {
+                    CX = hp[2 * i + 1].x;
+                    CY = hp[2 * i + 1].y;
+                } else {
+                    CX = ttfx_Scale26(v[i].cx, sx) + ox;
+                    CY = -ttfx_Scale26(v[i].cy, sy) + oy;
+                }
                 ttfx__tesselate(&fl, x << 10, y << 10, CX << 10, CY << 10, X << 10, Y << 10, 0);
                 break;
             }
@@ -1014,12 +1041,16 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
         if (fl.overflow || c < 0)
             goto error;
     }
+    if (hp)
+        ttfx_free(f->alloc, hp);
     *pts = fl.points;
     *ncontours = n;
     return 1;
 error:
     if (fl.points)
         ttfx_free(f->alloc, fl.points);
+    if (hp)
+        ttfx_free(f->alloc, hp);
     ttfx_free(f->alloc, *counts);
     *counts = 0;
     return 0;

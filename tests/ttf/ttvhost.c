@@ -3,7 +3,9 @@
  * from the same code as TTVIEW.EXE, for tests/ttview.sh to compare with
  * what TTVIEW drew on Windows (tests/ttf/ttvcmp.py).
  *
- *   usage: ttvhost FONT.TTF PAGE.PG
+ *   usage: ttvhost [-u] [-2] FONT.TTF PAGE.PG
+ *     -u  unhinted (ttfx_SetHinting 0; TTVIEW /U)
+ *     -2  page 2, the specimen at 8-24 pixels to the em (TTVIEW /P2)
  *
  * PAGE.PG: 640 x 480 bits, rows of 80 bytes, set bits the glyphs' pixels
  * (TTVIEW writes its TTVIEW.PG the same way). Prints the font's name, the
@@ -34,9 +36,19 @@ int main(int argc, char **argv)
     ttfx_font f;
     FILE *fp;
     char name[64];
-    int n, failed;
+    int n, failed, unhinted = 0, page2 = 0;
+    while (argc > 1 && argv[1][0] == '-') {
+        if (!strcmp(argv[1], "-u"))
+            unhinted = 1;
+        else if (!strcmp(argv[1], "-2"))
+            page2 = 1;
+        else
+            break;
+        argc--;
+        argv++;
+    }
     if (argc != 3) {
-        fprintf(stderr, "usage: ttvhost FONT.TTF PAGE.PG\n");
+        fprintf(stderr, "usage: ttvhost [-u] [-2] FONT.TTF PAGE.PG\n");
         return 2;
     }
     fp = fopen(argv[1], "rb");
@@ -54,7 +66,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "ttvhost: %s is not a TrueType font\n", argv[1]);
         return 1;
     }
-    n = ttv_page(&f, page, &failed);
+    if (unhinted)
+        ttfx_SetHinting(&f, 0);
+    n = page2 ? ttv_sizes(&f, page, &failed) : ttv_page(&f, page, &failed);
     ttv_name(&f, name, sizeof name);
     printf("ttvhost: %s: %d glyphs, %d failed, arena peak %u\n", name, n, failed, ttv_arena_peak);
     fp = fopen(argv[2], "wb");
