@@ -580,7 +580,8 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
                 const u8 FAR *tail, const u16 FAR *show, u16 libinit)
 {
     ne_header FAR *h = NE_HDR(m);
-    u16 t, seg, pdb, alias, i, xsel, sp, n;
+    u16 t, seg, pdb, alias, i, xsel, sp, n, k, ext;
+    int whole;
     u32 dsize;
     taskx FAR *x;
     u8 FAR *p;
@@ -598,7 +599,22 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     sp = h->sp ? h->sp : (u16)(dsize & ~1UL);
     if (sp < 26 || (u32)sp > (u32)sel_lim16(dg_sel) + 1)
         return 0;
-    t = galloc_dos(TDB_SIZE, 0, &seg);
+    /* the command tail (TK68 on Windows 3.1, KRNL286 and KRNL386, both
+       modes): the PDB's length byte is the tail's length as given, up to
+       255. A program's tail fills 81h-FFh at most (127 characters): with
+       126 or fewer the CR follows (InitTask makes it a NUL), with more
+       there is none in the PDB (3.1's PDB selector reaches past FFh, and
+       the byte at 100h is whatever lies there; w16 puts the CR there, in
+       a few bytes more of the PDB, so lpCmdLine still ends). WINOLDAP's
+       tail ("args NUL path LF", loader.c start_oldapp; the only one that
+       ends in LF) is kept whole: the PDB grows to hold it (3.1's PDB
+       selector limit grows with it, 220h-280h for 80h-FFh bytes on
+       KRNL386; w16 covers the tail and its LF) */
+    n = tail ? tail[0] : 0;
+    whole = tail && tail[1 + n] == '\n';
+    k = whole || n < 0x7F ? n : 0x7F;
+    ext = 0x81 + k + 1 > 0x100 ? (0x81 + k + 1 - 0x100 + 15) & ~15 : 0;
+    t = galloc_dos(TDB_SIZE + ext, 0, &seg);
     if (!t)
         return 0;
     FarSetOwner(t, t);          /* observed: a TDB owns itself */
@@ -608,7 +624,7 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     }
     x = MK_FP(xsel, 0);
     pdb = dpmi_alloc_desc(1);
-    if (!pdb || !dpmi_set_desc(pdb, ((u32)seg << 4) + TDB_PSP, 0xFF, 0)) {
+    if (!pdb || !dpmi_set_desc(pdb, ((u32)seg << 4) + TDB_PSP, 0xFF + ext, 0)) {
         if (pdb)
             dpmi_free_desc(pdb);
         GlobalFree(xsel);
@@ -633,16 +649,12 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     p = MK_FP(pdb, 0);
     *(u16 FAR *)(p + 0x16) = psp_sel;
     *(u16 FAR *)(p + 0x2C) = *(u16 FAR *)MK_FP(psp_sel, 0x2C);
-    n = tail ? tail[0] : 0;
-    if (n > 0x7E)
-        n = 0x7E;
     p[0x80] = (u8)n;
-    for (i = 0; i < n; i++)
+    for (i = 0; i < k; i++)
         p[0x81 + i] = tail[1 + i];
-    /* the CR; WINOLDAP's tail (loader.c start_oldapp) ends in LF, which
-       stays (WO1 on 3.1: "0F 00 'Z:\COMMAND.COM' 0A" at 80h after
-       InitTask) */
-    p[0x81 + n] = (tail && n == tail[0] && tail[1 + n] == '\n') ? '\n' : '\r';
+    /* the CR; WINOLDAP's tail ends in LF, which stays (WO1 on 3.1:
+       "0F 00 'Z:\COMMAND.COM' 0A" at 80h after InitTask) */
+    p[0x81 + k] = whole ? '\n' : '\r';
     *(u16 FAR *)(p + 0x5C) = show ? show[0] : 2;
     *(u16 FAR *)(p + 0x5E) = show ? show[1] : 1;   /* UNVERIFIED w/o */
     if (cur_task)
@@ -908,11 +920,20 @@ void __cdecl inittask_c(regs16 FAR *r)
        memory and wrote its NUL over the 0Ah there: a task's link to the
        next one (0A17h became 0017h), and Windows faulted or hung when the
        next DOS program started */
-    end = 0x81 + (psp[0x80] < 0x7E ? psp[0x80] : 0x7E);
-    if (psp[end] != '\n')
-        psp[end] = 0;
-    for (cmd = 0x81; cmd < end && (psp[cmd] == ' ' || psp[cmd] == '\t'); cmd++)
-        ;
+    end = 0x81 + psp[0x80];
+    if (end > sel_lim16(pdb) || psp[end] != '\n') {
+        /* a program's tail: its CR, at 100h past 126 characters (in
+           w16's few bytes more of the PDB, task_create; TK68) */
+        end = 0x81 + (psp[0x80] < 0x7F ? psp[0x80] : 0x7F);
+        if (end < 0x100 || (end <= sel_lim16(pdb) && psp[end] == '\r'))
+            psp[end] = 0;
+    }
+    /* UNVERIFIED: TK68 saw 3.1 give a program WinExec'd without
+       arguments BX 80h (the length byte) with the CR at 81h kept; TK1's
+       check (BX 81h or more, the NUL) is kept here */
+    cmd = 0x81;
+    while (cmd < end && (psp[cmd] == ' ' || psp[cmd] == '\t'))
+        cmd++;
 
     r->ax = pdb;
     if (x->heap_size && !local_init_task(r->ds, x->heap_size))

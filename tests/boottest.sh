@@ -25,6 +25,14 @@
 #   lastexit   the shell (TK55) ends at once: WIN's ERRORLEVEL 0 and text
 #              mode 3 afterwards, as 3.1's KERNEL ends Windows through
 #              USER's ExitWindows when the last task ends (ref and w16)
+#   kcmdline   long WinExec command lines (TK68 as the shell, TK68W in
+#              WINOLDAP.MOD's and WINOA386.MOD's place and run as a
+#              Windows program): what KERNEL gives WINOLDAP and a program
+#              (the PDB's tail) and WinExec's results, w16's KRNL286 and
+#              KRNL386 (Standard) and KRNL386 (Enhanced) against
+#              Microsoft's KRNL386, the PDB selector's limit aside; then,
+#              w16 alone, the tails of FEh and FFh bytes 3.1 fails with
+#              (Windows hangs or ends) must reach WINOLDAP whole
 #   k286       on an emulated 80286 (DOSBox-X, -p 286): w16's KRNL286 on
 #              Microsoft's DOSX and on w16's, against Microsoft's KRNL286
 #              there                                must be 0
@@ -931,7 +939,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload vsd bigmem filecdr}
+cases=${*:-kernel dosx dosxaudit kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload vsd bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1343,6 +1351,51 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   lastexit: the last task's end ends Windows through ExitWindows (ERRORLEVEL 0, mode 3)"
         else echo "FAIL lastexit: $r ($out/lastexit-w16)"; fails=$((fails + 1)); fi ;;
+    kcmdline)
+        # TK68 (tests/apps/tk68.c) makes the calls C:\TK68.TXT names; the
+        # w16 runs make four more, whose tails 3.1 fails with
+        common='c0 c89 c116 c117 c126 c127 c140 c200 c240 c245 c300 b117 b140 p117 p140 w126 w127 w200 w243'
+        extra='c243 c244 b244 p244'
+        printf '%s\r\n' "$common" > "$out/kcmdref.txt"
+        printf '%s %s\r\n' "$common" "$extra" > "$out/kcmdw16.txt"
+        set -- -f "$root/build/dos/TK68.EXE=TK68.EXE" -f "$root/build/dos/TK68W.EXE=TK68W.EXE" \
+            -f "$root/build/dos/TK68W.EXE=WINDOWS/SYSTEM/WINOLDAP.MOD" \
+            -f "$root/build/dos/TK68W.EXE=WINDOWS/SYSTEM/WINOA386.MOD" -i 'boot:shell=C:\TK68.EXE'
+        for k in ref k286 k386 k386e; do
+            case $k in
+            ref)   o="-r -3" t=$out/kcmdref.txt ;;
+            k286)  o= t=$out/kcmdw16.txt ;;
+            k386)  o=-3 t=$out/kcmdw16.txt ;;
+            k386e) o=-3 t=$out/kcmdw16.txt ;;
+            esac
+            # shellcheck disable=SC2086
+            if [ $k = k386e ]; then
+                "$root/tests/dropin.sh" -t 120 -o "$out/kcmdline-$k" $o -c 'WIN /3 /B' -f "$t=TK68.TXT" "$@" > "$out/kcmdline-$k.txt" 2>&1 &
+            else
+                "$root/tests/dropin.sh" -t 120 -o "$out/kcmdline-$k" $o -f "$t=TK68.TXT" "$@" > "$out/kcmdline-$k.txt" 2>&1 &
+            fi
+        done
+        wait
+        # the log without the mode and the PDB selector's limit
+        kclog() { tr -d '\r' < "$out/kcmdline-$1/c/TK68.LOG" 2>/dev/null | sed '/^C start/d; s/ lim=[0-9A-F]*//'; }
+        kclog ref | sed '/^C done/d' > "$out/kcmdline-ref.log"
+        n=$(wc -l < "$out/kcmdline-ref.log")
+        r=ok
+        [ "$n" -gt 60 ] || r="ref: $n lines"
+        for k in k286 k386 k386e; do
+            [ "$r" = ok ] || break
+            kclog $k > "$out/kcmdline-$k.log"
+            head -n "$n" "$out/kcmdline-$k.log" | diff "$out/kcmdline-ref.log" - > "$out/kcmdline-$k.diff" ||
+                { r="$k: differs from 3.1 ($out/kcmdline-$k.diff)"; break; }
+            tail -n +"$((n + 1))" "$out/kcmdline-$k.log" > "$out/kcmdline-$k.extra"
+            [ "$(grep -c '^C result=FFFF$' "$out/kcmdline-$k.extra")" = 4 ] &&
+            [ "$(grep -c ' len=F[EF]$' "$out/kcmdline-$k.extra")" = 4 ] &&
+            [ "$(grep -Ec '\\0D(C:\\5CT68\.(COM|BAT|PIF))\\0A\] n=0(0FF|100)$' "$out/kcmdline-$k.extra")" = 4 ] &&
+            grep -q '^C done$' "$out/kcmdline-$k.extra" ||
+                { r="$k: the FEh/FFh tails ($out/kcmdline-$k.extra)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   kcmdline: WinExec's long command lines, WINOLDAP's and a program's tails as 3.1's (KRNL286, KRNL386, Enhanced mode)"
+        else echo "FAIL kcmdline: $r"; fails=$((fails + 1)); fi ;;
     k286)   # an emulated 80286 (DOSBox-X cputype=286): w16's KRNL286 on
             # Microsoft's DOSX and on w16's, against Microsoft's KRNL286
             # there (mode switches back to real mode by processor reset)
