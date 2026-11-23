@@ -388,6 +388,152 @@ int __cdecl tmain(void)
         }
         report("msgs", n);
     }
+    /* drawing and USER work for the performance audit (each a step a
+     * user sees: text, fills, frames, a scroll, a stretch, GetDC, a sorted
+     * list box, a multi-line edit's typing) */
+    if (want("text")) {
+        HDC sdc = GetDC(0);
+        RECT r;
+        SetRect(&r, 20, 300, 620, 316);
+        SetBkMode(sdc, OPAQUE);
+        n = 0;
+        start();
+        for (;;) {
+            ExtTextOut(sdc, 20 + (int)(n & 7), 300, ETO_OPAQUE, &r,
+                       "The quick brown fox jumps over the lazy dog 0123456789", 54, NULL);
+            n++;
+            if (!(n & 3) && done()) break;
+        }
+        ReleaseDC(0, sdc);
+        report("text", n);
+    }
+    if (want("fill")) {
+        HDC sdc = GetDC(0);
+        HBRUSH b = CreateSolidBrush(RGB(0, 0, 128)), ob = SelectObject(sdc, b);
+        n = 0;
+        start();
+        for (;;) {
+            PatBlt(sdc, 101 + (int)(n & 7), 50, 300, 200, PATCOPY);
+            n++;
+            if (!(n & 3) && done()) break;
+        }
+        SelectObject(sdc, ob);
+        DeleteObject(b);
+        ReleaseDC(0, sdc);
+        report("fill", n);
+    }
+    if (want("line")) {
+        HDC sdc = GetDC(0);
+        n = 0;
+        start();
+        for (;;) {
+            int k = (int)(n & 7);
+            MoveTo(sdc, 50 + k, 60);
+            LineTo(sdc, 590 - k, 60);
+            LineTo(sdc, 590 - k, 420);
+            LineTo(sdc, 50 + k, 420);
+            LineTo(sdc, 50 + k, 60);
+            LineTo(sdc, 300, 200 + k);
+            n++;
+            if (!(n & 3) && done()) break;
+        }
+        ReleaseDC(0, sdc);
+        report("line", n);
+    }
+    if (want("scroll")) {
+        HDC sdc = GetDC(0);
+        n = 0;
+        start();
+        for (;;) {
+            /* screen to screen, overlapping, the same bit position: a
+             * window's contents scrolled a line */
+            BitBlt(sdc, 64, 40, 512, 300, sdc, 64, 56, SRCCOPY);
+            n++;
+            if (!(n & 3) && done()) break;
+        }
+        ReleaseDC(0, sdc);
+        report("scroll", n);
+    }
+    if (want("stretch")) {
+        HDC sdc = GetDC(0), mdc = CreateCompatibleDC(sdc);
+        HBITMAP bm = CreateCompatibleBitmap(sdc, 64, 64), ob = SelectObject(mdc, bm);
+        int i;
+        for (i = 0; i < 64; i += 4) PatBlt(mdc, 0, i, 64, 2, (i & 4) ? BLACKNESS : WHITENESS);
+        n = 0;
+        start();
+        for (;;) {
+            StretchBlt(sdc, 300, 100, 160, 120, mdc, 0, 0, 64, 64, SRCCOPY);
+            n++;
+            if (done()) break;
+        }
+        SelectObject(mdc, ob);
+        DeleteObject(bm);
+        DeleteDC(mdc);
+        ReleaseDC(0, sdc);
+        report("stretch", n);
+    }
+    if (want("getdc")) {
+        HWND w = CreateWindow("STATIC", "", WS_POPUP | WS_VISIBLE, 10, 10, 100, 50,
+                              0, 0, GetModuleHandle("VX16"), NULL);
+        n = 0;
+        start();
+        for (;;) {
+            HDC dc = GetDC(w);
+            PatBlt(dc, 0, 0, 1, 1, DSTINVERT);
+            ReleaseDC(w, dc);
+            n++;
+            if (!(n & 15) && done()) break;
+        }
+        DestroyWindow(w);
+        report("getdc", n);
+    }
+    if (want("lbsort")) {
+        HWND w = CreateWindow("LISTBOX", "", WS_POPUP | LBS_SORT | LBS_HASSTRINGS, 0, 0, 100, 100,
+                              0, 0, GetModuleHandle("VX16"), NULL);
+        char t[16];
+        n = 0;
+        start();
+        for (;;) {
+            int i;
+            SendMessage(w, LB_RESETCONTENT, 0, 0);
+            for (i = 0; i < 200; i++) {
+                wsprintf(t, "item%u", (i * 7919u) % 1000u);
+                SendMessage(w, LB_ADDSTRING, 0, (LPARAM)(LPSTR)t);
+            }
+            n++;
+            if (done()) break;
+        }
+        DestroyWindow(w);
+        report("lbsort", n);
+    }
+    if (want("edit")) {
+        HWND w = CreateWindow("EDIT", "", WS_POPUP | WS_VISIBLE | WS_BORDER | WS_HSCROLL |
+                              WS_VSCROLL | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL,
+                              20, 20, 400, 300, 0, 0, GetModuleHandle("VX16"), NULL);
+        HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, 300 * 40L + 1);
+        char FAR *p = (char FAR *)GlobalLock(h);
+        int i;
+        if (p) {
+            for (i = 0; i < 300; i++)
+                wsprintf(p + i * 40, "line %3d of the text, some words %8u\r\n", i, i * 31u);
+            p[300 * 40] = 0;
+            SetWindowText(w, p);
+        }
+        UpdateWindow(w);
+        SendMessage(w, EM_SETSEL, 0, MAKELONG(20 * 40, 20 * 40));
+        n = 0;
+        start();
+        for (;;) {
+            SendMessage(w, WM_CHAR, (n & 1) ? 8 : 'x', 1);
+            UpdateWindow(w);
+            n++;
+            if (!(n & 3) && done()) break;
+        }
+        DestroyWindow(w);
+        if (p) GlobalUnlock(h);
+        GlobalFree(h);
+        report("edit", n);
+    }
     if ((UINT)hmm >= 32) FreeLibrary(hmm);
     out("VX16 done\r\n");
     f = _lcreat("C:\\VX16.LOG", 0);
