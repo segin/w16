@@ -98,6 +98,11 @@ typedef struct ED {
     WORD   ubuf, udel;          /* udel characters deleted there (block of hseg) */
 } ED;
 typedef WORD PED;               /* the state block's handle (object heap) */
+/* a single-line control holds at most 32766 characters, whatever its
+   limit: WM_SETTEXT cuts longer text there, and nothing is added past it
+   even after EM_LIMITTEXT 0 (US36 on 3.1). A multi-line one takes what
+   its heap holds (60000 in a 64K segment) */
+#define SL_MAX  0x7FFE
 #define E(e)    ((ED __far *)UH_PTR(&uhObj, (e)))
 
 static void relayout(HWND h, PED e);
@@ -509,13 +514,13 @@ static BOOL is_delim(char c)
 
 /* the application's word-break procedure (3.1 SDK, EM_SETWORDBREAKPROC:
    the text, a position, the text's length, WB_LEFT/WB_RIGHT/
-   WB_ISDELIMITER); 3.1 passes the whole text and its length (US35) */
-static int call_wbp(PED e, int ich, int code)
+   WB_ISDELIMITER); 3.1 passes the whole text and its length (US35).
+   Positions are WORDs, past 32767 too (US36): what WB_LEFT and WB_RIGHT
+   answer is taken as one */
+static WORD call_wbp(PED e, WORD ich, int code)
 {
     FARPROC f = E(e)->wbp;
-    int r;
-    r = ((int (__far __pascal *)(LPSTR, int, int, int))f)(text(e), ich, E(e)->len, code);
-    return r;
+    return (WORD)((int (__far __pascal *)(LPSTR, int, int, int))f)(text(e), (int)ich, (int)E(e)->len, code);
 }
 
 /* where a line from s breaks when character c does not fit (see the
@@ -527,7 +532,7 @@ static WORD wrap_break(PED e, WORD s, WORD c, WORD lend)
     if (E(e)->wbp) {
         /* 3.1 asks WB_ISDELIMITER of that character (a break after it),
            then of the one before (a break at it), then WB_LEFT (US35) */
-        int r;
+        WORD r;
         /* a delimiter that is a space hangs; another starts the next
            line (US35: a hyphen) */
         if (call_wbp(e, c, WB_ISDELIMITER))
@@ -535,7 +540,7 @@ static WORD wrap_break(PED e, WORD s, WORD c, WORD lend)
         if (c > s && call_wbp(e, c - 1, WB_ISDELIMITER))
             return c;
         r = call_wbp(e, c, WB_LEFT);
-        if (r > (int)s && r <= (int)c)
+        if (r > s && r <= c)
             return r;
         return c > s ? c : s + 1;
     }
@@ -1080,6 +1085,12 @@ static void scroll_to_caret(HWND h, PED e)
            whole, shows it from the start, cut at the right) */
         HDC hdc = ctl_dc(h);
         HFONT old = SelectObject(hdc, efont(e));
+        /* more characters than the width has pixels (each at least one,
+           with room for the overhang) do not fit: start there, not a
+           character at a time from far back, which measured up to 32766
+           characters 32766 times (US36) */
+        if (r.right > 0 && E(e)->sel1 - E(e)->first > (WORD)r.right + 16)
+            E(e)->first = E(e)->sel1 - ((WORD)r.right + 16);
         while (E(e)->first < E(e)->sel1 && text_x(hdc, e, E(e)->first, E(e)->sel1 - E(e)->first) > r.right - 2)
             E(e)->first++;
         SelectObject(hdc, old);
@@ -1235,7 +1246,7 @@ static BOOL undo_keep(PED e, WORD pos, WORD n, BOOL front)
 #define K_TYPE    1             /* a character typed */
 #define K_BACK    2             /* Backspace */
 #define K_DEL     3             /* Delete */
-#define K_NOUNDO  4             /* a multi-line control's EM_REPLACESEL */
+#define K_NOUNDO  4             /* EM_REPLACESEL */
 
 /* a change about to be made: s0-s1 replaced by n characters.
    A multi-line control whose lines wrap (US35 on 3.1) keeps one change: an insertion
@@ -1309,6 +1320,8 @@ static void undo_record(PED e, WORD s0, WORD s1, WORD n, int kind)
 static void set_text(HWND h, PED e, LPCSTR s)
 {
     WORD n = s ? lstr_len(s) : 0;
+    if (!E(e)->multi && n > SL_MAX)
+        n = SL_MAX;
     if (!grow(e, n, FALSE))
         return;
     if (n)
@@ -1355,7 +1368,7 @@ static BOOL change(HWND h, PED e, WORD s0, WORD s1, LPCSTR s, WORD n, int kind)
 
 static void replace_sel_n(HWND h, PED e, LPCSTR s, WORD n, int kind)
 {
-    WORD s0 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel0 : E(e)->sel1, s1 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel1 : E(e)->sel0;
+    WORD s0 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel0 : E(e)->sel1, s1 = E(e)->sel0 < E(e)->sel1 ? E(e)->sel1 : E(e)->sel0, lim;
     BOOL cut = FALSE;
     if (s1 > E(e)->len)
         s1 = E(e)->len;
@@ -1379,9 +1392,12 @@ static void replace_sel_n(HWND h, PED e, LPCSTR s, WORD n, int kind)
     /* past the limit what fits goes in (3.1: 5 characters replacing
        nothing at 29998 left 30000), then EN_MAXTEXT (US35: "UCM" for a
        paste cut short, "M" alone for a key that did not fit) */
-    if (E(e)->limit && E(e)->len - (s1 - s0) + n > E(e)->limit) {
+    lim = E(e)->limit ? E(e)->limit : 0xFFFF;
+    if (!E(e)->multi && lim > SL_MAX)
+        lim = SL_MAX;
+    if ((DWORD)E(e)->len - (s1 - s0) + n > lim) {
         WORD keep = E(e)->len - (s1 - s0);
-        n = keep < E(e)->limit ? E(e)->limit - keep : 0;
+        n = keep < lim ? lim - keep : 0;
         cut = TRUE;
     }
     if (s0 == s1 && !n) {
@@ -1570,14 +1586,15 @@ static WORD word_right(PED e, WORD p)
     if (E(e)->wbp) {
         /* 3.1 asks WB_ISDELIMITER of p, WB_LEFT of p and WB_RIGHT of
            one past that (US35), nothing at the end */
-        int a, r;
+        WORD a, r;
         if (p >= len)
             return len;
         call_wbp(e, p, WB_ISDELIMITER);
         a = call_wbp(e, p, WB_LEFT);
-        a = a < 0 ? 0 : (WORD)a >= len ? len - 1 : a;
+        if (a >= len)
+            a = len - 1;
         r = call_wbp(e, a + 1, WB_RIGHT);
-        return r < 0 ? 0 : (WORD)r > len ? len : (WORD)r;
+        return r > len ? len : r;
     }
     t = text(e);
     if (p < len && t[p] == '\r') {
@@ -1599,12 +1616,13 @@ static WORD word_left(PED e, WORD p)
     if (E(e)->wbp) {
         /* WB_LEFT of p, then WB_RIGHT of one past that (US35), nothing
            at the start */
-        int r;
+        WORD r;
         if (!p)
             return 0;
         r = call_wbp(e, p, WB_LEFT);
-        r = r < 0 ? 0 : (WORD)r > p ? p : r;
-        if ((WORD)r < E(e)->len)
+        if (r > p)
+            r = p;
+        if (r < E(e)->len)
             call_wbp(e, r + 1, WB_RIGHT);
         return r;
     }
@@ -1915,7 +1933,9 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             notify(h, e, EN_CHANGE);
         return 1;
     case WM_GETTEXT:
-        if ((int)wp <= 0 || GP_BAD(lp))
+        /* the count a WORD (US36 on 3.1: 65535 copies all of 60000;
+           0 writes nothing) */
+        if (!wp || GP_BAD(lp))
             return 0;
     {
         /* the control's length of what is in the block (US20) */
@@ -1971,10 +1991,10 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         ls = E(e)->multi ? lstart(e, line_of(e, pos)) : 0;
         if (E(e)->wbp) {
             /* WB_LEFT of the place, WB_RIGHT of one past that (US35) */
-            int r = call_wbp(e, pos, WB_LEFT);
-            a = r < 0 ? 0 : (WORD)r > pos ? pos : r;
+            WORD r = call_wbp(e, pos, WB_LEFT);
+            a = r > pos ? pos : r;
             r = a < E(e)->len ? call_wbp(e, a + 1, WB_RIGHT) : a;
-            b = r < (int)a ? a : (WORD)r > E(e)->len ? E(e)->len : r;
+            b = r < a ? a : r > E(e)->len ? E(e)->len : r;
         } else {
             a = word_left(e, pos);
             if (a < ls)
@@ -2060,12 +2080,17 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case EM_GETSEL:
         return MAKELONG(E(e)->sel0 < E(e)->sel1 ? E(e)->sel0 : E(e)->sel1, E(e)->sel0 < E(e)->sel1 ? E(e)->sel1 : E(e)->sel0);
     case EM_SETSEL: {
-        int a = (int)LOWORD(lp), b = (int)HIWORD(lp);
-        if (a == -1) {
+        /* positions are WORDs (US36 on 3.1): past the text (32768 to
+           FFFEh too) the text's end; a start of FFFFh (-1) alone is
+           special, the selection taken away, the caret where it was
+           (whatever the end); the caret goes to the end given, before
+           the start when the end is smaller */
+        WORD a = LOWORD(lp), b = HIWORD(lp);
+        if (a == 0xFFFF) {
             E(e)->sel0 = E(e)->sel1;
         } else {
-            E(e)->sel0 = (WORD)(a < 0 ? 0 : a > (int)E(e)->len ? E(e)->len : a);
-            E(e)->sel1 = (WORD)(b < 0 || b > (int)E(e)->len ? E(e)->len : b);
+            E(e)->sel0 = a > E(e)->len ? E(e)->len : a;
+            E(e)->sel1 = b > E(e)->len ? E(e)->len : b;
         }
         E(e)->eol = 0;
         /* the caret brought into view whatever wParam says (US35) */
@@ -2075,13 +2100,16 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case EM_REPLACESEL:
         if (GP_BAD(lp))
             return 0;
-        /* a wrapping multi-line control's empties the undo record (US35;
-           UNVERIFIED without wrapping) */
-        replace_sel(h, e, (LPCSTR)lp, E(e)->multi && E(e)->wrapmode ? K_NOUNDO : K_OTHER);
+        /* empties the undo record (US35 wrapping; US36 with
+           ES_AUTOHSCROLL and single-line) */
+        replace_sel(h, e, (LPCSTR)lp, K_NOUNDO);
         return 1;
     case EM_LIMITTEXT:
-        /* 0: as much as fits (3.1 answers the limit: 65535 for 0, US35) */
+        /* 0: as much as fits (3.1 answers the limit: 65535 for 0, US35;
+           a single-line control's no more than 32766, US36) */
         E(e)->limit = wp ? wp : 0xFFFF;
+        if (!E(e)->multi && E(e)->limit > SL_MAX)
+            E(e)->limit = SL_MAX;
         return E(e)->limit;
     case WM_USER + 13:              /* EM_GETHANDLE: multi-line only (US20) */
         return E(e)->multi ? E(e)->text : 0;
@@ -2149,7 +2177,12 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case EM_LINEFROMCHAR:
         if (!E(e)->multi)
             return 0;
-        return line_of(e, (int)wp == -1 ? E(e)->sel1 : wp > E(e)->len ? E(e)->len : wp);
+        /* -1: the selection's start's line (US36 on 3.1: 39990-40100
+           gave 39990's; EM_LINEINDEX -1 the caret's); past the text
+           (FFFEh too) the last line */
+        if (wp == 0xFFFF)
+            return line_of(e, E(e)->sel0 < E(e)->sel1 ? E(e)->sel0 : E(e)->sel1);
+        return line_of(e, wp > E(e)->len ? E(e)->len : wp);
     case EM_GETLINE: {
         WORD st, n, max;
         if (GP_BAD(lp))

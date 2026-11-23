@@ -910,12 +910,17 @@ BOOL WINAPI IsZoomed(HWND h)
 }
 
 /* ---- window text ---- */
+/* the count is a WORD: 32768 or more is a count, not a negative number,
+   and 0 copies nothing yet still empties the buffer (probe US36 on 3.1:
+   51193 characters copied for 51194, NUL at buf[0] for 0) */
 int WINAPI GetWindowText(HWND h, LPSTR buf, int n)
 {
-    if (!valid_wnd(h) || n <= 0)
+    if (!valid_wnd(h))
         return 0;
     buf[0] = 0;
-    return (int)send_message(h, WM_GETTEXT, n, (LPARAM)buf);
+    if (!n)
+        return 0;
+    return (int)send_message(h, WM_GETTEXT, (WORD)n, (LPARAM)buf);
 }
 
 int WINAPI GetWindowTextLength(HWND h)
@@ -936,9 +941,10 @@ void WINAPI SetWindowText(HWND h, LPCSTR s)
 
 /* DefWindowProc's part; a bad buffer (WM_GETTEXT) or string (WM_SETTEXT):
    0, the text as it was (3.1) */
-LONG def_gettext(PWND w, int n, LPSTR buf)
+LONG def_gettext(PWND w, WORD n, LPSTR buf)
 {
-    if (n <= 0 || GP_BAD(buf))
+    /* n a WORD (US36: 32768 to 65535 copy the text) */
+    if (!n || GP_BAD(buf))
         return 0;
     if (!w->text) {
         buf[0] = 0;

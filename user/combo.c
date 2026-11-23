@@ -535,17 +535,28 @@ LRESULT WINAPI __loadds ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             /* a CBS_DROPDOWNLIST's (US29 cb on 3.1): WM_GETTEXTLENGTH is
                -1 whatever is selected; WM_GETTEXT copies what fits and
                returns the text's length, or the buffer's size when it
-               was cut (20 for 19 characters of 300) */
+               was cut (20 for 19 characters of 300). The size is
+               compared as an int: one of 32768 or more counts as cut,
+               wp - 1 bytes copied, a NUL at wp - 1, wp returned (US36 on
+               3.1: 3.1 copies what follows the item's text in its heap,
+               w16 zeros) */
             if (msg == WM_GETTEXTLENGTH)
                 return -1;
-            if ((int)wp <= 0 || GP_BAD((LPSTR)lp))
+            if (!wp || GP_BAD((LPSTR)lp))
                 return 0;
             if ((buf = item_text(c, i)) == NULL)
                 return 0;
-            lstr_cpyn((LPSTR)lp, buf, wp);
             n = lstr_len(buf);
+            if (n < (LONG)(int)wp) {
+                lstr_cpyn((LPSTR)lp, buf, wp);
+                item_free(buf);
+                return n;
+            }
+            lstr_cpyn((LPSTR)lp, buf, (WORD)n < wp ? (WORD)n + 1 : wp);
             item_free(buf);
-            return n < (LONG)(int)wp ? n : (LONG)(int)wp;
+            if ((WORD)n + 1 < wp)
+                fmemset((LPSTR)lp + (WORD)n + 1, 0, wp - (WORD)n - 1);
+            return (LONG)(int)wp;
         }
         return 0;
     /* ---- CB_ messages: most are the list's ---- */

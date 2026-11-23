@@ -265,17 +265,18 @@ void WINAPI DrawFocusRect(HDC hdc, const RECT __far *rp)
    runbrowse) */
 static int text_width(HDC hdc, LPCSTR s, int n, BOOL prefix, BOOL tabs, int tabw)
 {
-    int w = 0, i, start = 0, oh;
+    int w = 0, oh;
+    WORD i, start = 0, wn = (WORD)n;   /* WORDs: an int i <= n never ends for n 32767 (US36) */
     TEXTMETRIC tm;
     GetTextMetrics(hdc, &tm);
     oh = tm.tmOverhang;
-    for (i = 0; i <= n; i++) {
-        if (i == n || (prefix && s[i] == '&') || (tabs && s[i] == '\t')) {
+    for (i = 0; i <= wn; i++) {
+        if (i == wn || (prefix && s[i] == '&') || (tabs && s[i] == '\t')) {
             if (i > start)
                 w += LOWORD(GetTextExtent(hdc, s + start, i - start)) - oh;
-            if (i < n && tabs && s[i] == '\t')
+            if (i < wn && tabs && s[i] == '\t')
                 w = (w / tabw + 1) * tabw;
-            if (i < n && prefix && s[i] == '&' && i + 1 < n && s[i + 1] == '&') {
+            if (i < wn && prefix && s[i] == '&' && i + 1 < wn && s[i + 1] == '&') {
                 w += LOWORD(GetTextExtent(hdc, "&", 1)) - oh;
                 i++;
             }
@@ -287,23 +288,24 @@ static int text_width(HDC hdc, LPCSTR s, int n, BOOL prefix, BOOL tabs, int tabw
 
 static void draw_line(HDC hdc, int x, int y, LPCSTR s, int n, BOOL prefix, BOOL tabs, int tabw)
 {
-    int i, start = 0, cx = x, ul = -1;
+    int cx = x, ul = -1;
+    WORD i, start = 0, wn = (WORD)n;   /* (see text_width) */
     TEXTMETRIC tm;
     GetTextMetrics(hdc, &tm);
-    for (i = 0; i <= n; i++) {
-        if (i == n || (prefix && s[i] == '&') || (tabs && s[i] == '\t')) {
+    for (i = 0; i <= wn; i++) {
+        if (i == wn || (prefix && s[i] == '&') || (tabs && s[i] == '\t')) {
             if (i > start) {
                 TextOut(hdc, cx, y, s + start, i - start);
                 cx += LOWORD(GetTextExtent(hdc, s + start, i - start)) - tm.tmOverhang;
             }
-            if (i < n && tabs && s[i] == '\t')
+            if (i < wn && tabs && s[i] == '\t')
                 cx = x + ((cx - x) / tabw + 1) * tabw;
-            else if (i < n && prefix && s[i] == '&') {
-                if (i + 1 < n && s[i + 1] == '&') {
+            else if (i < wn && prefix && s[i] == '&') {
+                if (i + 1 < wn && s[i + 1] == '&') {
                     TextOut(hdc, cx, y, "&", 1);
                     cx += LOWORD(GetTextExtent(hdc, "&", 1)) - tm.tmOverhang;
                     i++;
-                } else if (i + 1 < n && ul < 0) {
+                } else if (i + 1 < wn && ul < 0) {
                     ul = cx;
                     /* underline the next character */
                     {
@@ -397,7 +399,7 @@ int WINAPI DrawText(HDC hdc, LPCSTR s, int n, RECT __far *r, UINT fmt)
                    "Clipboard Viewer" in 40 pixels of the system font
                    gives three lines) */
                 int k, fit = -1, first = -1;
-                for (k = start; k <= end; k++) {
+                for (k = start;; k++) {
                     if (k == end || s[k] == ' ') {
                         if (first < 0)
                             first = k;
@@ -406,6 +408,8 @@ int WINAPI DrawText(HDC hdc, LPCSTR s, int n, RECT __far *r, UINT fmt)
                         else
                             break;
                     }
+                    if (k >= end)       /* (not k <= end: end may be 32767) */
+                        break;
                 }
                 /* ... but only when drawing centred or right-aligned text:
                    DT_CALCRECT and left-aligned text break there as at any

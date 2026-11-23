@@ -17,7 +17,7 @@
 #include "user.h"
 
 BOOL def_settext(PWND w, LPCSTR s);
-LONG def_gettext(PWND w, int n, LPSTR buf);
+LONG def_gettext(PWND w, WORD n, LPSTR buf);
 LONG def_gettextlength(PWND w);
 HBRUSH sys_brush(HBRUSH b);
 void invalidate_screen(const RECT *rc);
@@ -891,8 +891,14 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         FillRect((HDC)wp, &r, b);
         return 1;
     }
-    case WM_SETTEXT:
-        if (!def_settext(w, (LPCSTR)lp))
+    case WM_SETTEXT: {
+        /* 3.1 answers 0, and a text of 32768 characters or more leaves
+           the window none, the old one gone (US36: a window's, a
+           static's, a button's; 32767 kept) */
+        LPCSTR s = (LPCSTR)lp;
+        if (s && !GP_BAD(s) && lstr_len(s) > 0x7FFF)
+            s = "";
+        if (!def_settext(w, s))
             return 0;
         if (has_caption(w) && is_visible(w))
             nc_paint(h, 0, (w->flags & WF_ACTIVEFRAME) != 0);
@@ -900,7 +906,8 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             follow_icon_title(h);       /* sized to the new text */
             redraw_icon_title(h);
         }
-        return 1;
+        return 0;
+    }
     case WM_GETTEXT:
         return def_gettext(w, wp, (LPSTR)lp);
     case WM_GETTEXTLENGTH:

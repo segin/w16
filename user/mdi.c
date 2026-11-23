@@ -9,7 +9,7 @@
  * the active child is maximised.
  */
 #include "user.h"
-LONG def_gettext(PWND w, int n, LPSTR buf);     /* win.c: a window's own text */
+LONG def_gettext(PWND w, WORD n, LPSTR buf);     /* win.c: a window's own text */
 
 void menu_track_bar(HWND h, char key);
 HBRUSH sys_brush(HBRUSH b);
