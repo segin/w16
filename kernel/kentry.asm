@@ -116,6 +116,15 @@ int21_handler:
 cdr_none:
         cmp ah, 4Ch
         je .exit
+        ; AH=00h (terminate, exit code 0): as 4C00h. Windows 3.1 hangs on
+        ; it from a Windows program under both its KERNELs (the DOSX audit's
+        ; DX10, docs/notes/dosx-audit-triage.md); DOS would end whatever
+        ; program it takes for the caller. w16 ends the task.
+        or ah, ah
+        jnz .not00
+        mov ax, 4C00h
+        jmp .exit
+.not00:
         cmp ah, 1Ah
         jne .not1a
         ; set DTA: the running task's (TDB 62h), then to DOS as before
