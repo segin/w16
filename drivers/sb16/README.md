@@ -68,7 +68,13 @@ DRV_DISABLE, DRV_FREE 1, DRV_QUERYCONFIGURE 1, DRV_CONFIGURE the
 configuration dialog (`sb16.rc`: port, IRQ, DMA, high DMA, MPU port,
 written to `[sb16.drv]`; DRVCNF_RESTART on OK, DRVCNF_CANCEL on Cancel),
 DRV_INSTALL DRVCNF_RESTART, DRV_REMOVE DRVCNF_OK, the rest DefDriverProc.
-In 386 Enhanced mode it offers no devices and leaves the card alone. DRVM_INIT
+In 386 Enhanced mode it needs VSBD.386 (`win386/vxd/vsbd.c`, `[386Enh]
+device=vsbd.386`, ARCHITECTURE.md 24.6): it takes the card through
+VSBD's API (INT 2Fh 1684h, device 0445h; DX 1 take, 2 give back, AX the
+port) for DRV_ENABLE and while a wave device is open, as Windows 3.1's
+SNDBLST2.DRV takes Windows 3.1's VSBD.386; a wave open while a DOS box
+has the card answers 4 (MMSYSERR_ALLOCATED). Without VSBD in Enhanced
+mode it offers no devices and leaves the card alone. DRVM_INIT
 answers 8 on every entry, as SNDBLST2's.
 
 Configuration: SYSTEM.INI `[sb16.drv]` port (hex), int, dma, hdma, mpuport
@@ -126,10 +132,6 @@ reset, a MIDI long message) on the caller's, as SNDBLST2's.
 
 - No OPL3 FM synthesiser device (it would need a patch set of w16's own:
   docs/notes/sb16-handover.md); the MIDI aux device sets the FM's volume only.
-- 386 Enhanced mode: the driver offers no devices there. It would need a VxD that virtualises the
-  card's ports, the DMA channels (VDMAD: the buffer's physical address)
-  and the IRQ for the system VM, and the DMA buffer page-locked; without
-  one the driver is not safe there.
 - MIDI input with real data: DOSBox's MPU-401 has no input source, so
   only the buffer handling (open, add, start, stop, reset, close) is
   verified; the parsing (running status, system exclusive, real time) is
