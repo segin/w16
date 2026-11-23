@@ -1545,6 +1545,10 @@ ZOI: no fixed limit on applets, applet DLLs or [MMCPL] entries (arrays grow); th
 
 **Results** (`tests/cplscenarios.sh`, installation-05, 2026-11-21): the scenarios `fnsample`, `fnadd`, `fnaddnc`, `fnremove`, `fntt`, `fnttonly` (Fonts), `ptset`, `ptadv` (Ports), `en386`, `envalid`, `envm` (386 Enhanced in `WIN /3` on 3.1's WIN386) and `en386w`, `envmw` (the w16 run on w16's WIN386 as well): CONTROL.INI, WIN.INI and SYSTEM.INI byte-identical to 3.1's in all 13; every Fonts sample (TrueType, raster, vector), the TrueType dialog, the Remove dialog and the 386 Enhanced dialog and its error boxes 0 pixels; what differs is w16's icon art (the panel, the Ports buttons), "w16" for "Windows" in the restart prompts and the swap file's figures (`tests/scripts/cpl.baseline`).
 
+### 14.7 MAIN.CPL audit (2026-11-23)
+
+An outside read-only audit of MAIN.CPL (16 findings) was checked finding by finding against the code and against 3.1 (scenarios `wnchange`, `msdbl*`, `msbtn`, `dkcolors`, `dksvorder*`, `dklongpat*`, `colongsch`, `dkspin`): 12 fixed (7 real, partly so for L2, and 5 hardening), the broadcasts, the double-click bar, Edit Pattern, the saver list and names of any length among them (14.3); M1, M3 (3.1 behaves the same), L4 and L5 false. Every verdict, its evidence and commit are in its triage file, `docs/notes/cpl-audit-triage.md`, which is in git history (removed once the audit was complete). Found with it, from two user reports: the cursor blink rate and the keyboard settings (14.3 Desktop and Keyboard).
+
 ## 15. Applets
 
 ### 15.1 Notepad (`shell/notepad/`, probes NP1-NP9)
