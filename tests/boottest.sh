@@ -327,7 +327,13 @@
 #              2026-11-20 w16's list was a row taller and the scroll drew
 #              over the static). The tree's SB16.DRV gives QuickTime a
 #              sound device in parts tree, tree386 and cpl; their stock
-#              3.1 runs get Windows 3.1's SNDBLST2.DRV to match
+#              3.1 runs get Windows 3.1's SNDBLST2.DRV to match. Part enh:
+#              the tree alone in 386 Enhanced mode (its WIN386 and
+#              KRNL386, WIN /3; qtplay.sh -T 386 -E) against stock 3.1's
+#              WIN /3: until 2026-11-22 the movie ended Windows with a
+#              #GP in TIMER:1 (a nested interrupt's frame put on WIN386's
+#              host stack over TIMER's words while its callback ran on
+#              MMSYSTEM's stack; win386/vmm/dpmi.c hstk_base)
 #   mmsystem  w16's MMSYSTEM.DLL and MMTASK.TSK (ARCHITECTURE.md 23)
 #              against Microsoft's, on the reference 3.1
 #              (tests/mmsystem/mscen.sh): parts core (the probe MMP.EXE:
@@ -3720,6 +3726,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         case ${part:-over} in
         tree) qto="-T 286" ;;
         tree386) qto="-T 386" ;;
+        enh) qto="-T 386 -E" ;;
         esac
         if [ "${part:-}" = cpl ]; then
             # its Control Panel's Files list (tests/qtcpl.sh)
@@ -5802,7 +5809,7 @@ caseparts() {
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
     ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
     timer) echo "$1@s $1@3 $1@qt" ;;
-    quicktime) echo "$1@over $1@tree $1@tree386 $1@cpl" ;;
+    quicktime) echo "$1@over $1@tree $1@tree386 $1@enh $1@cpl" ;;
     mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;
     sb16) echo "$1@dev $1@audio $1@prog" ;;
     bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;
