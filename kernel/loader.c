@@ -1480,10 +1480,16 @@ static int win32s_installed(void)
    in WINOLDAP.MOD's place, for WinExec("COMMAND.COM /C ECHO HI")): its
    command tail is the DOS program's tail, a NUL, then the program's name
    as given ("/C ECHO HI\0COMMAND.COM", length byte 16h, followed by
-   0Ah), nCmdShow as given, hPrevInstance 0. UNVERIFIED: the 0Ah, a name
-   with a path, a .PIF, tails longer than 127 bytes (Pietrek: the PDB
-   then grows); the TDB's WINOLDAP flag (Pietrek: TDB 16h bit 0) is not
-   set yet. */
+   0Ah), nCmdShow as given, hPrevInstance 0. Long tails (TK68, its
+   TK68W in WINOLDAP.MOD's and WINOA386.MOD's place, KRNL286 and KRNL386,
+   Standard and Enhanced mode; a .COM, a .BAT, a .PIF and a name with a
+   path alike): the whole tail, its length byte up to FFh, the PDB grown to
+   hold it (task_create); with more than 126 characters of arguments the
+   separator is a CR instead of the NUL (it falls past the PDB's FFh), and
+   WINOLDAP, 3.1's and w16's, then says "Cannot find the specified file."
+   3.1 itself fails with tails of FEh and FFh bytes (Windows hangs or
+   ends); w16 runs them. UNVERIFIED: the TDB's WINOLDAP flag (Pietrek: TDB
+   16h bit 0) is not set yet. */
 u16 KAPI LoadModule(const char FAR *name, void FAR *params);
 #ifdef KRNL386
 u16 KAPI LoadLibrary(const char FAR *name);
@@ -1495,18 +1501,19 @@ int KAPI GetPrivateProfileString(const char FAR *sec, const char FAR *key,
 static u16 start_oldapp(const char FAR *name, const loadparms FAR *lp)
 {
     static char woa[DOS_PATHMAX + 16];
-    static u8 tail[0x100];
+    static u8 tail[1 + 0xFF + 1];
     loadparms np;
     const u8 FAR *t = lp->cmd;
     u16 n = 0, i, k;
 
     k = t ? t[0] : 0;
-    for (i = 0; i < k && n < sizeof tail - 3; i++)
+    for (i = 0; i < k && n < 0xFF; i++)
         tail[1 + n++] = t[1 + i];
-    tail[1 + n++] = 0;
-    for (i = 0; name[i] && n < sizeof tail - 3; i++)
+    if (n < 0xFF)
+        tail[1 + n++] = k < 0x7F ? 0 : '\r';
+    for (i = 0; name[i] && n < 0xFF; i++)
         tail[1 + n++] = name[i];
-    tail[0] = (u8)(n > 0xFF ? 0xFF : n);
+    tail[0] = (u8)n;
     tail[1 + n] = '\n';
     n = kstrlen(sys_dir);
     kmemcpy(woa, sys_dir, n);
@@ -1627,7 +1634,10 @@ u16 KAPI LoadModule(const char FAR *name, void FAR *params)    /* KERNEL.45 */
    the tail starts with two); a name without extension gets ".EXE"; the
    name is searched as LoadLibrary's (TK16A was found in the directory of
    the caller's program); nCmdShow reaches InitTask; a missing file gives
-   2, a missing directory 3.
+   2, a missing directory 3; a command line of 256 characters or more
+   gives 0 and starts nothing, and the tail is the rest of the line
+   whatever its length (TK68: 140 or 243 characters reach the program's
+   PDB or WINOLDAP's tail).
    UNVERIFIED: tabs, quotes, a name ending in a dot. */
 /* a dot in the last part of a path */
 static int has_ext(const char *name)
@@ -1644,11 +1654,15 @@ static int has_ext(const char *name)
 u16 KAPI WinExec(const char FAR *cmd, u16 show)                /* KERNEL.166 */
 {
     char name[DOS_PATHMAX];
-    u8 tail[0x80];
+    u8 tail[1 + 0xFF + 1];
     u16 shw[2];
     loadparms lp;
     u16 i = 0, n = 0;
 
+    while (cmd[n])
+        if (++n > 0xFF)
+            return 0;
+    n = 0;
     while (cmd[i] == ' ')
         i++;
     while (cmd[i] && cmd[i] != ' ') {
@@ -1668,7 +1682,7 @@ u16 KAPI WinExec(const char FAR *cmd, u16 show)                /* KERNEL.166 */
     }
     if (cmd[i] == ' ')
         i++;
-    for (n = 0; cmd[i] && n < 0x7E; n++)
+    for (n = 0; cmd[i] && n < 0xFF; n++)
         tail[1 + n] = (u8)cmd[i++];
     tail[0] = (u8)n;
     tail[1 + n] = 13;

@@ -177,11 +177,13 @@ void fatal(const char *fmt, ...);   /* end Windows with a message */
 void *kmalloc(u32 size);
 void kfree(void *p);
 u32 page_alloc(void);               /* a physical page, zeroed; 0 if none */
+u32 page_alloc_run(u32 n, u32 align, u32 max_phys);    /* contiguous pages, or 0 */
 u32 pages_free(void);
 void page_free(u32 phys);
 u32 phys_to_lin(u32 phys);
 int map_page(u32 lin, u32 phys, u32 flags);
 u32 lin_to_phys(u32 lin);
+u32 lin_to_phys_x(u32 lin);          /* ~0: not present */
 int lin_user_ok(u32 lin, u32 len, int write);   /* ring 3 could reach it all */
 u32 vmm_pdir_entry(u32 i, u32 v);   /* set a page directory entry; the old one */
 u32 vmm_pdir_entry_get(u32 i);

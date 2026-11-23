@@ -1,7 +1,7 @@
 /*
  * pifread.c - reading a .PIF as Windows 3.1's WINOLDAP.MOD (Standard
  * mode) and WINOA386.MOD (386 Enhanced mode) do: one reader for w16's two
- * modules (winoldap/, winoa386/). MIT licence (LICENSE).
+ * modules (winoldap/, winoa386/). Public domain (CC0 1.0, LICENSE).
  *
  * The format (ARCHITECTURE.md 15.11, shell/pifedit/pif.c's table): the
  * 171h-byte base section (Windows 2.x's PIF), then section headers from

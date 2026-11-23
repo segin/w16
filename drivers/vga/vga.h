@@ -248,6 +248,7 @@ typedef struct {
     WORD wbytes;                        /* bytes in one plane's scan line */
     WORD sel, off;                      /* the bits */
     WORD scanseg;                       /* lines per 64K segment (0: one segment) */
+    WORD segincr;                       /* selector increment between 64K segments */
     WORD fill;                          /* bytes left at a segment's end */
 } SURF;
 

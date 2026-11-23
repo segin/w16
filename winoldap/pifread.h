@@ -2,7 +2,7 @@
  * pifread.h - a .PIF read as Windows 3.1's WINOLDAP.MOD (Standard mode)
  * and WINOA386.MOD (386 Enhanced mode) read it: winoldap/pifread.c, used
  * by both modules (ARCHITECTURE.md 9.8, 12.11; the format: 15.11 and
- * shell/pifedit/pif.c). MIT licence (LICENSE).
+ * shell/pifedit/pif.c). Public domain (CC0 1.0, LICENSE).
  */
 #ifndef PIFREAD_H
 #define PIFREAD_H

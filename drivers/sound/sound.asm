@@ -141,6 +141,18 @@ beepsnd dw s_def, s_hand, s_quest, s_excl, s_ast, s_def, s_def, s_def
 
 segment _TEXT
 
+; popfi: the flags pushed before a cli back, interrupts enabled again
+; explicitly when they were (in 386 Enhanced mode POPF does not change IF)
+%macro popfi 0
+        push bp
+        mov bp, sp
+        test byte [bp + 3], 2
+        pop bp
+        jz %%n
+        sti
+%%n:    popf
+%endmacro
+
 global libentry
 libentry:
         mov ax, 1
@@ -149,6 +161,25 @@ libentry:
 ; ---- 18: WEP(bSystemExit) -> 1 (SN1: 2 bytes off, DX kept)
 global WEP
 WEP:
+        push ds
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        push es
+        mov ax, DGROUP
+        mov ds, ax
+        call stopall
+        call freequeue
+        mov byte [opened], 0
+        pop es
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ds
         mov ax, 1
         retf 2
 
@@ -315,7 +346,7 @@ additem:
         xor di, di
 .w:     mov [qtail], di
         inc word [qcount]
-        popf
+        popfi
         xor ax, ax
         jmp .r
 .full:  mov ax, S_SERQFUL
@@ -798,7 +829,7 @@ mmtick:
         cmp byte [usemm], 0
         je .n
         call tick
-.n:     popf
+.n:     popfi
         pop es
         pop dx
         pop cx
@@ -860,7 +891,7 @@ DOBEEP:
         in al, 61h
         or al, 3
         out 61h, al
-        popf
+        popfi
         mov dx, 500
 .o:     mov cx, 126
 .i:     loop .i
@@ -871,7 +902,7 @@ DOBEEP:
         in al, 61h
         and al, 0FCh
         out 61h, al
-        popf
+        popfi
         mov dx, 500
         xor ax, ax
         retf 2

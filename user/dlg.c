@@ -868,8 +868,15 @@ BOOL WINAPI IsDialogMessage(HWND dlg, MSG __far *m)
         c = mnemonic_item(dlg, (char)m->wParam);
         if (c) {
             UINT dc = (UINT)send_message(c, WM_GETDLGCODE, 0, 0);
-            if (dc & DLGC_STATIC) {     /* a label: the next tab item */
+            if (dc & DLGC_STATIC) {
+                /* a label or a group box: the next control after it that
+                   is no label itself (3.1: Desktop's "Cursor Blink &Rate"
+                   group box, then the labels Slow and Fast, then the bar:
+                   Alt+R moves the bar, tests/scripts/cpl/dkblk*.txt) */
                 HWND n = GetWindow(c, GW_HWNDNEXT);
+                while (n && (!IsWindowVisible(n) || !IsWindowEnabled(n) ||
+                             (send_message(n, WM_GETDLGCODE, 0, 0) & DLGC_STATIC)))
+                    n = GetWindow(n, GW_HWNDNEXT);
                 if (n)
                     set_dlg_focus(dlg, n);
             } else if (dc & DLGC_BUTTON) {

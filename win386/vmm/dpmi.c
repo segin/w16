@@ -1344,6 +1344,10 @@ static u32 hstk_sel, hstk_lin;
  * pushed since. UNVERIFIED how Windows 3.1 nests; VX4 saw only the
  * outermost entry (SP 0FF6h). */
 static u32 hstk_depth, hstk_low = HSTK_TOP;
+/* the stack the innermost running protected-mode code was on at its last
+ * trap (while hstk_depth > 0): for an interrupt that comes in V86 code it
+ * called, the stack it left from (nest_stack) */
+static u32 pmw_ss, pmw_sp;
 
 static u32 hstk_mask(void)
 {
@@ -1354,6 +1358,10 @@ static u32 hstk_mask(void)
 void dpmi_note_pm(struct cregs *r)
 {
     if (!hstk_sel) return;
+    if (hstk_depth) {
+        pmw_ss = r->ss & 0xFFFF;
+        pmw_sp = r->esp & hstk_mask();
+    }
     if ((r->ss & 0xFFFF) == hstk_sel) {
         if ((r->esp & hstk_mask()) < hstk_low)
             hstk_low = r->esp & hstk_mask();
@@ -1392,15 +1400,59 @@ static u32 hstk_base(struct cregs *intr)
     return hstk_low;
 }
 
-/* run p (a frame on the host stack built from hstk_base) to its return */
+/* run p (a frame on the host stack built from hstk_base, or a nested
+ * handler's on the interrupted code's own stack) to its return */
 static void hstk_run(struct cregs *p)
 {
-    u32 saved_low = hstk_low;
+    u32 saved_low = hstk_low, saved_ss = pmw_ss, saved_sp = pmw_sp;
     hstk_depth++;
-    hstk_low = p->esp & hstk_mask();
+    if ((p->ss & 0xFFFF) == hstk_sel)
+        hstk_low = p->esp & hstk_mask();
+    pmw_ss = p->ss & 0xFFFF;
+    pmw_sp = p->esp & hstk_mask();
     exec_v86(p);
     hstk_depth--;
     hstk_low = saved_low;
+    pmw_ss = saved_ss;
+    pmw_sp = saved_sp;
+}
+
+/* Only the outermost handler gets the host stack. While a handler runs
+ * (hstk_depth > 0), an interrupt gets its frame on the protected-mode
+ * stack the VM is on: the interrupted code's SS:SP when it came in
+ * protected mode, else (in V86 code a handler called: a DOS or BIOS call,
+ * a chain to the host's handler) the stack that code left protected mode
+ * from, at its last trap. VPICD's Begin_Use_Locked_PM_Stack switches
+ * stacks on its first call only and counts the others (Virtual Device
+ * Adaptation Guide), and VX4's nested tick under Windows 3.1's WIN386
+ * (kinds 3 and 4, tests/dos/vx4.asm) shows it: a handler that has moved
+ * to a stack of its own and enabled interrupts gets the next tick's frame
+ * on that stack, and its words on the host stack stay. On the host stack
+ * itself the frame still goes below everything noted there (hstk_base).
+ * Returns 0 for the host stack. Before (2026-11-22) every nested frame
+ * went on the host stack below hstk_low, the lowest SP of a trap there;
+ * CLI and STI do not note it (cli_sti_fast), so the frame overwrote what
+ * a handler had pushed before it moved: w16's TIMER.DRV's interrupt
+ * handler, on MMSYSTEM's stack for a QuickTime callback, came back to
+ * garbage (a #GP in TIMER:1 at 0723; and, with only interrupts in
+ * protected mode moved, at 010E: a tick chained to the BIOS from
+ * MMSYSTEM's stack, and an IRQ in that BIOS code; docs/notes/
+ * quicktime-handover.md). */
+static int nest_stack(struct cregs *intr, u32 *ss, u32 *sp)
+{
+    u32 s, p;
+    if (!hstk_depth || !intr) return 0;
+    if (!(intr->eflags & EFL_VM)) {
+        s = intr->ss & 0xFFFF;
+        p = intr->esp & hstk_mask();
+    } else {
+        s = pmw_ss;
+        p = pmw_sp;
+    }
+    if (!s || s == hstk_sel) return 0;
+    *ss = s;
+    *sp = p;
+    return 1;
 }
 
 /* Run the client's protected-mode handler of hardware interrupt vec on
@@ -1409,14 +1461,18 @@ static void hstk_run(struct cregs *p)
  * breakpoint), then the client's own CS:IP where it was interrupted (or,
  * for an interrupt in V86 mode, where it last left protected mode); DS
  * and ES are the client's DS; interrupts off. Synchronous: returns when
- * the handler has returned. intr: the interrupted state. */
+ * the handler has returned. intr: the interrupted state. A nested one's
+ * frame may go on another stack (nest_stack). */
 static void run_hw_handler(int vec, struct cregs *intr, u32 ccs, u32 cip, u32 cds, u32 cflags)
 {
     struct cregs p;
 
     memset(&p, 0, sizeof(p));
-    p.esp = hstk_base(intr);
-    p.ss = hstk_sel;
+    hstk_make();
+    if (!nest_stack(intr, &p.ss, &p.esp)) {
+        p.esp = hstk_base(intr);
+        p.ss = hstk_sel;
+    }
     p.ds = p.es = cds;
     pm_push(&p, ccs);
     pm_push(&p, cip);
@@ -1561,8 +1617,11 @@ void dpmi_ps2cb(struct cregs *r)
     SETW(r->esp, (u16)r->esp + 4);
     if (!sysvm.pm || !ps2_sel) return;
     memset(&p, 0, sizeof(p));
-    p.esp = hstk_base(r);
-    p.ss = hstk_sel;
+    hstk_make();
+    if (!nest_stack(r, &p.ss, &p.esp)) {
+        p.esp = hstk_base(r);
+        p.ss = hstk_sel;
+    }
     p.ds = p.es = sysvm.last_ds;
     pm_push(&p, status);
     pm_push(&p, x);

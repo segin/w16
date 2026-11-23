@@ -323,6 +323,7 @@ void input_enable(void)
 
     S_ENABLESYSTEMTIMERS();
     KB_ENABLE((FARPROC)keybd_event_entry, keystate);
+    keyboard_speed_init();
     MS_ENABLE((FARPROC)mouse_event_entry);
     D_MOVECURSOR(ptCursor.x, ptCursor.y);
     set_cursor_shape(load_icon_cursor(0, IDC_ARROW, TRUE));
@@ -988,6 +989,16 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                         qkeystate[vk] ^= 1;
                     qkeystate[vk] |= 0x80;
                 }
+            }
+            /* Print Screen: a copy of the screen on the clipboard;
+               KEYBOARD's BX (the scan-code byte here) 1 the whole screen,
+               0 the active window (Alt+Print Screen). Only the key-up is
+               delivered (Windows 3.1's USER and KEYBOARD.DRV, KB2 in
+               boot-test case kbdsnap: 640 x 480, then 400 x 300; no
+               WM_KEYDOWN or WM_SYSKEYDOWN for VK_SNAPSHOT) */
+            if ((e.msg == WM_KEYDOWN || e.msg == WM_SYSKEYDOWN) && (BYTE)e.wParam == VK_SNAPSHOT) {
+                clip_snapshot(((e.lParam >> 16) & 0xFF) == 0);
+                continue;
             }
             /* Ctrl+Esc: the active window gets WM_SYSCOMMAND SC_TASKLIST,
                whatever has the focus (3.1: from Character Map, a dialog,

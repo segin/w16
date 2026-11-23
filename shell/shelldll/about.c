@@ -42,6 +42,24 @@ static void user_string(HWND dlg, int id, WORD sid)
         SetDlgItemText(dlg, id, t);
 }
 
+/* fmt with the caller's string put in, in a block as long as it needs
+   (szApp has no length limit), as the dialog's caption (id 0) or a
+   control's text */
+static void set_fmt(HWND dlg, int id, LPCSTR fmt, LPCSTR s)
+{
+    HGLOBAL h = sh_alloc((DWORD)sh_len(fmt) + sh_len(s) + 1);
+    char __far *t = (char __far *)sh_lock(h);
+    if (!t)
+        return;
+    wsprintf(t, fmt, s);
+    if (id)
+        SetDlgItemText(dlg, id, t);
+    else
+        SetWindowText(dlg, t);
+    GlobalUnlock(h);
+    GlobalFree(h);
+}
+
 static void init(HWND dlg, ABOUT __far *a)
 {
     char fmt[200], t[400], ver[40], num[20];
@@ -57,21 +75,23 @@ static void init(HWND dlg, ABOUT __far *a)
         }
     if (hash) {
         WORD n = (WORD)(hash - a->app);
-        if (n > sizeof t - 1)
-            n = sizeof t - 1;
-        sh_move(t, a->app, n);
-        t[n] = 0;
-        SetWindowText(dlg, t);
+        HGLOBAL h = sh_alloc((DWORD)n + 1);
+        char __far *c = (char __far *)sh_lock(h);
+        if (c) {
+            sh_move(c, a->app, n);
+            c[n] = 0;
+            SetWindowText(dlg, c);
+            GlobalUnlock(h);
+            GlobalFree(h);
+        }
         s = hash + 1;
     } else {
-        GetWindowText(dlg, fmt, sizeof fmt);
-        wsprintf(t, fmt, a->app ? a->app : (LPCSTR)"");
-        SetWindowText(dlg, t);
         s = a->app ? a->app : (LPCSTR)"";
+        GetWindowText(dlg, fmt, sizeof fmt);
+        set_fmt(dlg, 0, fmt, s);
     }
     GetDlgItemText(dlg, IDC_LINE1, fmt, sizeof fmt);
-    wsprintf(t, fmt, s);
-    SetDlgItemText(dlg, IDC_LINE1, t);
+    set_fmt(dlg, IDC_LINE1, fmt, s);
 
     if (!LoadString(user, 516, ver, sizeof ver))
         ver[0] = 0;

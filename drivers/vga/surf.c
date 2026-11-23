@@ -37,6 +37,7 @@ int surf_get(SURF *s, LPVOID dev)
         s->sel = vga_sel;
         s->off = 0;
         s->scanseg = 0;
+        s->segincr = 0;
         s->fill = 0;
         return 1;
     }
@@ -48,6 +49,7 @@ int surf_get(SURF *s, LPVOID dev)
     s->sel = SELECTOROF(b->bmBits);
     s->off = OFFSETOF(b->bmBits);
     s->scanseg = b->bmScanSegment;
+    s->segincr = b->bmSegmentIndex ? (WORD)b->bmSegmentIndex : ahincr;
     s->fill = b->bmFillBytes;
     /* one segment: the lines simply follow each other */
     if ((DWORD)s->wbytes * s->planes * s->height + s->off <= 0x10000L)
@@ -64,8 +66,12 @@ BYTE __far *surf_line(SURF *s, int y, int plane)
         return (BYTE __far *)MK_FP(s->sel, (WORD)y * 80);
     if (!s->scanseg)
         return (BYTE __far *)MK_FP(s->sel, s->off + (WORD)y * line + plane * s->wbytes);
-    return (BYTE __far *)MK_FP(s->sel + (WORD)(y / s->scanseg) * ahincr,
-                               (WORD)(y % s->scanseg) * line + plane * s->wbytes);
+    {
+        WORD seg = (WORD)(y / s->scanseg);
+        WORD row = (WORD)(y % s->scanseg);
+        return (BYTE __far *)MK_FP(s->sel + seg * s->segincr,
+                                   (seg ? 0 : s->off) + row * line + plane * s->wbytes);
+    }
 }
 
 /* the screen's plane for the next reads and writes */

@@ -234,10 +234,16 @@ struct vm *vm_create(void)
     p = page_alloc();
     pt = p ? (u32 *)phys_to_lin(p) : NULL;
     if (pt) {
+        u32 run;
         spt = (u32 *)phys_to_lin(sysvm.ptab_phys);
         memcpy(pt, spt, 4096);
+        /* physically contiguous when it can be, as Windows 3.1 gives a
+         * DOS VM its memory (VDS, INT 4Bh 8103h in a box: three pages
+         * locked without a buffer at consecutive physical addresses):
+         * DMA to a box's buffer then needs no copy (VDMAD) */
+        run = page_alloc_run((priv_end - priv_start) >> 12, 0, 0);
         for (a = priv_start; a < priv_end; a += 4096) {
-            u32 pg = page_alloc();
+            u32 pg = run ? run + (a - priv_start) : page_alloc();
             if (!pg) break;
             pt[a >> 12] = pg | 7;
         }
@@ -950,6 +956,15 @@ int vm_service(u32 svc, struct svcregs *s)
         return 1;
     case 0x0005:                        /* Validate_VM_Handle: carry if not */
         if (!vm_of(s->ebx)) s->eflags |= EFL_CF;
+        return 1;
+    case 0x002F:                        /* Crash_Cur_VM: the current VM ends (SHELL's
+                                         * "violated system integrity"); the
+                                         * System VM's end is Windows' */
+        if (cur_vm == &sysvm) panic("Crash_Cur_VM in the System VM (called from %x)", *(u32 *)(s + 1));
+        trace("VMM: VM %d: Crash_Cur_VM (called from %x)\n", cur_vm->id, *(u32 *)(s + 1));
+        cur_vm->ended = 1;
+        shell_vm_crashed(cur_vm);
+        resched = 1;
         return 1;
     case 0x002B:                        /* Suspend_VM */
         /* the DDK: a count; VM_Suspend to the devices when the VM was

@@ -100,6 +100,9 @@ events  times NEV * ESIZE db 0
 nused   dw 0                            ; events in use
 stkdone db 0                            ; StackEnter called once at task
                                         ; time
+curcb   dd 0                            ; snapshotted event fields while
+curuser dd 0                            ; busy == 1
+curid   dw 0
 
 ; the 8254's count for 1-55 ms (55: 0, 65536 counts)
 counts:
@@ -163,6 +166,13 @@ libentry:
 ; ---- 1: WEP(bSystemExit) -> 1
 global WEP
 WEP:
+        push ds
+        push dx
+        mov ax, DGROUP
+        mov ds, ax
+        call disable
+        pop dx
+        pop ds
         mov ax, 1
         retf 2
 
@@ -278,18 +288,22 @@ period:
         cmp bx, MAXPER
         ja .bad
         shl bx, 1
+        pushf
+        cli
         cmp ax, 1
         je .inc
         cmp word [begun + bx], 0
-        je .bad
+        je .bad1
         dec word [begun + bx]
         jmp .re
 .inc:   cmp word [begun + bx], 0FFFFh
-        je .bad
+        je .bad1
         inc word [begun + bx]
-.re:    call reprogram
+.re:    popfi
+        call reprogram
         xor ax, ax
         ret
+.bad1:  popfi
 .bad:   xor ax, ax
         cmp byte [enh], 0
         jne .r
@@ -310,8 +324,10 @@ setev:
         call far STACKLEAVE             ; the callbacks' SS is TIMER)
 .v:     mov ax, [es:bx]
         or ax, ax
-        jz .fail
+        jz .fail0
         ; the first free slot
+        pushf
+        cli
         mov si, events + ESIZE
         mov cx, 1
         mov dx, 15
@@ -326,7 +342,8 @@ setev:
         inc cx
         cmp cx, dx
         jbe .find
-.fail:  xor ax, ax
+        popfi
+.fail0: xor ax, ax
         ret
 .got:   mov ax, [es:bx]                 ; delay
         mov [si + E_DELAY], ax
@@ -360,14 +377,13 @@ setev:
         shl ax, 4
         jmp .id
 .e:     and ax, 1FFFh
-        mov [seq], ax
+        jnz .e1
+        inc ax
+.e1:    mov [seq], ax
         shl ax, 3
 .id:    or ax, cx
         mov [si + E_ID], ax
-        push ax
         ; due: now + delay
-        pushf
-        cli
         call gettime                    ; DX:AX ms, BX its fraction
         add ax, [si + E_DELAY]
         adc dx, 0
@@ -376,9 +392,9 @@ setev:
         mov [si + E_DUEF], bx
         mov word [si + E_USED], 1
         inc word [nused]
+        mov ax, [si + E_ID]
         popfi
         call reprogram
-        pop ax
         ret
 
 ; ---- timeKillEvent: AX the ID -> AX 0, or 97 when no event has it (in
@@ -633,12 +649,14 @@ gettime:
         add ax, [cms]
         adc dx, [cms + 2]
         pop cx
-        cmp dx, [lastms + 2]
-        ja .new
-        jb .old
-        cmp ax, [lastms]
-        jae .new
-.old:   mov ax, [lastms]
+        push dx
+        push ax
+        sub ax, [lastms]
+        sbb dx, [lastms + 2]
+        pop ax
+        pop dx
+        jns .new
+        mov ax, [lastms]
         mov dx, [lastms + 2]
         jmp .r
 .new:   mov [lastms], ax
@@ -665,6 +683,9 @@ enable:
         mov [cfrac], ax
         mov [lastms], ax
         mov [lastms + 2], ax
+        mov [lastel], ax
+        mov [lastel + 2], ax
+        inc word [epoch]
         mov [owed], ax
         mov [skip], al
         mov byte [enabled], 1
@@ -764,15 +785,14 @@ runevents:
         mov si, events
 .e:     cmp word [si + E_USED], 0
         je .n
-        ; due when the clock has passed E_DUE
-        mov ax, [cms + 2]
-        cmp ax, [si + E_DUE + 2]
-        jb .n
-        ja .due
+        ; due when the clock has passed E_DUE (wrap-safe)
         mov ax, [cms]
-        cmp ax, [si + E_DUE]
-        jb .n
-        ja .due
+        mov dx, [cms + 2]
+        sub ax, [si + E_DUE]
+        sbb dx, [si + E_DUE + 2]
+        js .n
+        or ax, dx
+        jnz .due
         mov ax, [cfrac]
         cmp ax, [si + E_DUEF]
         jbe .n
@@ -790,19 +810,29 @@ runevents:
 .call:  mov ax, [si + E_FLAGS]
         test ax, [nevmask]
         jnz .n
+        mov ax, [si + E_CB]
+        mov [curcb], ax
+        mov ax, [si + E_CB + 2]
+        mov [curcb + 2], ax
+        mov ax, [si + E_ID]
+        mov [curid], ax
+        mov ax, [si + E_USER]
+        mov [curuser], ax
+        mov ax, [si + E_USER + 2]
+        mov [curuser + 2], ax
         push si
         sti
         call far STACKENTER
         push si                         ; (3.1's callbacks find SP 6 bytes
         push di                         ; lower on MMSYSTEM's stack than
         push bp                         ; DriverCallback's arguments alone)
-        push word [si + E_CB + 2]       ; dwCallback
-        push word [si + E_CB]
+        push word [curcb + 2]           ; dwCallback
+        push word [curcb]
         push word DCB_FUNCTION          ; uFlags
-        push word [si + E_ID]           ; hDevice: the ID
+        push word [curid]               ; hDevice: the ID
         push word 0                     ; uMessage
-        push word [si + E_USER + 2]     ; dwUser
-        push word [si + E_USER]
+        push word [curuser + 2]         ; dwUser
+        push word [curuser]
         push word 0                     ; dw1
         push word 0
         push word 0                     ; dw2

@@ -291,15 +291,25 @@ static void windows_record(void)
     *(WORD FAR *)(recp(r) + R_HWND) = (WORD)a;
 }
 
+/* the tail in its field (05h-86h: length, text, CR): 3.1 writes tails of
+   127 and 128 characters there as they are (tests/winoldap.sh lb127,
+   lb128); a longer one it writes whole, over the grabber's path at 87h,
+   and its switch then fails with "Cannot find the file WINOLDAP.GRB"
+   (longbat, 131; longbatargs, 166). w16 cuts it to the 128 that fit and
+   runs the program (the audit's H1) */
 static void write_tail(void)
 {
     int n = lstrlen(tail), i;
+    if (n > B_GRABBER - B_TAIL - 2)
+        n = B_GRABBER - B_TAIL - 2;
     blk[B_TAIL] = (BYTE)n;
     for (i = 0; i < n; i++)
         blk[B_TAIL + 1 + i] = tail[i];
     blk[B_TAIL + 1 + n] = '\r';
 }
 
+/* a string in a field of the block max bytes long (the NUL counted; the
+   fields are 3.1's, sized for DOS's 80-byte paths: 87h-D6h, 189h-1D8h) */
 static void put_string(int off, const char *s, int max)
 {
     int i;
@@ -377,24 +387,52 @@ static void rec_pif(BYTE FAR *r)
 /* ---- the switch ---- */
 static void do_switch(void)
 {
+    /* the buffer WSWAP keeps Windows' low memory in while the program
+       runs: allocated for each switch and freed after it, as Windows 3.1's
+       (its INT 31h 0006h comes before every INT 2Fh 4B80h, and the address
+       at 185h changes between switches). Its size is block 183h (the
+       paragraphs DOS programs get) times 16 plus 1000 bytes, fixed and
+       zero-initialised: Microsoft's WINOLDAP on w16's KERNEL asks
+       GlobalAlloc(0040h, 9DB08h) with 183h = 9D72h, and on Windows 3.1's
+       KRNL286 the buffer's selector has limit DB0Fh (9DB10h bytes); with
+       16 KB less DOS memory (LOADFIX -16) 183h = 9926h and the limit 964Fh
+       (99650h = 99648h rounded to a paragraph). WSWAP writes more than
+       640 KB - 1600h:0 there: on w16's KRNL286 the image starts at 03FBh,
+       so a buffer of (top - 1600h) x 16 bytes was overrun.
+       Taken before the block is touched: without it nothing changes there
+       (w16 had already entered a new program's record, which stayed in
+       WSWAP's list with no task behind it; 3.1's WINOLDAP went on with
+       the switch, and Windows did not come back: winoldap.sh nomem) */
+    hbuf = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT,
+                       ((DWORD)*(WORD FAR *)(blk + B_DOSMEM) << 4) + 1000);
+    if (!hbuf) {
+        message(IDS_NOMEM, MB_OK | MB_ICONEXCLAMATION);
+        if (!started) {
+            ended = TRUE;
+            DestroyWindow(hwnd);
+        }
+        return;
+    }
     blk[B_172] = 0;                 /* (00h as each switch starts: WO2) */
     blk[B_173] = blk[B_173 + 1] = 0xFF;
     blk[B_178] &= ~0x08;
     blk[B_17E] = R_WINDOWS;
     if (!started) {
         write_tail();
-        put_string(B_GRABBER, grabber, sizeof grabber);
+        put_string(B_GRABBER, grabber, B_SWAPDIR - B_GRABBER);
         blk[B_17A] = R_WINDOWS;
         blk[B_17A + 1] = 0x10;
         blk[B_17A + 3] = 0x01;
-        put_string(B_PROGRAM, program, 80);
+        put_string(B_PROGRAM, program, B_RECORDS - B_PROGRAM);
     } else
-        put_string(B_PROGRAM, dosx_path, 80);
+        put_string(B_PROGRAM, dosx_path, B_RECORDS - B_PROGRAM);
     windows_record();
     if (!started) {
         BYTE FAR *r;
         rec = free_record();
         if (rec < 0) {
+            GlobalFree(hbuf);
+            hbuf = NULL;
             message(IDS_TOOMANY, MB_OK | MB_ICONEXCLAMATION);
             ended = TRUE;
             DestroyWindow(hwnd);
@@ -409,28 +447,6 @@ static void do_switch(void)
         blk[B_COUNT]++;
     } else
         to_front(rec);
-    /* the buffer WSWAP keeps Windows' low memory in while the program
-       runs: allocated for each switch and freed after it, as Windows 3.1's
-       (its INT 31h 0006h comes before every INT 2Fh 4B80h, and the address
-       at 185h changes between switches). Its size is block 183h (the
-       paragraphs DOS programs get) times 16 plus 1000 bytes, fixed and
-       zero-initialised: Microsoft's WINOLDAP on w16's KERNEL asks
-       GlobalAlloc(0040h, 9DB08h) with 183h = 9D72h, and on Windows 3.1's
-       KRNL286 the buffer's selector has limit DB0Fh (9DB10h bytes); with
-       16 KB less DOS memory (LOADFIX -16) 183h = 9926h and the limit 964Fh
-       (99650h = 99648h rounded to a paragraph). WSWAP writes more than
-       640 KB - 1600h:0 there: on w16's KRNL286 the image starts at 03FBh,
-       so a buffer of (top - 1600h) x 16 bytes was overrun. */
-    hbuf = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT,
-                       ((DWORD)*(WORD FAR *)(blk + B_DOSMEM) << 4) + 1000);
-    if (!hbuf) {
-        message(IDS_NOMEM, MB_OK | MB_ICONEXCLAMATION);
-        if (!started) {
-            ended = TRUE;
-            DestroyWindow(hwnd);
-        }
-        return;
-    }
     linear = woa_selbase(SELECTOROF(GlobalLock(hbuf)));
     *(DWORD FAR *)(blk + B_LINEAR) = linear;
     started = TRUE;
@@ -567,20 +583,32 @@ BOOL FAR PASCAL DialogProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 /* ---- start-up ---- */
 static BOOL setup(LPSTR cmd)
 {
-    char path[128], args[130], name[80];
-    char pifpath[128];
+    char path[128], args[130], name[80 + 4];
+    char pifpath[128 + 4];
     BOOL from_pif;
     DWORD b;
     int i, n;
 
-    /* "args NUL path LF" (WO1) */
-    for (n = 0; cmd[n] && n < (int)sizeof args - 1; n++)
-        args[n] = cmd[n];
-    args[n] = 0;
-    cmd += n + 1;
-    for (i = 0; cmd[i] && cmd[i] != '\n' && cmd[i] != '\r' && i < (int)sizeof path - 1; i++)
-        path[i] = cmd[i];
-    path[i] = 0;
+    /* "args NUL path LF" (WO1), read no further than the PDB's end: w16's
+       KERNEL cuts a tail at 7Eh bytes, so the NUL or the path can be
+       missing (126 characters of arguments: the NUL went, and the path
+       was looked for past the PDB selector's limit, FFh; the audit's H2) */
+    {
+        DWORD lim = GetSelectorLimit(SELECTOROF(cmd));
+        DWORD r = lim >= OFFSETOF(cmd) ? lim - OFFSETOF(cmd) + 1 : 0;
+        UINT room = r > 0xFFFF ? 0xFFFF : (UINT)r;
+        for (n = 0; (UINT)n < room && cmd[n] && n < (int)sizeof args - 1; n++)
+            args[n] = cmd[n];
+        args[n] = 0;
+        if ((UINT)n < room && !cmd[n]) {
+            cmd += n + 1;
+            room -= n + 1;
+        } else
+            room = 0;
+        for (i = 0; (UINT)i < room && cmd[i] && cmd[i] != '\n' && cmd[i] != '\r' && i < (int)sizeof path - 1; i++)
+            path[i] = cmd[i];
+        path[i] = 0;
+    }
 
     b = woa_block();
     if (!b) {
@@ -589,6 +617,11 @@ static BOOL setup(LPSTR cmd)
         return FALSE;
     }
     blk = (BYTE FAR *)MAKELP(woa_segsel(HIWORD(b)), LOWORD(b));
+    if (!SELECTOROF(blk)) {         /* (DPMI 0002h failed: no descriptor) */
+        stem(path, title, sizeof title);
+        message(IDS_NOSWITCHER, MB_OK | MB_ICONEXCLAMATION);
+        return FALSE;
+    }
     /* what to put back at 189h when resuming: DOSX's path as WIN.COM
        wrote it. A second instance finds another program's path there;
        Windows 3.1's then still writes DOSX's (WO2): w16 takes it from the
@@ -600,8 +633,17 @@ static BOOL setup(LPSTR cmd)
             dosx_path[i] = blk[B_PROGRAM + i];
         dosx_path[i] = 0;
         if (!has_ext(dosx_path, "\\DOSX.EXE")) {
-            GetWindowsDirectory(dosx_path, sizeof dosx_path - 18);
-            lstrcat(dosx_path, "\\system\\dosx.exe");
+            /* (WIN.COM's way: "C:\" keeps its one backslash; a Windows
+               directory too long for the field leaves it empty) */
+            char wd[144];
+            UINT k = GetWindowsDirectory(wd, sizeof wd);
+            dosx_path[0] = 0;
+            if (k && k < sizeof wd) {
+                if (wd[k - 1] == '\\')
+                    wd[--k] = 0;
+                if (k + 16 < sizeof dosx_path)
+                    wsprintf(dosx_path, "%s\\system\\dosx.exe", (LPSTR)wd);
+            }
         }
     }
 
@@ -675,7 +717,7 @@ static BOOL setup(LPSTR cmd)
        and a blank before the parameters (3.1: Z:\COMMAND.COM, " /c
        C:\WC1.BAT  stdargs") */
     if (has_ext(path, ".PIF") && has_ext(program, ".BAT") && get_env("COMSPEC", name, sizeof name)) {
-        char t2[140];
+        char t2[sizeof program + sizeof tail + 8];   /* (140 was overrun: H3) */
         wsprintf(t2, " /c %s %s", (LPSTR)program, (LPSTR)tail);
         lstrcpyn(tail, t2, sizeof tail);
         lstrcpy(program, name);

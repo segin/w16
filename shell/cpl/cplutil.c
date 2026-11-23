@@ -104,8 +104,10 @@ BOOL cpl_ne_desc(const char *path, char *buf, int size)
     if (_lread(f, hdr, 64) == 64 && hdr[0] == 'M' && hdr[1] == 'Z') {
         ne = *(DWORD *)(hdr + 0x3C);
         _llseek(f, ne, 0);
-        if (_lread(f, hdr, 64) == 64 && hdr[0] == 'N' && hdr[1] == 'E') {
-            nonres = *(DWORD *)(hdr + 0x2C);
+        /* no non-resident name table (its offset or its length 0, the
+           WORD at 20h): no description, not the MZ header read as one */
+        if (_lread(f, hdr, 64) == 64 && hdr[0] == 'N' && hdr[1] == 'E' &&
+            (nonres = *(DWORD *)(hdr + 0x2C)) != 0 && *(WORD *)(hdr + 0x20) != 0) {
             _llseek(f, nonres, 0);
             if (_lread(f, &len, 1) == 1 && len && len < size &&
                 _lread(f, buf, len) == len) {

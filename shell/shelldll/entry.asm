@@ -34,6 +34,13 @@ libentry:
         push word 0
         push cx
         call far LOCALINIT
+        or ax, ax               ; no local heap (the Program Not Found
+        jnz .noheap             ; dialog's edit control needs it): not
+        pop es                  ; loaded
+        pop di
+        pop si
+        pop ds
+        retf
 .noheap:
         pop es
         pop di

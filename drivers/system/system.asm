@@ -62,8 +62,21 @@ onedrv  dw 0                            ; +14 InquireSystem(2) state
         times 18h - ($ - $$) db 0
 timers: times NTIMER * TSIZE db 0       ; +18h
 tend:
+curproc dd 0                            ; snapshotted T_PROC while busy == 1
 
 segment _TEXT
+
+; popfi: the flags pushed before a cli back, interrupts enabled again
+; explicitly when they were (in 386 Enhanced mode POPF does not change IF)
+%macro popfi 0
+        push bp
+        mov bp, sp
+        test byte [bp + 3], 2
+        pop bp
+        jz %%n
+        sti
+%%n:    popf
+%endmacro
 
 ; ---- the library's start: the coprocessor and the floppy drives from the
 ; BIOS's equipment word (Schulman ch. 9: INT 11h; FNINIT when there is a
@@ -94,6 +107,8 @@ libentry:
 ; ---- 10: WEP(bSystemExit) -> 1
 global WEP
 WEP:
+        push cs
+        call DISABLESYSTEMTIMERS
         mov ax, 1
         retf 2
 
@@ -113,7 +128,7 @@ GETSYSTEMMSECCOUNT:
         cli
         mov ax, [msec wrt DGROUP]
         mov dx, [msec + 2 wrt DGROUP]
-        popf
+        popfi
         pop ds
         retf
 
@@ -282,7 +297,7 @@ CREATESYSTEMTIMER:
         add bx, TSIZE
         cmp bx, tend
         jb .find
-        popf
+        popfi
         xor ax, ax
         jmp .r
 .got:   mov ax, [bp + 6]
@@ -291,7 +306,7 @@ CREATESYSTEMTIMER:
         mov [bx + T_PROC + 2], ax
         mov [bx + T_COUNT], cx
         mov [bx + T_RELOAD], cx         ; last: the entry is in use now
-        popf
+        popfi
         mov ax, bx
 .r:     pop cx
         pop bx
@@ -386,8 +401,10 @@ timer_int:
         push ax
         mov ax, DGROUP
         mov ds, ax
+        cld
         pushf                           ; the BIOS first (tick count, EOI)
         call far [prev8 wrt DGROUP]
+        cli
         ; the msec count: 54.925 ms a tick
         add word [msec wrt DGROUP], 54
         adc word [msec + 2 wrt DGROUP], 0
@@ -407,7 +424,6 @@ timer_int:
         push di
         push bp
         push es
-        sti
         mov bx, timers
 .next:  cmp word [bx + T_RELOAD], 0
         je .skip
@@ -416,18 +432,23 @@ timer_int:
         mov ax, [bx + T_RELOAD]
         mov [bx + T_COUNT], ax
         mov ax, [bx + T_PROC]
-        or ax, [bx + T_PROC + 2]
+        mov dx, [bx + T_PROC + 2]
+        mov [curproc wrt DGROUP], ax
+        mov [curproc + 2 wrt DGROUP], dx
+        or ax, dx
         jz .skip                        ; a null procedure: not called
         push bx
         mov ax, bx                      ; AX = the handle
-        call far [bx + T_PROC]
+        cld
+        sti
+        call far [curproc wrt DGROUP]
+        cli
         mov ax, DGROUP
         mov ds, ax
         pop bx
 .skip:  add bx, TSIZE
         cmp bx, tend
         jb .next
-        cli
         mov byte [busy wrt DGROUP], 0
         pop es
         pop bp

@@ -51,9 +51,12 @@ BOOL SHAPI RegisterShellHook(HWND w, UINT on)
     if (on) {
         if (n_list == cap_list) {
             WORD cap = cap_list ? cap_list * 2 : 8;
-            HGLOBAL h = h_list ? GlobalReAlloc(h_list, (DWORD)cap * 2, GMEM_MOVEABLE)
-                               : GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE, (DWORD)cap * 2);
-            if (!h || cap < cap_list)
+            HGLOBAL h;
+            if (cap < cap_list)         /* 32K registrations: no more */
+                return TRUE;
+            h = h_list ? GlobalReAlloc(h_list, (DWORD)cap * 2, GMEM_MOVEABLE)
+                       : GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE, (DWORD)cap * 2);
+            if (!h)
                 return TRUE;
             h_list = h;
             cap_list = cap;

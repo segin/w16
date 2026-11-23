@@ -1,0 +1,22 @@
+# File > Run "C:\LB127.PIF": LONGBAT.PIF with 60 characters of
+# parameters, a tail of 127 characters: 3.1 writes the length (7Fh) and
+# runs it, its text past 78 characters its own data; w16 the same length
+# with the text (the WINOLDAP audit's H1)
+# opts: files=WC1 wait longbat
+# expect: blocks -> 7f 20 2f 63 20 43 3a 5c 44 32 33
+# expect: WC.LOG tail=3C \[ a123456789b.*f12345678\] end=0D
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type c:\lb127.pif
+key Return
+sleep 3
+shot run
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 8

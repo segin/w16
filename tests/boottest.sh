@@ -25,6 +25,14 @@
 #   lastexit   the shell (TK55) ends at once: WIN's ERRORLEVEL 0 and text
 #              mode 3 afterwards, as 3.1's KERNEL ends Windows through
 #              USER's ExitWindows when the last task ends (ref and w16)
+#   kcmdline   long WinExec command lines (TK68 as the shell, TK68W in
+#              WINOLDAP.MOD's and WINOA386.MOD's place and run as a
+#              Windows program): what KERNEL gives WINOLDAP and a program
+#              (the PDB's tail) and WinExec's results, w16's KRNL286 and
+#              KRNL386 (Standard) and KRNL386 (Enhanced) against
+#              Microsoft's KRNL386, the PDB selector's limit aside; then,
+#              w16 alone, the tails of FEh and FFh bytes 3.1 fails with
+#              (Windows hangs or ends) must reach WINOLDAP whole
 #   k286       on an emulated 80286 (DOSBox-X, -p 286): w16's KRNL286 on
 #              Microsoft's DOSX and on w16's, against Microsoft's KRNL286
 #              there                                must be 0
@@ -127,6 +135,14 @@
 #              it (tools/vsdcmp.py); then Reboot's "not responding" screen
 #              (vsdhung.txt): keys it has no use for each beep a bell of
 #              Windows 3.1's tone and length
+#   vdmad      the Virtual DMA Device (win386/vxd/vdmad.c): tests/vdmadprobe.sh
+#              under w16's WIN386 and Microsoft's (DOSBox-X as a Sound
+#              Blaster 16, the sound recorded): SBD.COM in a full-screen
+#              box reads the 8237s' registers back, calls the Virtual DMA
+#              Services, plays single-cycle and auto-initialised 8-bit and
+#              16-bit DMA and a transfer through VDMAD's buffer; the probe
+#              VxD VXM.386's VDMAD service results, trapped ports and
+#              channel callbacks (tools/vdmadcmp.py: the logs, the tones)
 #   win386doscad  a DOS program's #GP (VX12 G: the stop box) and Ctrl+Alt+Del
 #              with the MS-DOS Prompt full screen (its screen; Return closes
 #              the box, vx12gc.txt; Escape goes back, dosbox386cad.txt)
@@ -327,7 +343,13 @@
 #              2026-11-20 w16's list was a row taller and the scroll drew
 #              over the static). The tree's SB16.DRV gives QuickTime a
 #              sound device in parts tree, tree386 and cpl; their stock
-#              3.1 runs get Windows 3.1's SNDBLST2.DRV to match
+#              3.1 runs get Windows 3.1's SNDBLST2.DRV to match. Part enh:
+#              the tree alone in 386 Enhanced mode (its WIN386 and
+#              KRNL386, WIN /3; qtplay.sh -T 386 -E) against stock 3.1's
+#              WIN /3: until 2026-11-22 the movie ended Windows with a
+#              #GP in TIMER:1 (a nested interrupt's frame put on WIN386's
+#              host stack over TIMER's words while its callback ran on
+#              MMSYSTEM's stack; win386/vmm/dpmi.c nest_stack)
 #   mmsystem  w16's MMSYSTEM.DLL and MMTASK.TSK (ARCHITECTURE.md 23)
 #              against Microsoft's, on the reference 3.1
 #              (tests/mmsystem/mscen.sh): parts core (the probe MMP.EXE:
@@ -657,6 +679,9 @@
 #   kbdwoados  the woados script with w16's KEYBOARD.DRV on Microsoft's
 #              stack (Disable and Enable around the DOS program): the
 #              screens as all-Microsoft's up to the cursor
+#   kbdsnap    Print Screen and Alt+Print Screen with w16's KEYBOARD.DRV
+#              under KB2, on Microsoft's USER and on w16's: the clipboard's
+#              bitmap 640x480 (the screen), then 400x300 (KB2's window)
 #   sysdrv     w16's SYSTEM.DRV (drivers/system) on Microsoft's stack under
 #              real input: kbtype, tabs, alttab, helpmenus, dragoff,
 #              pmkeys, every screen against Microsoft's SYSTEM.DRV: 0
@@ -938,7 +963,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload vsd bigmem filecdr}
+cases=${*:-kernel dosx dosxaudit kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload vsd vdmad bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1350,6 +1375,51 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   lastexit: the last task's end ends Windows through ExitWindows (ERRORLEVEL 0, mode 3)"
         else echo "FAIL lastexit: $r ($out/lastexit-w16)"; fails=$((fails + 1)); fi ;;
+    kcmdline)
+        # TK68 (tests/apps/tk68.c) makes the calls C:\TK68.TXT names; the
+        # w16 runs make four more, whose tails 3.1 fails with
+        common='c0 c89 c116 c117 c126 c127 c140 c200 c240 c245 c300 b117 b140 p117 p140 w126 w127 w200 w243'
+        extra='c243 c244 b244 p244'
+        printf '%s\r\n' "$common" > "$out/kcmdref.txt"
+        printf '%s %s\r\n' "$common" "$extra" > "$out/kcmdw16.txt"
+        set -- -f "$root/build/dos/TK68.EXE=TK68.EXE" -f "$root/build/dos/TK68W.EXE=TK68W.EXE" \
+            -f "$root/build/dos/TK68W.EXE=WINDOWS/SYSTEM/WINOLDAP.MOD" \
+            -f "$root/build/dos/TK68W.EXE=WINDOWS/SYSTEM/WINOA386.MOD" -i 'boot:shell=C:\TK68.EXE'
+        for k in ref k286 k386 k386e; do
+            case $k in
+            ref)   o="-r -3" t=$out/kcmdref.txt ;;
+            k286)  o= t=$out/kcmdw16.txt ;;
+            k386)  o=-3 t=$out/kcmdw16.txt ;;
+            k386e) o=-3 t=$out/kcmdw16.txt ;;
+            esac
+            # shellcheck disable=SC2086
+            if [ $k = k386e ]; then
+                "$root/tests/dropin.sh" -t 120 -o "$out/kcmdline-$k" $o -c 'WIN /3 /B' -f "$t=TK68.TXT" "$@" > "$out/kcmdline-$k.txt" 2>&1 &
+            else
+                "$root/tests/dropin.sh" -t 120 -o "$out/kcmdline-$k" $o -f "$t=TK68.TXT" "$@" > "$out/kcmdline-$k.txt" 2>&1 &
+            fi
+        done
+        wait
+        # the log without the mode and the PDB selector's limit
+        kclog() { tr -d '\r' < "$out/kcmdline-$1/c/TK68.LOG" 2>/dev/null | sed '/^C start/d; s/ lim=[0-9A-F]*//'; }
+        kclog ref | sed '/^C done/d' > "$out/kcmdline-ref.log"
+        n=$(wc -l < "$out/kcmdline-ref.log")
+        r=ok
+        [ "$n" -gt 60 ] || r="ref: $n lines"
+        for k in k286 k386 k386e; do
+            [ "$r" = ok ] || break
+            kclog $k > "$out/kcmdline-$k.log"
+            head -n "$n" "$out/kcmdline-$k.log" | diff "$out/kcmdline-ref.log" - > "$out/kcmdline-$k.diff" ||
+                { r="$k: differs from 3.1 ($out/kcmdline-$k.diff)"; break; }
+            tail -n +"$((n + 1))" "$out/kcmdline-$k.log" > "$out/kcmdline-$k.extra"
+            [ "$(grep -c '^C result=FFFF$' "$out/kcmdline-$k.extra")" = 4 ] &&
+            [ "$(grep -c ' len=F[EF]$' "$out/kcmdline-$k.extra")" = 4 ] &&
+            [ "$(grep -Ec '\\0D(C:\\5CT68\.(COM|BAT|PIF))\\0A\] n=0(0FF|100)$' "$out/kcmdline-$k.extra")" = 4 ] &&
+            grep -q '^C done$' "$out/kcmdline-$k.extra" ||
+                { r="$k: the FEh/FFh tails ($out/kcmdline-$k.extra)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   kcmdline: WinExec's long command lines, WINOLDAP's and a program's tails as 3.1's (KRNL286, KRNL386, Enhanced mode)"
+        else echo "FAIL kcmdline: $r"; fails=$((fails + 1)); fi ;;
     k286)   # an emulated 80286 (DOSBox-X cputype=286): w16's KRNL286 on
             # Microsoft's DOSX and on w16's, against Microsoft's KRNL286
             # there (mode switches back to real mode by processor reset)
@@ -1698,6 +1768,18 @@ runcase() {
         FAIL*) echo "FAIL vsd: ${r#FAIL } ($out/vsd-w16, $out/vsdh-w16)"; fails=$((fails + 1)) ;;
         *) echo "ok   vsd: $r; $h" ;;
         esac ;;
+    vdmad)
+        # the Virtual DMA Device: tests/vdmadprobe.sh (SBD.COM's DMA in a
+        # box, VXM.386's service results), w16's WIN386 against Microsoft's
+        set -- -k "$root/build/dos/VXM.386" -k "$root/build/dos/SBD.COM" \
+            -k "$root/tests/scripts/input/vdmadbox.txt"
+        refrun vdmad-ref vdmad "$root/tests/vdmadprobe.sh" -o "$out/vdmad-ref" "$@" ms
+        "$root/tests/vdmadprobe.sh" -o "$out/vdmad-w16" "$@" w16 > "$out/vdmad-w16.txt" 2>&1 || true
+        if r=$(python3 "$root/tools/vdmadcmp.py" "$out/vdmad-ref" "$out/vdmad-w16" 2>&1); then
+            echo "ok   vdmad: $r"
+        else
+            echo "FAIL vdmad: $r ($out/vdmad-w16)"; fails=$((fails + 1))
+        fi ;;
     win386dosprobe)
         # VX12 (tests/dos/vx12.asm) in the MS-DOS Prompt under w16's WIN386
         # against Microsoft's (DOSBox-X's own DOS): the V86 API entries
@@ -2450,7 +2532,9 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
                 for f in "$1"/[0-9]*.png; do
                     sn=$(basename "$f")
                     [ -f "$2/$sn" ] || { r="$3: no $sn"; return; }
-                    n=$(magick compare -metric AE "$2/$sn" "$f" "$out/$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                    magick "$f" -fill black -draw "$clkmask" "$out/.clk-a.png"
+                    magick "$2/$sn" -fill black -draw "$clkmask" "$out/.clk-b.png"
+                    n=$(magick compare -metric AE "$out/.clk-b.png" "$out/.clk-a.png" "$out/$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
                     n=${n%% *}
                     [ "$n" = 0 ] || { r="$3: $sn: $n pixels differ"; return; }
                 done
@@ -2465,6 +2549,11 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
         for pk in ${part:-$dparts}; do
             ap=${pk%-*} st=${pk#*-}
             s=$root/tests/scripts/input/cplclick-$ap.txt
+            # Desktop: the cursor blink sample blinks, and once the bar
+            # has moved its focused thumb's caret blinks at the new rate
+            # (as on 3.1, 2026-11-22): both left out of the screens
+            clkmask="rectangle 0,0 0,0"
+            [ "$ap" = dk ] && clkmask="rectangle 205,346 332,366 rectangle 339,334 348,356"
             case $st in
             tree)
                 set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=CONTROL.EXE' \
@@ -2473,7 +2562,7 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
                 "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$out/cplclick-$ap-t286" "$@" \
                     > "$out/cplclick-$ap-t286.txt" 2>&1 || true
                 "$root/tests/inputrun.sh" -e "$out/cplclick-$ap-t286/boot.png" -E "$out/cplclick-$ap-t286" \
-                    -b 40 -t 300 "$s" "$out/cplclick-$ap-t386" "$@" -3 > "$out/cplclick-$ap-t386.txt" 2>&1 || true
+                    -M "$clkmask" -b 40 -t 300 "$s" "$out/cplclick-$ap-t386" "$@" -3 > "$out/cplclick-$ap-t386.txt" 2>&1 || true
                 clkcmp "$out/cplclick-$ap-t286" "$out/cplclick-$ap-t386" "$pk" 1 W16 ;;
             *)
                 cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cplclick-$ap-WIN.INI"
@@ -2488,7 +2577,7 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
                     rm -rf "$out/cplclick-$ap-us"
                     # shellcheck disable=SC2086
                     "$root/tests/inputrun.sh" -e "$out/cplclick-$ap-ref/boot.png" -E "$out/cplclick-$ap-ref" \
-                        -b 25 -t 300 "$s" "$out/cplclick-$ap-us" -r "$@" $w16cp \
+                        -M "$clkmask" -b 25 -t 300 "$s" "$out/cplclick-$ap-us" -r "$@" $w16cp \
                         -f "$user=WINDOWS/SYSTEM/USER.EXE" > "$out/cplclick-$ap-us.txt" 2>&1 || true
                     clkcmp "$out/cplclick-$ap-ref" "$out/cplclick-$ap-us" "$pk" 1 WINDOWS
                 else
@@ -3727,6 +3816,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         case ${part:-over} in
         tree) qto="-T 286" ;;
         tree386) qto="-T 386" ;;
+        enh) qto="-T 386 -E" ;;
         esac
         if [ "${part:-}" = cpl ]; then
             # its Control Panel's Files list (tests/qtcpl.sh)
@@ -5358,6 +5448,33 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         ls "$out/kbdwrite-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
         if [ "$r" = ok ]; then echo "ok   kbdwrite: 0 pixels (Write with w16's KEYBOARD.DRV)"
         else echo "FAIL kbdwrite: $r ($out)"; fails=$((fails + 1)); fi ;;
+    kbdsnap)
+        # Print Screen and Alt+Print Screen with w16's KEYBOARD.DRV (KB2,
+        # tests/apps/kb2.c, as the shell, its 400 x 300 window active;
+        # tests/scripts/input/kbsnap.txt): the clipboard's CF_BITMAP is the
+        # whole screen (640 x 480), then the active window (400 x 300), as
+        # on Windows 3.1, and KB2 gets VK_SNAPSHOT's key-ups only, as
+        # there. On Microsoft's KRNL286, DOSX and USER (ms: all Microsoft's,
+        # which shows the harness sent the keys), then with w16's USER and
+        # GDI. In DOSBox-X (-p 386): DOSBox 0.74 sends no
+        # Print Screen scan codes
+        scr=$root/tests/scripts/input/kbsnap.txt
+        want='P 1 640 480|P 2 400 300'
+        r=ok
+        for k in ms drv usr; do
+            set -- -f "$root/build/dos/KB2.EXE=KB2.EXE" -i 'boot:shell=C:\KB2.EXE' -i w16:kb2secs=60
+            [ $k = ms ] || set -- "$@" -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV"
+            [ $k = usr ] && set -- "$@" -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
+            "$root/tests/inputrun.sh" -b 30 -t 120 "$scr" "$out/kbdsnap-$k" -r -p 386 "$@" > "$out/kbdsnap-$k.txt" 2>&1 || true
+            # the bitmaps, and the VK_SNAPSHOT messages KB2 got (3.1: the
+            # key-ups only, scan code 01) as all-Microsoft's
+            got=$(tr -d '\r' < "$out/kbdsnap-$k/work/c/WINDOWS/TK.LOG" 2>/dev/null | grep -E '^(P |M 010. 002C )' | paste -sd'|' -)
+            [ $k = ms ] && want="$want|$(echo "$got" | tr '|' '\n' | grep '^M' | paste -sd'|' -)"
+            echo "kbdsnap $k: ${got:-no bitmap}" >> "$out/kbdsnap.log"
+            [ "$r" = ok ] && [ "$got" != "$want" ] && r="$k: ${got:-no bitmap}, not $want"
+        done
+        if [ "$r" = ok ]; then echo "ok   kbdsnap: Print Screen 640x480, Alt+Print Screen 400x300 (w16's KEYBOARD.DRV, Microsoft's and w16's USER)"
+        else echo "FAIL kbdsnap: $r ($out/kbdsnap.log)"; fails=$((fails + 1)); fi ;;
     kbdwoados)
         # the MS-DOS Prompt (the woados case's script: KEYBOARD.Disable and
         # Enable around the DOS program, the BIOS's keyboard in between)
@@ -5837,7 +5954,7 @@ caseparts() {
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
     ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
     timer) echo "$1@s $1@3 $1@qt" ;;
-    quicktime) echo "$1@over $1@tree $1@tree386 $1@cpl" ;;
+    quicktime) echo "$1@over $1@tree $1@tree386 $1@enh $1@cpl" ;;
     mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;
     sb16) echo "$1@dev $1@audio $1@prog" ;;
     bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;

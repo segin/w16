@@ -1,0 +1,12 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! ini WINDOWS/CONTROL.INI Patterns:Longxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=1 2 4 8 16 32 64 128
+;! ini WINDOWS/WIN.INI Desktop:Pattern=1 2 4 8 16 32 64 128
+; A pattern name of 124 characters (a hand-edited CONTROL.INI), the
+; current one (cpl audit H1): listed, chosen by its bits, OK writes them
+; (dklongpat2: Edit Pattern on it)
+blinktime 65535
+run CONTROL.EXE DESKTOP
+wait 4000
+snap D0.BMP
+key 0D
+wait 2000

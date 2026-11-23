@@ -1,0 +1,18 @@
+# com.txt on a C: of 64 KB clusters (512-byte sectors, 128 a cluster,
+# 1000 free: 62.5 MB): the room for the swap file (the WINOLDAP audit's M1)
+# opts: files=WC1 wait size=512,128,4000,1000
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\WC1.COM hello
+key Return
+sleep 3
+shot run
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 8

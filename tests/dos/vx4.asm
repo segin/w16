@@ -8,6 +8,15 @@
 ;   - while it runs in protected mode itself,
 ; the handler's SS, SP, DS, ES, flags and the 16 words at SS:SP (the frame
 ; it was given), then chains to the previous handler. Logs to C:\VX4.LOG.
+; Then a nested tick (kinds 3 and 4, 2026-11-22: w16's TIMER.DRV runs its
+; callbacks from its INT 08h handler on MMSYSTEM's stack): the handler of
+; one tick ends the interrupt itself, then pushes 8 marker words on the
+; stack it was given, moves to a stack of its own (SS = its DS), enables interrupts
+; and waits for the next tick; that one's handler records where its frame
+; went (kind 4: SS, SP at entry, DS, ES, flags, 8 words of the frame) and
+; chains. Kind 3's record: SS, SP at entry, DS, ES of the outer handler,
+; then its own stack's SS and top, 2 when the nested tick came, and how
+; many of the 8 markers were still there afterwards.
 
         bits 16
         cpu 386
@@ -107,7 +116,18 @@ start:  mov ax, cs
 .ww:    loop .ww
         pop cx
         loop .w
-.wd:    mov byte [kind], 0
+.wd:    ; a tick whose handler leaves the stack it was given (kinds 3, 4)
+        mov byte [kind], 3
+        sti
+        mov cx, 0
+.n3:    cmp byte [n3done], 0
+        jne .n3d
+        push cx
+        mov cx, 1000
+.n3w:   loop .n3w
+        pop cx
+        loop .n3
+.n3d:   mov byte [kind], 0
         ; unhook
         mov ax, 0205h
         mov bl, 08h
@@ -117,7 +137,7 @@ start:  mov ax, cs
         ; the records
         mov si, recs
         mov bx, 0
-.r:     cmp bx, NREC * 2
+.r:     cmp bx, NREC * 2 + 2
         jae .rd
         push bx
         push si
@@ -150,7 +170,9 @@ handler:
         push bp
         mov bp, sp
         mov ds, [cs:datasel]
-        push ax
+        cmp byte [kind], 3
+        je .k3
+.norm:  push ax
         push bx
         push si
         push di
@@ -201,9 +223,110 @@ handler:
         pop si
         pop bx
         pop ax
-        pop bp
+.chain: pop bp
         pop ds
         jmp far [cs:old08v]
+
+; kinds 3 and 4: the outer tick (nest 0) and the one that comes while its
+; handler waits on its own stack (nest 1)
+.k3:    cmp byte [nest], 1
+        je .inner
+        ja .chain
+        cmp byte [n3done], 0
+        jne .chain
+        push ax
+        push bx
+        push cx
+        push si
+        push di
+        mov di, recs + NREC * 2 * RECW * 2
+        mov word [di], 3                ; 0: kind 3
+        mov [di+2], ss                  ; 1: SS
+        lea ax, [bp+4]
+        mov [di+4], ax                  ; 2: SP at entry
+        mov ax, [bp+2]
+        mov [di+6], ax                  ; 3: DS at entry
+        mov [di+8], es                  ; 4: ES at entry
+        mov al, 20h                     ; end of interrupt: the next tick
+        out 20h, al                     ; may come
+        mov cx, 8                       ; the markers: A5A0h ... A5A7h,
+        mov ax, 0A5A0h                  ; pushed after the OUT (a trap)
+.pm:    push ax
+        inc ax
+        loop .pm
+        mov [o_ss], ss
+        mov [o_sp], sp
+        mov ax, ds
+        mov ss, ax
+        mov sp, pstk_top
+        mov [di+10], ss                 ; 5: its own stack's SS
+        mov word [di+12], pstk_top      ; 6: and top
+        mov byte [nest], 1
+        sti
+        xor cx, cx
+        mov bx, 400
+.wt:    cmp byte [nest], 2
+        je .got
+        loop .wt
+        dec bx
+        jnz .wt
+.got:   cli
+        mov al, [nest]
+        xor ah, ah
+        mov [di+14], ax                 ; 7: 2 when the nested tick came
+        mov byte [nest], 3
+        mov ss, [o_ss]
+        mov sp, [o_sp]
+        xor bx, bx                      ; the markers still there
+        mov cx, 8
+        mov si, sp
+        mov ax, 0A5A7h
+.ck:    cmp [ss:si], ax
+        jne .ck1
+        inc bx
+.ck1:   add si, 2
+        dec ax
+        loop .ck
+        mov [di+16], bx                 ; 8: markers intact (of 8)
+        add sp, 16
+        mov byte [n3done], 1
+        pop di
+        pop si
+        pop cx
+        pop bx
+        pop ax
+        pop bp
+        pop ds
+        iret
+.inner: push ax
+        push cx
+        push si
+        push di
+        mov di, recs + (NREC * 2 + 1) * RECW * 2
+        mov word [di], 4                ; 0: kind 4
+        mov [di+2], ss                  ; 1: SS
+        lea ax, [bp+4]
+        mov [di+4], ax                  ; 2: SP at entry
+        mov ax, [bp+2]
+        mov [di+6], ax                  ; 3: DS at entry
+        mov [di+8], es                  ; 4: ES at entry
+        pushf
+        pop ax
+        mov [di+10], ax                 ; 5: flags in the handler
+        lea si, [bp+4]                  ; 6-13: the frame
+        add di, 12
+        mov cx, 8
+.ic:    mov ax, [ss:si]
+        mov [di], ax
+        add si, 2
+        add di, 2
+        loop .ic
+        mov byte [nest], 2
+        pop di
+        pop si
+        pop cx
+        pop ax
+        jmp .chain
 
 ; real mode, called with 0301h: wait for six timer ticks
 rmloop: push ds
@@ -231,7 +354,11 @@ datasel         dw 0
 kind            db 0
 nrec1           db 0
 nrec2           db 0
-recs            times NREC * 2 * RECW dw 0
+nest            db 0                    ; kind 3: 1 waiting, 2 nested came
+n3done          db 0
+o_ss            dw 0
+o_sp            dw 0
+recs            times (NREC * 2 + 2) * RECW dw 0
 
         section .bss
 psp     resw 1
@@ -258,3 +385,5 @@ rm_ss   resw 1
 logbuf  resb LOGSIZE
         resb 1024
 stack_top:
+        resb 512                        ; kind 3's own stack
+pstk_top:

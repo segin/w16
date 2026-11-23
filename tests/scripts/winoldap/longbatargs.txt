@@ -1,0 +1,21 @@
+# File > Run "C:\LONGBAT.PIF" with 100 characters of arguments: " /c FILE
+# ARGS", 166 characters (3.1: A6h over the grabber's path, the switch
+# fails; w16 built it in 140 bytes of stack: the WINOLDAP audit's H3, H1)
+# opts: files=WC1 wait longbat
+# expect: blocks -> 80 20 2f 63 20 43 3a 5c 44 32 33
+# expect: WC.LOG tail=3D \[ b234567890c.*g234567890\] end=0D
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type c:\longbat.pif b234567890c234567890d234567890e234567890f234567890g234567890h234567890i234567890j234567890k234567890
+key Return
+sleep 3
+shot run
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 8

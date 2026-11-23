@@ -70,6 +70,7 @@ MOVECURSOR:
         push ds
         push es
         pusha
+        cld
         mov ax, DGROUP
         mov ds, ax
         push word [bp + 6]              ; y
@@ -88,6 +89,7 @@ CHECKCURSOR:
         push ds
         push es
         pusha
+        cld
         mov ax, DGROUP
         mov ds, ax
         call far _cur_check
@@ -251,6 +253,9 @@ hooked  db 0
 segment ENTRY_TEXT
 
 int2f_hook:
+        push ax                         ; slot for old2f segment
+        push ax                         ; slot for old2f offset
+        pushf                           ; preserve caller FLAGS
         cmp ax, 4001h
         je .ours
         cmp ax, 4002h
@@ -261,6 +266,7 @@ int2f_hook:
         push ds
         push es
         pusha
+        cld
         mov bx, DGROUP
         mov ds, bx
         push ax
@@ -270,7 +276,6 @@ int2f_hook:
         pop es
         pop ds
 .chain:
-        sub sp, 4                       ; the old handler's address goes here
         push bp
         mov bp, sp
         push ds
@@ -278,12 +283,13 @@ int2f_hook:
         mov ax, DGROUP
         mov ds, ax
         mov ax, [old2f wrt DGROUP]
-        mov [bp + 2], ax
-        mov ax, [old2f + 2 wrt DGROUP]
         mov [bp + 4], ax
+        mov ax, [old2f + 2 wrt DGROUP]
+        mov [bp + 6], ax
         pop ax
         pop ds
         pop bp
+        popf
         retf                            ; to the old handler, the IRET frame as it came
 
 ; void __cdecl far hook2f(void), unhook2f(void)

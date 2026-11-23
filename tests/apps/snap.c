@@ -98,6 +98,15 @@
  *     clipmf                 put a small metafile picture on the clipboard
  *     cliplink <file.bmp> <class>|<doc>|<item>   clipbmp, then ObjectLink
  *                            and OwnerLink naming that link (Paste Link)
+ *     blinkrate <file> <ms> caret | id <hex> | <x> <y> <w> <h>
+ *                            watch the focus window's caret, a control of
+ *                            the active dialog or a screen rectangle for
+ *                            <ms> ms and append "blinkrate ...: <n>
+ *                            changes in <ms> ms" to <file>
+ *     caretblink <file>      append GetCaretBlinkTime to <file>
+ *     kbrlog <file>          append the KEYBOARD.SetSpeed calls KBREC.DRV
+ *                            (tests/apps/kbrec.asm) recorded (since the
+ *                            last kbrlog) to <file>
  *     class <name>           Windows 2.x: the window class "cmd" and "close"
  *                            go to (default Progman)
  * Lines starting with ';' are comments. Progress and errors go to TK.LOG.
@@ -883,6 +892,145 @@ static void append_line(char *arg)
 }
 
 #ifndef SNAP_WIN2
+/* ---- blinking, the caret's rate, the keyboard's speed (Control Panel's
+   Desktop and Keyboard applets: tests/scripts/cpl/dkblk*.txt, kbspeed*) ---- */
+
+static char *word(char *p, int *v);
+
+/* append "<file> <text>" through append_line (its memory log too) */
+static void append_to(const char *file, const char *text)
+{
+    char b[300];
+    wsprintf(b, "%s %s", (LPSTR)file, (LPSTR)text);
+    append_line(b);
+}
+
+/* blinkrate <file> <ms> caret | id <hex> | <x> <y> <w> <h>: watch a
+   screen rectangle for <ms> ms, messages dispatched meanwhile, and count
+   how often what it shows changes (16 points of it, read with GetPixel):
+   the caret's (the focus window's caret: GetCaretPos), a control's of the
+   active dialog, or a rectangle. Appends "blinkrate <what>: <n> changes
+   in <ms> ms" to <file>. */
+static void blink_rate(char *arg)
+{
+    char file[80], what[40], b[120];
+    char *p = arg, *f = file;
+    int ms, x = 0, y = 0, w = 0, h = 0, n = 0, i, first = 1;
+    WORD last = 0;
+    DWORD end;
+    HDC dc;
+    MSG msg;
+    while (*p == ' ')
+        p++;
+    while (*p && *p != ' ' && f < file + sizeof file - 1)
+        *f++ = *p++;
+    *f = 0;
+    p = word(p, &ms);
+    while (*p == ' ')
+        p++;
+    if (!lstrcmpi(p, "caret")) {
+        HWND fw = GetFocus();
+        POINT pt;
+        GetCaretPos(&pt);
+        if (fw)
+            ClientToScreen(fw, &pt);
+        x = pt.x - 1;
+        y = pt.y;
+        w = 4;
+        h = 8;
+        lstrcpy(what, "caret");
+    } else if (p[0] == 'i' && p[1] == 'd') {
+        HWND top = top_window();
+        int id = (int)parse_num(p + 3, 16);
+        HWND c = top ? GetDlgItem(top, id) : NULL;
+        RECT r;
+        if (c) {
+            GetWindowRect(c, &r);
+            x = r.left;
+            y = r.top;
+            w = r.right - r.left;
+            h = r.bottom - r.top;
+        }
+        wsprintf(what, "id %X", id);
+    } else {
+        p = word(p, &x);
+        p = word(p, &y);
+        p = word(p, &w);
+        word(p, &h);
+        wsprintf(what, "%d,%d", x, y);
+    }
+    if (w < 1)
+        w = 1;
+    if (h < 1)
+        h = 1;
+    end = GetTickCount() + ms;
+    do {
+        WORD sum = 1;
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+        dc = GetDC(NULL);
+        for (i = 0; i < 16; i++) {
+            DWORD px = GetPixel(dc, x + (i & 3) * w / 4, y + (i >> 2) * h / 4);
+            sum = (WORD)(sum * 31 + LOWORD(px) + 7 * HIWORD(px));
+        }
+        ReleaseDC(NULL, dc);
+        if (!first && sum != last)
+            n++;
+        first = 0;
+        last = sum;
+        Yield();
+    } while ((long)(GetTickCount() - end) < 0);
+    wsprintf(b, "blinkrate %s: %d changes in %d ms", (LPSTR)what, n, ms);
+    out(" -> ");
+    out(b);
+    append_to(file, b);
+}
+
+/* caretblink <file>: append "GetCaretBlinkTime=<n>" */
+static void caret_blink(char *arg)
+{
+    char b[40];
+    while (*arg == ' ')
+        arg++;
+    wsprintf(b, "GetCaretBlinkTime=%u", GetCaretBlinkTime());
+    out(" -> ");
+    out(b);
+    append_to(arg, b);
+}
+
+/* kbrlog <file>: the KEYBOARD.SetSpeed calls KBREC.DRV (tests/apps/
+   kbrec.asm, in front of the keyboard driver) recorded since Windows
+   started, or since the last kbrlog, one line each with the argument and
+   the result (only values: its ring holds registers and stack words) */
+static WORD kbr_seen;
+
+static void kbr_log(char *arg)
+{
+    FARPROC f = GetProcAddress(GetModuleHandle("KEYBOARD"), MAKEINTRESOURCE(200));
+    WORD FAR *hd, FAR *r;
+    WORD i, n, sz;
+    char b[60];
+    while (*arg == ' ')
+        arg++;
+    if (!f) {
+        append_to(arg, "no KBREC");
+        return;
+    }
+    hd = (WORD FAR *)((DWORD (FAR PASCAL *)(void))f)();
+    n = hd[0];
+    sz = hd[2];
+    for (i = kbr_seen; i < n; i++) {
+        r = (WORD FAR *)((BYTE FAR *)hd + 16 + i * sz);
+        if (r[0] == 7) {
+            wsprintf(b, "SetSpeed(%04X) -> %04X", r[12], r[20]);
+            append_to(arg, b);
+        }
+    }
+    kbr_seen = n;
+}
+
 /* ---- clipboard sources for pasting pictures (Write's probes) ---- */
 
 /* clipbmp <file.bmp>: the file's DIB as CF_DIB and as a device-dependent
@@ -1639,6 +1787,14 @@ static void run_line(char *l)
         append_line(arg);
     } else if (same(l, "memlog")) {
         memlog_start(arg);
+#ifndef SNAP_WIN2
+    } else if (same(l, "blinkrate")) {
+        blink_rate(arg);
+    } else if (same(l, "caretblink")) {
+        caret_blink(arg);
+    } else if (same(l, "kbrlog")) {
+        kbr_log(arg);
+#endif
     } else if (same(l, "cursor")) {
         HCURSOR c = GetCursor();
         POINT pt;
