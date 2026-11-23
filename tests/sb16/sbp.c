@@ -22,6 +22,11 @@
  *   mci STRING          mciSendString(STRING) with the probe's window;
  *                       logs the answer and the returned string
  *   snd FILE            sndPlaySound(FILE, SND_SYNC); logs the answer
+ *   postrace            from here on play logs the position (bytes)
+ *                       every 250 ms while it waits
+ *   exec CMDLINE        WinExec(CMDLINE, SW_SHOWNORMAL): a DOS program in a
+ *                       box beside what plays (tests/sbvxdprobe.sh); logs
+ *                       the answer
  *   config              the driver of [drivers] wave= opened with OpenDriver,
  *                       DRV_QUERYCONFIGURE and DRV_CONFIGURE sent (its dialog)
  * Sources: the Multimedia Programmer's Guide (the wave, MIDI, MMIO and
@@ -95,13 +100,24 @@ static void wait(DWORD ms)
     }
 }
 
+/* "postrace": play logs the position in bytes every 250 ms while it waits */
+static BOOL postrace;
+static HWAVEOUT ptrace_h;
+
 /* until *p reaches n, at most MS milliseconds; the time it took */
 static DWORD waitn(WORD *p, WORD n, DWORD ms)
 {
-    DWORD t0 = timeGetTime(), t, top = t0;
+    DWORD t0 = timeGetTime(), t, top = t0, next = t0;
     while (*p < n) {
         pump();
         t = timeGetTime();
+        if (ptrace_h && t >= next) {
+            MMTIME b;
+            b.wType = TIME_BYTES;
+            waveOutGetPosition(ptrace_h, &b, sizeof b);
+            lg("  at %lu ms: %lu bytes", t - t0, b.u.cb);
+            next = t + 250;
+        }
         if (t > top && t - top < 0x10000000L)
             top = t;
         if (top - t0 >= ms)
@@ -200,7 +216,9 @@ static void play(LPCSTR name, WORD n, DWORD loops)
         for (i = 0; i < n; i++)
             if ((r = waveOutWrite(h, &w[i], sizeof(WAVEHDR))) != 0)
                 lg("  waveOutWrite(%u) = %u", i, r);
+        ptrace_h = postrace ? h : 0;
         took = waitn(&ndone, n, 60000L);
+        ptrace_h = 0;
         lg("  done %u of %u, ~%lu ms", ndone, n, took);
         position(h);
         for (i = 0; i < n; i++)
@@ -417,6 +435,12 @@ int __cdecl __far tmain(void)
             while (*p == ' ')
                 p++;
             mci(p);
+        } else if (is(cmd, "postrace")) {
+            postrace = TRUE;
+        } else if (is(cmd, "exec")) {
+            while (*p == ' ')
+                p++;
+            lg("exec %s = %u", (LPSTR)p, WinExec(p, SW_SHOWNORMAL));
         }
     }
     lg("SBP end");

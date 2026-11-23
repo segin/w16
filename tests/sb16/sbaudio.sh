@@ -20,9 +20,12 @@
 # through its MCI driver instead, on $W16_QTDIR/ref-installed/c (Windows
 # 3.1 with QuickTime installed by its own installer, as tests/qtplay.sh
 # makes it): its sound track must come out (4 s of sound or more).
-#   usage: tests/sb16/sbaudio.sh [-o OUTDIR] [ms|w16|qtms|qtw16 ...]
+#   usage: tests/sb16/sbaudio.sh [-o OUTDIR] [ms|w16|qtms|qtw16|mse|w16e|qtmse|qtw16e ...]
 # ms: Microsoft's MMSYSTEM.DLL, w16: w16's (and MMTASK.TSK); default ms
-# and w16, and qtms and qtw16 when the QuickTime drive is there.
+# and w16, and qtms and qtw16 when the QuickTime drive is there. A side
+# ending in e is the same in 386 Enhanced mode (WIN /3) with w16's
+# VSBD.386 (win386/vxd/vsbd.c, device=vsbd.386): mse and qtmse under
+# Microsoft's WIN386, w16e and qtw16e under w16's.
 # Exit status 0 when every check passes.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
@@ -52,18 +55,24 @@ run() {
     s=$1 d=$out/$1 script=$mat/SBP.TXT
     rm -rf "$d" "$d.cap"
     case $s in qt*) script=$mat/SBPQT.TXT ;; esac
+    b=$s wcmd='WIN /S'
+    case $s in *e) b=${s%e} wcmd='WIN /3' ;; esac
     set -- -r -3 -p 386 -f "$dos/SBP.EXE=SBP.EXE" -f "$script=SBP.TXT" \
         -f "$dos/SB16.DRV=WINDOWS/SYSTEM/SB16.DRV" -i 'boot:shell=C:\SBP.EXE' \
         -i 'drivers:wave=sb16.drv' -i 'drivers:midi=sb16.drv' -i 'drivers:aux=sb16.drv' \
         -i 'sb16.drv:port=220' -i 'sb16.drv:int=5' -i 'sb16.drv:dma=1' -i 'sb16.drv:hdma=5' \
-        -i 'sb16.drv:mpuport=330' -t "${SBAUDIO_SECS:-600}" -o "$d/run" -c 'WIN /S'
+        -i 'sb16.drv:mpuport=330' -t "${SBAUDIO_SECS:-600}" -o "$d/run" -c "$wcmd"
     for f in "$mat"/T*.WAV "$mat/SCALE.MID"; do
         set -- "$@" -f "$f=SB16T/$(basename "$f")"
     done
     case $s in qt*) export DROPIN_REF="$qtc" ;; *) unset DROPIN_REF ;; esac
-    if [ "$s" = w16 ] || [ "$s" = qtw16 ]; then
+    if [ "$b" = w16 ] || [ "$b" = qtw16 ]; then
         set -- "$@" -f "$dos/MMSYSTEM.DLL=WINDOWS/SYSTEM/MMSYSTEM.DLL" \
             -f "$dos/MMTASK.TSK=WINDOWS/SYSTEM/MMTASK.TSK"
+    fi
+    if [ "$b" != "$s" ]; then
+        set -- "$@" -f "$dos/VSBD.386=WINDOWS/SYSTEM/VSBD.386" -i '386Enh:+device=vsbd.386'
+        case $b in *w16) set -- "$@" -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" ;; esac
     fi
     DROPIN_CAPTURE="$d.cap" DROPIN_CONF="[sblaster]
 sbtype=sb16

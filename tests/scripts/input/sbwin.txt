@@ -1,0 +1,21 @@
+; the Sound Blaster's VxD (tests/sbvxdprobe.sh, tests/sb16/sbwin.sbp):
+; SBP.EXE as the shell starts SBD.COM in a box and at once plays
+; CHIMES.WAV looped (Windows has the card when the box wants it): shots
+; of what comes; Return twice at 14 s; SBP ends Windows
+sleep 3
+shot 01
+sleep 3
+shot 02
+sleep 3
+shot 03
+sleep 3
+shot 04
+key Return
+sleep 3
+shot 05
+key Return
+sleep 4
+shot 06
+sleep 6
+shot 07
+waitexit 60

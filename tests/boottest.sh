@@ -377,7 +377,11 @@
 #              differences, tests/sb16/sbcmp.py), audio (what it plays,
 #              recorded and checked against the WAV and MIDI material:
 #              tests/sb16/sbaudio.sh) and prog (Sound Recorder, Sound and
-#              Media Player over it: every screen as over SNDBLST2)
+#              Media Player over it: every screen as over SNDBLST2); enh
+#              (sbaudio.sh in 386 Enhanced mode with w16's VSBD.386 under
+#              Microsoft's WIN386 and w16's, QuickTime's movie too) and
+#              cont (a DOS box and Windows sharing the card: as Windows
+#              3.1's SNDBLST2.DRV and VSBD.386, the contention message too)
 #   bigmem     more than 64 MB of memory (DOSBox-X, memsize 128 and 256):
 #              TK63 as the shell reports DPMI 0500h, GetFreeSpace and the
 #              largest GlobalAlloc and takes blocks until none is left,
@@ -5956,7 +5960,7 @@ caseparts() {
     timer) echo "$1@s $1@3 $1@qt" ;;
     quicktime) echo "$1@over $1@tree $1@tree386 $1@enh $1@cpl" ;;
     mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;
-    sb16) echo "$1@dev $1@audio $1@prog" ;;
+    sb16) echo "$1@dev $1@audio $1@prog $1@enh $1@cont" ;;
     bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;
     filecdr) echo "$1@k286 $1@k386 $1@userk" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;

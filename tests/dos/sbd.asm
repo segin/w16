@@ -12,7 +12,8 @@
 ; D8h, status 08h/D0h, the channels' address and count ports, the page
 ; registers 87h 83h 81h 82h / 8Bh 89h 8Ah); the 8259A (EOI).
 ;
-;   usage: SBD M IRQ DMA HDMA      (base 220h; one digit each)
+;   usage: SBD M IRQ DMA HDMA [WAIT]  (base 220h; one digit each; WAIT:
+;          BIOS ticks to wait first, decimal: tests/sb16/sbwin.sbp)
 ;     M  s  8-bit single-cycle: 1 s of 700 Hz, then 1 s of 900 Hz, each
 ;           one transfer and one interrupt (11025 Hz)
 ;        a  8-bit auto-initialised: a buffer of two halves of 0.5 s
@@ -59,6 +60,30 @@ start:  mov si, 81h
         call word_
         sub al, '0'
         mov [dma16], al
+.ws:    lodsb                           ; WAIT: ticks, before anything
+        cmp al, ' '
+        je .ws
+        xor bx, bx
+.wd:    cmp al, '0'
+        jb .wn
+        cmp al, '9'
+        ja .wn
+        sub al, '0'
+        imul bx, 10
+        movzx ax, al
+        add bx, ax
+        lodsb
+        jmp .wd
+.wn:    or bx, bx
+        jz .w0
+        call ticks
+        mov cx, ax
+.wl:    sti
+        call ticks
+        sub ax, cx
+        cmp ax, bx
+        jb .wl
+.w0:
         ; a 64 KB-aligned segment above the program for the buffer
         mov ax, cs
         add ax, 1000h + 0FFFh

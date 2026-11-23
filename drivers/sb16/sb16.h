@@ -204,6 +204,13 @@ void __cdecl __far sb_sti(WORD flags);          /* back on when they were */
 WORD __cdecl __far sb_ahincr(void);             /* KERNEL's __AHINCR */
 int __cdecl __far sb_hook(WORD irq);            /* the card's IRQ ours */
 void __cdecl __far sb_unhook(void);
+/* VSBD.386's API (386 Enhanced mode, sb16a.asm): the entry (INT 2Fh 1684h,
+   device 0445h), 0 if there is none; a call (DX the function, AX the
+   port): AX back, bit 16 the carry */
+DWORD __cdecl __far sb_vxd_entry(void);
+DWORD __cdecl __far sb_vxd(WORD fn, WORD ax);
+int sb_take(void);                  /* the card ours (always in Standard mode) */
+void sb_give(void);
 void __cdecl __far sb_hcopy(LPSTR dst, LPSTR src, DWORD off, WORD n, WORD dir);
                                         /* dir 0: dst <- src+off (huge); 1: src+off <- dst */
 extern WORD sb_hinst;

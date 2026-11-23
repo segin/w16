@@ -74,6 +74,7 @@ extern DWORD __far __pascal TranslateWinToFScreen(LPEPS);           /* 23 */
 #define WM_SHELL_ENDED  0x418
 #define WM_SHELL_DISP   0x41A
 #define WM_SHELL_SWITCH 0x41E
+#define WM_SHELL_MESSAGE 0x4F0          /* w16's: SHELL_Message for this VM (win386/vmm/shell.c) */
 #define WM_START        (WM_USER + 0x80)
 
 #define SHELL_ID 0x0017
@@ -147,6 +148,48 @@ static void focus(DWORD v, DWORD edi)
 static void handback(LPARAM rec)
 {
     shell_call(0x0C, 0, 0, 0, 0, rec);
+}
+
+/* bytes at a linear address (str: a string, up to n - 1 bytes and a
+ * NUL), through a selector of KERNEL's for the while */
+UINT FAR PASCAL AllocSelector(UINT);
+UINT FAR PASCAL FreeSelector(UINT);
+UINT FAR PASCAL SetSelectorBase(UINT, DWORD);
+UINT FAR PASCAL SetSelectorLimit(UINT, DWORD);
+static void read_linear(DWORD lin, char *buf, int n, BOOL str)
+{
+    UINT sel = AllocSelector(get_ds());
+    LPSTR p;
+    int i;
+    if (str) buf[0] = 0;
+    if (!sel) return;
+    SetSelectorBase(sel, lin);
+    SetSelectorLimit(sel, (DWORD)n);
+    p = (LPSTR)MAKELP(sel, 0);
+    if (!str)
+        for (i = 0; i < n; i++) buf[i] = p[i];
+    else {
+        for (i = 0; i < n - 1 && p[i]; i++) buf[i] = p[i];
+        buf[i] = 0;
+    }
+    FreeSelector(sel);
+}
+
+/* SHELL_Message for our VM (a device's: VSBD.386's contention message):
+ * the event record's data is the text's linear address; shown in a
+ * message box with the window's title, on Windows' screen (Windows 3.1:
+ * the box inactive behind it), the box in front again after it if it was */
+static void shell_message(UINT flags, LPARAM rec)
+{
+    static char text[256];
+    DWORD lin;
+    BOOL front = running && !ended && !windowed && focused == vm;
+    read_linear((DWORD)rec + 0x10, (char *)&lin, sizeof lin, FALSE);
+    read_linear(lin, text, sizeof text, TRUE);
+    if (front) focus(sysvm, rec);
+    handback(rec);
+    MessageBox(hwnd, text, title[0] ? title : "WINOLDAP", flags | MB_TASKMODAL);
+    if (front && running && !ended) focus(vm, (DWORD)(WORD)&cblk);
 }
 
 /* ---- the PIF (winoldap/pifread.c: as Windows 3.1's WINOA386 reads it) ---- */
@@ -639,6 +682,9 @@ LRESULT FAR PASCAL WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_SHELL_ENDED:
         program_ended(lp);
+        return 0;
+    case WM_SHELL_MESSAGE:
+        shell_message((UINT)wp, lp);
         return 0;
     case WM_SHELL_FAULT:
         /* Windows 3.1 (VX12 G): a stop box with the window's title, then

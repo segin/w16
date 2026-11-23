@@ -136,6 +136,8 @@ is newer. Neither mode needs anything of Microsoft's.
                           Mapper, and QuickTime for Windows' MCI driver
                           work)
   SYSTEM\MMTASK.TSK       the multimedia library's helper task
+  SYSTEM\VSBD.386        the Sound Blaster between Windows and DOS
+                          programs in 386 Enhanced mode
   SYSTEM\SB16.DRV         a Sound Blaster 16 driver: wave output and
                           input (8 and 16 bits, mono and stereo, 5000
                           to 44100 Hz), MIDI out and in through the
@@ -240,8 +242,13 @@ and, when the card is not at its usual place, a section of its own
 A key that is missing comes from the BLASTER environment setting
 (A220 I5 D1 H5 P330), else from the card's own mixer (IRQ and DMA),
 else from the defaults above (Control Panel's Drivers applet, Setup,
-shows and changes them). Without a card, and in 386 Enhanced mode, the
-driver offers no devices and Windows starts as usual. The MIDI Mapper needs a setup that
+shows and changes them). Without a card the driver offers no devices
+and Windows starts as usual. In 386 Enhanced mode the card is shared
+with DOS programs by SYSTEM\VSBD.386 ([386Enh] device=vsbd.386, in the
+SYSTEM.INI shipped): Windows has it while a program plays, a DOS program
+has it while its box is open, and a DOS program that wants it while
+Windows plays is told it is in use; without VSBD.386 the driver offers
+no devices there. The MIDI Mapper needs a setup that
 sends to "Sound Blaster 16 MIDI" before programs that use it (Media
 Player's MIDI Sequencer) play through the card.
 

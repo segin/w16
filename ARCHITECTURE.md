@@ -4190,8 +4190,9 @@ segment (`tools/irqcheck.py --fixed`, in `make test`).
   SB16 mixer's registers 80h (IRQ) and 81h (DMA); else 220h, 5, 1, 5,
   330h. DSP reset (base+6, AAh), version (E1h): 4.00 or later gives the
   wave and aux devices; the MPU-401 reset (FFh twice) and put in UART
-  mode (3Fh) gives the MIDI devices. In 386 Enhanced mode nothing is
-  touched and no device offered (24.5).
+  mode (3Fh) gives the MIDI devices. In 386 Enhanced mode the card is
+  taken from VSBD.386 for this and given back (24.6); without VSBD there
+  no device is offered.
 - **Wave**: one 8 KB DMA buffer of conventional memory (GlobalDOSAlloc;
   physical = linear in Standard mode; within one 64 KB page), auto-
   initialised, two halves of about 1/16 s; DSP 4.xx's B6h/C6h (output)
@@ -4294,13 +4295,6 @@ name `w16-sb16`:
 
 ### 24.5 UNVERIFIED, and not done
 
-- **386 Enhanced mode**: the driver offers no devices there (GetWinFlags'
-  WF_ENHANCED: the card is not touched). It would
-  need a VxD that gives the system VM the card's ports (or virtualises
-  them per VM), its IRQ (VPICD: a virtualised IRQ, so that the handler
-  runs in the system VM) and its DMA channels (VDMAD: the DMA buffer's
-  physical address, or the transfers translated), and the DMA buffer and
-  the handler's code and data page-locked.
 - **FM**: no OPL3 synthesiser device (it needs a MIDI-to-OPL voice
   allocator and a patch set of w16's own: not done); the MIDI aux device
   only sets the FM's volume.
@@ -4320,3 +4314,93 @@ name `w16-sb16`:
   setup answers 68, 23.2); Media Player's MIDI Sequencer plays through
   the mapper, so CANYON.MID is only opened in `prog`; MCISEQ on port 0
   ("set port 0") plays through the MPU-401 (`audio`).
+
+### 24.6 386 Enhanced mode: VSBD.386
+
+**Windows 3.1's structure** (observed, `tests/sbvxdprobe.sh ms`: Windows
+3.1 with its own SNDBLST2.DRV and VSBD.386 as Setup installs them,
+`[386Enh] device=vsbd.386`; the probe VxD VXB.386, `tests/vxd/vxm.c`
+built with SBPROBE, loaded just before VSBD finds VSBD's DDB as its
+DDB_Next and puts loggers in front of VSBD's API procedures; SBD.COM in a
+box; SBP.EXE as the shell). SETUP.INF gives sndblst.drv and sndblst2.drv
+the VxD vsbd.386 (msadlib.drv vadlibd.386). VSBD.386's format facts
+(readexe): "VSBD", device 0445h, 3.00, Undefined_Init_Order, one procedure
+for the V86 and the PM API, 2 services; its dynamic links are to VPICD
+(Virtualize_IRQ, Set/Clear_Int_Request, Phys_EOI, Physically_Mask/Unmask,
+Set_Auto_Masking), the I/O trapping services (Install_IO_Handler,
+Install_Mult_IO_Handlers, Enable/Disable_Local_Trapping, Simulate_IO),
+the profile services, SHELL_Message and VADLIBD.386: none to VDMAD (the
+DMA is VDMAD's default handling, 12.8). It virtualises the card's IRQ
+(IRQ 5's status: carry; physically masked, 4, while nobody plays, 0 while
+a box has the card) and traps 220h-22Eh, 388h and 389h (not 22Fh, 38Ah,
+38Bh, 330h, 331h). SNDBLST2 calls the API with DX the function and AX the
+port: 1 at its enable (AX=8000h back the first time), 3 (AX the DSP's
+version 0405h, BX 2, CX 0501h: the IRQ and the DMA channel, DX the port),
+2; then 1 at each wave open and 2 at the close; 1 while a box has the card
+comes back AX=2, carry set (MessageBeep is then silent, no message). A box
+that touches the card while nobody has it plays (SBD's single-cycle
+transfers, the IRQ to the box). A box that touches it while Windows plays
+gets a message box on Windows' screen, the box inactive behind it:
+caption the box's title, "Unable to play sound - the Sound Blaster is in
+use by another application.", OK, an exclamation mark; after OK the box
+runs on without the card (SBD: DSP not found).
+
+**w16's VSBD.386** (`win386/vxd/vsbd.c`, an external VxD as Windows
+3.1's, built beside SB16.DRV, `SYSTEM\VSBD.386`, in the install tree's
+SYSTEM.INI): the same DDB, device ID and API, so it serves Windows 3.1's
+SNDBLST2.DRV too, and it runs under Microsoft's WIN386 as under w16's.
+The card is one VM's at a time; the owner's port trapping is off, the
+others' on; a VM that touches the ports while the card is free takes it,
+one that touches them while another has it gets FFh for reads, its writes
+dropped, and SHELL_Message once (until it gets the card); the IRQ
+(VPICD_Virtualize_IRQ) goes to the owner, the 8259 follows the owner's
+mask, masked while nobody has it. The System VM takes and gives back the
+card through the API; a box keeps it until it ends. The card's settings:
+[sb16.drv] or [sndblst.drv] port, int, dma; else the SB16 mixer's IRQ
+(register 80h); no DSP: nothing trapped, the API always grants. SB16.DRV
+takes the card for its enable and while a wave device is open (or for a
+volume change), and offers its devices in 386 Enhanced mode when VSBD.386
+is there. Needed in the VMM: the profile services (Get_Profile_String and
+the rest: the loader leaves SYSTEM.INI in its memory), a SHELL device with
+SHELL_Message (to the VM's WINOA386 as w16's event 4F0h, the text where
+ring 3 can read it; w16's WINOA386 shows it captioned with its title on
+Windows' screen and the box back in front after OK), DDB_Next to the next
+device in init order (as VXB saw: before, each pointed to the one
+before), and, for Windows 3.1's TIMER.DRV and VTDAPI.386 on w16's WIN386
+(MCISEQ, QuickTime in the sbaudio sides), the VM event services (0Eh-15h)
+and Simulate_Push and Simulate_Far_Call run at Resume_Exec in protected
+mode.
+
+**Tests** (boot-test case sb16, parts enh and cont): `tests/sb16/sbaudio.sh`
+sides mse (Microsoft's WIN386 and MMSYSTEM with SB16.DRV and w16's VSBD),
+w16e (w16's), qtmse (QuickTime's movie; qtw16e by hand, below); `tests/sbvxdprobe.sh`
+ms against w16 with `tools/sbvxdcmp.py`: sbbox (a box plays while
+Windows has nothing open: SBD's log and tones as 3.1's), sbwin (a box
+wants the card while SBP plays: the message box screen as 3.1's but the
+box's icon, SBD finds no card as under 3.1), the trapped ports and the
+IRQ's virtualisation as 3.1's. UNVERIFIED: VSBD's two services and API
+function 0, BX's meaning, the System VM touching the ports without
+taking the card (here it takes it, as a box), the event Windows 3.1's
+SHELL sends its WINOA386 for SHELL_Message (w16's WINOA386 has its own:
+under Microsoft's WINOA386 the box gets no card and no message), the
+box's icon behind the message ("(Inactive SBD)" under 3.1).
+
+**QuickTime in 386 Enhanced mode** (boot-test part `quicktime@enh`, the
+tree alone, its SYSTEM.INI loading VSBD.386; Windows 3.1's side with
+SNDBLST2.DRV and its VSBD.386): the movie's sound plays (sbaudio.sh's
+qtw16e and qtmse sides: its sound track comes out), but on w16 the movie
+drops frames to keep up with its sound: its picture garbled, its end
+after about 6 s against 3.1's 12 (with Microsoft's TIMER.DRV and VTDAPI
+on w16's WIN386 too, so not the timer driver), and the close sequence's
+screens differ. Without a sound device w16 shows every frame but takes
+22-26 s (21.5): w16's 386 Enhanced mode runs QuickTime at about half
+3.1's speed, and with a sound clock to follow that shows as dropped
+frames. Each read of the DMA count is now one trapped reading (VDMAD
+gives both bytes of one, SB16.DRV reads once in Enhanced mode: before,
+the movie took 2-4 s). Not done: finding where w16's Enhanced mode loses
+the time. Under w16's WIN386 with Windows 3.1's own TIMER.DRV and
+VTDAPI.386 (sbaudio.sh's side qtw16e) QuickTime's "play" stopped in most
+runs on 2026-11-23 (it passed once): UNVERIFIED why; the side is left out
+of the boot-test part enh. Plain DOSBox: the Enhanced-mode sound tests run in DOSBox-X
+only (the sound capture needs it); SB16.DRV's devices in Enhanced mode
+were not tried in plain DOSBox.

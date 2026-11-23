@@ -60,8 +60,12 @@ DWORD vol_get(int which)
 void vol_set(int which, DWORD v)
 {
     vols[which] = v;
+    if (!sb_take())                     /* (Enhanced mode: a box has the card:
+                                           kept for later, not set) */
+        return;
     mix_write(regs[which], (BYTE)((LOWORD(v) >> 11) << 3));
     mix_write((BYTE)(regs[which] + 1), (BYTE)((HIWORD(v) >> 11) << 3));
+    sb_give();
 }
 
 DWORD ENTRY AUXMESSAGE(WORD dev, WORD msg, DWORD user, DWORD p1, DWORD p2)

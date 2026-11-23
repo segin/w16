@@ -39,6 +39,7 @@ static void outb(vu32 port, vu32 v);
 #pragma aux outb = "out dx, al" parm [edx] [eax] modify exact [];
 
 void __cdecl vmm_install_io(struct vregs *r);
+void __cdecl vxd_call_proc(vu32 proc, struct vregs *r);
 void __cdecl vmm_get_sys_vm(struct vregs *r);
 #define D(n) void __cdecl vdmad_##n(struct vregs *r);
 D(0) D(1) D(2) D(3) D(4) D(5) D(6) D(7) D(8) D(9) D(10) D(11) D(12) D(13)
@@ -323,6 +324,109 @@ static void services(void)
     }
 }
 
+#ifdef SBPROBE
+/* ---- VXB.386: the Sound Blaster's VxD watched (built with SBPROBE) ----
+ * At Init_Complete and System_Exit: VPICD_Get_IRQ_Complete_Status for
+ * IRQs 5 and 7 (carry: someone virtualised it); Install_IO_Handler for the
+ * card's ports (carry: someone traps them; a port the probe gets goes to
+ * the hardware unchanged). At Device_Init the DDB chain from VXB's own DDB
+ * is walked to the device named VSBDNAME (default "VSBD"); its V86 and PM
+ * API procedures are replaced by loggers that log the client's registers
+ * before and after calling the original */
+void __cdecl vpicd_irq_status(struct vregs *r);
+extern char VXM_DDB[], vxb_v86[], vxb_pm[];
+#pragma aux VXM_DDB "*"
+#pragma aux vxb_v86 "*"
+#pragma aux vxb_pm "*"
+#ifndef VSBDNAME
+#define VSBDNAME "VSBD    "
+#endif
+static vu32 orig_v86 = 1, orig_pm = 1, api_calls = 1;
+static const vu16 sbports[] = { 0x220, 0x221, 0x222, 0x223, 0x224, 0x225, 0x226, 0x227,
+    0x228, 0x229, 0x22A, 0x22B, 0x22C, 0x22D, 0x22E, 0x22F, 0x388, 0x389, 0x38A, 0x38B,
+    0x330, 0x331, 0x240, 0x22, 0xFFFF };
+
+static void irq_status(const char *when)
+{
+    struct vregs s;
+    vu32 i;
+    for (i = 5; i <= 7; i += 2) {
+        clr(&s); s.eax = i; s.ecx = 0xEEEEEEEE;
+        vpicd_irq_status(&s);
+        LOG("IRQ %b status %x: ecx %x cf %b", i, *(vu32 *)when, s.ecx, CF(&s));
+    }
+}
+
+static void api_log(struct vregs *r, vu32 orig, const char *kind)
+{
+    struct client_regs *c = (struct client_regs *)r->ebp;
+    struct vregs s;
+    vu32 n = api_calls++;
+    LOG("%x api %x vm %b in: eax %x ebx %x ecx %x edx %x esi %x edi %x ds %w es %w fl %x",
+        *(vu32 *)kind, n, vmid(r->ebx), c->eax, c->ebx, c->ecx, c->edx, c->esi, c->edi, c->ds, c->es, c->eflags);
+    s = *r;
+    vxd_call_proc(orig, &s);
+    LOG("%x api %x out: eax %x ebx %x ecx %x edx %x esi %x edi %x es %w fl %x",
+        *(vu32 *)kind, n, c->eax, c->ebx, c->ecx, c->edx, c->esi, c->edi, c->es, c->eflags);
+}
+void __cdecl vxb_v86_api(struct vregs *r) { api_log(r, orig_v86, "v86 "); }
+void __cdecl vxb_pm_api(struct vregs *r) { api_log(r, orig_pm, "pm  "); }
+
+static void sb_wrap(void)
+{
+    struct vxd_ddb *d = (struct vxd_ddb *)VXM_DDB;
+    vu32 i, j;
+    for (i = 0; i < 64 && d; i++, d = (struct vxd_ddb *)d->next) {
+        for (j = 0; j < 8 && d->name[j] == VSBDNAME[j]; j++) ;
+        if (j < 8) continue;
+        LOG("found %x: id %w version %b.%b init %x v86 %x pm %x services %x",
+            i, d->device_id, d->major, d->minor, d->init_order, d->v86_api, d->pm_api, d->svc_count);
+        if (d->v86_api) { orig_v86 = d->v86_api; d->v86_api = (vu32)vxb_v86; }
+        if (d->pm_api) { orig_pm = d->pm_api; d->pm_api = (vu32)vxb_pm; }
+        return;
+    }
+    LOG("no %x in the DDB chain (%x devices)", *(vu32 *)VSBDNAME, i);
+}
+
+static void sb_ports(void)
+{
+    struct vregs s;
+    vu32 i;
+    for (i = 0; sbports[i] != 0xFFFF; i++) {
+        clr(&s); s.edx = sbports[i]; s.esi = (vu32)vxm_io;
+        vmm_install_io(&s);
+        LOG("Install_IO_Handler %w: cf %b", sbports[i], CF(&s));
+    }
+}
+
+void __cdecl vxm_control(struct vregs *r)
+{
+    r->eflags &= ~VF_CF;
+    cur_ebp = r->ebp;
+    switch (r->eax) {
+    case DEVICE_INIT:
+        sb_wrap();
+        break;
+    case INIT_COMPLETE:
+        irq_status("ic  ");
+        sb_ports();
+        break;
+    case SYS_VM_INIT:
+        irq_status("svi ");
+        break;
+    case CREATE_VM:
+        LOG("Create_VM %b", vmid(r->ebx));
+        irq_status("cvm ");
+        break;
+    case DESTROY_VM:
+        LOG("Destroy_VM %b", vmid(r->ebx));
+        break;
+    case SYSTEM_EXIT:
+        irq_status("exit");
+        break;
+    }
+}
+#else
 void __cdecl vxm_control(struct vregs *r)
 {
     struct vregs s;
@@ -371,3 +475,4 @@ void __cdecl vxm_control(struct vregs *r)
         break;
     }
 }
+#endif

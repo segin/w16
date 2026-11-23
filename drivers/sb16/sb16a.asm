@@ -58,6 +58,7 @@ vecno           db 0                    ; its vector
 maskbit         db 0                    ; the PIC's mask bit as it was
                 db 0
 oldvec          dd 0
+vsbd_entry      dd 0                    ; VSBD.386's API (sb_vxd_entry)
 
 segment SB_TEXT
 
@@ -95,6 +96,54 @@ global WEP
 WEP:
         mov ax, 1
         retf 2
+
+; DWORD __cdecl __far sb_vxd_entry(void): VSBD.386's API entry (INT 2Fh
+; AX=1684h BX=0445h, the DDK's Get Device Entry Point Address), 0 if there
+; is none
+global _sb_vxd_entry
+_sb_vxd_entry:
+        push ds
+        push es
+        push di
+        mov ax, DGROUP
+        mov ds, ax
+        xor di, di
+        mov es, di
+        mov ax, 1684h
+        mov bx, 0445h
+        int 2Fh
+        mov [vsbd_entry], di
+        mov [vsbd_entry + 2], es
+        mov ax, di
+        mov dx, es
+        pop di
+        pop es
+        pop ds
+        retf
+
+; DWORD __cdecl __far sb_vxd(WORD fn, WORD ax): VSBD.386's API, DX the
+; function, AX the argument (the port); AX back in the low word, 1 in the
+; high word if the carry came back set (Windows 3.1's SNDBLST2.DRV calls
+; Windows 3.1's VSBD.386 so: win386/vxd/vsbd.c)
+global _sb_vxd
+_sb_vxd:
+        push bp
+        mov bp, sp
+        push ds
+        push si
+        push di
+        mov ax, DGROUP
+        mov ds, ax
+        mov dx, [bp + 6]
+        mov ax, [bp + 8]
+        call far [vsbd_entry]
+        mov dx, 0
+        adc dx, 0
+        pop di
+        pop si
+        pop ds
+        pop bp
+        retf
 
 ; WORD __cdecl __far sb_ahincr(void)
 global _sb_ahincr

@@ -20,7 +20,16 @@
 #          SB16 records DING.WAV's 22050 Hz, SNDBLST2 does not); and
 #          SB16.DRV's configuration dialog opened through USER and
 #          cancelled (tests/scripts/input/sb16cfg.txt)
-#   usage: tests/sb16/sbscen.sh [-o OUTDIR] [dev] [audio] [prog]
+#   enh    tests/sb16/sbaudio.sh in 386 Enhanced mode with w16's VSBD.386:
+#          sides mse (Microsoft's WIN386 and MMSYSTEM) and w16e (w16's),
+#          and QuickTime's qtmse when $W16_QTDIR has it
+#   cont   the card between Windows and a DOS box (tests/sbvxdprobe.sh,
+#          tools/sbvxdcmp.py) under w16's WIN386, SB16.DRV and VSBD.386
+#          against Windows 3.1's own, SNDBLST2.DRV and VSBD.386: sbbox (a
+#          box plays while Windows has nothing open) and sbwin (a box
+#          wants the card while Windows plays: the contention message,
+#          screenshot 03, and no card for the box)
+#   usage: tests/sb16/sbscen.sh [-o OUTDIR] [dev] [audio] [prog] [enh] [cont]
 # Exit status 0 when every comparison agrees.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
@@ -70,6 +79,34 @@ for p in $parts; do
             echo "FAIL audio: $(grep -m1 FAIL "$out/audio.txt" || echo 'no result') ($out/audio.txt)"
             fails=$((fails + 1))
         fi ;;
+    enh)
+        qtc=${W16_QTDIR:-$HOME/Downloads/qtw16}/ref-installed/c
+        sides="mse w16e"
+        # (qtw16e, QuickTime under w16's WIN386 with Windows 3.1's
+        # TIMER.DRV and VTDAPI.386, stops at "play" in most runs
+        # (2026-11-23, ARCHITECTURE.md 24.6): run it by hand with
+        # tests/sb16/sbaudio.sh qtw16e)
+        [ -d "$qtc" ] && sides="$sides qtmse"
+        if "$root/tests/sb16/sbaudio.sh" -o "$out/enh" $sides > "$out/enh.txt" 2>&1; then
+            echo "ok   enh: $(grep -c '^ok' "$out/enh.txt") checks, sides $sides ($out/enh.txt)"
+        else
+            echo "FAIL enh: $(grep -m1 FAIL "$out/enh.txt" || echo 'no result') ($out/enh.txt)"
+            fails=$((fails + 1))
+        fi ;;
+    cont)
+        for sc in sbbox sbwin; do
+            b=200; sh=
+            [ "$sc" = sbwin ] && b=14 sh="-s 03"
+            SBVXD_BOOT=$b "$root/tests/sbvxdprobe.sh" -o "$out/cont-ms-$sc" ms $sc > /dev/null 2>&1 &
+            SBVXD_BOOT=$b "$root/tests/sbvxdprobe.sh" -o "$out/cont-w16-$sc" w16 $sc > /dev/null 2>&1 &
+            wait
+            if r=$(python3 "$root/tools/sbvxdcmp.py" $sh "$out/cont-ms-$sc" "$out/cont-w16-$sc" 2>&1); then
+                echo "ok   cont $sc: $r"
+            else
+                echo "FAIL cont $sc: $r ($out/cont-w16-$sc)"
+                fails=$((fails + 1))
+            fi
+        done ;;
     prog)
         r=ok
         for g in soundrec sound mplayer; do

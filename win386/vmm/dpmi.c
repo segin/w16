@@ -1520,6 +1520,24 @@ void dpmi_pm_int(int vec, struct cregs *r)
 /* a far call (PASCAL: the callee pops the words) to sel:off in the System
  * VM's protected mode, on the host stack, with n words of arguments
  * (args[0] pushed first); the registers it returns with in r */
+/* as dpmi_pm_farcall, the registers (and DS, ES) from in */
+void dpmi_pm_farcall_regs(const struct cregs *in, u32 sel, u32 off, const u16 *args, int n, struct cregs *r)
+{
+    struct cregs p;
+    int i;
+    p = *in;
+    p.esp = hstk_base(NULL);
+    p.ss = hstk_sel;
+    for (i = 0; i < n; i++) pm_push(&p, args[i]);
+    pm_push(&p, SEL_PMBP);
+    pm_push(&p, PMBP_IRQRET);
+    p.eflags = 0x0202;
+    p.cs = sel;
+    p.eip = off;
+    hstk_run(&p);
+    if (r) *r = p;
+}
+
 void dpmi_pm_farcall(u32 sel, u32 off, const u16 *args, int n, struct cregs *r)
 {
     struct cregs p;

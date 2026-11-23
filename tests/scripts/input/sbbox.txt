@@ -1,0 +1,31 @@
+; the Sound Blaster's VxD (tests/sbvxdprobe.sh): Windows has the card (its
+; start-up sound played); the MS-DOS Prompt full screen, SBD.COM plays a
+; single-cycle 8-bit DMA transfer (700, 900 Hz): what the VxD does about
+; the box's use of the card (shots), Return for a message box if one came;
+; EXIT, Exit Windows
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+shot 01-box
+type sbd s 5 1 5
+key Return
+sleep 3
+shot 02-sbd
+sleep 4
+shot 03-later
+key Return
+sleep 4
+shot 04-return
+type exit
+key Return
+sleep 8
+shot 05-windows
+key alt+F4
+sleep 2
+key Return
+waitexit 60

@@ -369,6 +369,7 @@ static DWORD wo_close(void)
         sb_sti(f);
     }
     wo.open = 0;
+    sb_give();
     notify(&wo.cb, MM_WOM_CLOSE, 0, 0);
     return 0;
 }
@@ -423,6 +424,8 @@ static DWORD wopen(struct wdev *w, WORD dev, DWORD FAR *user, WOPENDESC FAR *d, 
     if (!sb_ok)
         return MMSYSERR_NOTENABLED;
     if (wo.open || wi.open)
+        return MMSYSERR_ALLOCATED;
+    if (!sb_take())                     /* (Enhanced mode: a DOS box has the card) */
         return MMSYSERR_ALLOCATED;
     setfmt(w, d->lpFormat);
     w->cb.h = d->hWave;
@@ -613,6 +616,7 @@ DWORD ENTRY WIDMESSAGE(WORD dev, WORD msg, DWORD user, DWORD p1, DWORD p2)
             return WAVERR_STILLPLAYING;
         wi_halt();
         wi.open = 0;
+        sb_give();
         notify(&wi.cb, MM_WIM_CLOSE, 0, 0);
         return 0;
     case WIDM_ADDBUFFER:
