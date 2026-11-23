@@ -1,0 +1,37 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! ini WINDOWS/WIN.INI colors:Background=0 128 0
+;! ini WINDOWS/WIN.INI colors:Window=0 0 128
+;! ini WINDOWS/WIN.INI colors:WindowText=255 0 0
+; Desktop in other colours: the cursor blink sample (cpl audit M2) and
+; Edit Pattern on 50% Gray (L1, L8: the grid, the sample), then on (None)
+run CONTROL.EXE DESKTOP
+wait 4000
+snap B0.BMP
+wait 150
+snap B1.BMP
+wait 150
+snap B2.BMP
+wait 150
+snap B3.BMP
+wait 150
+snap B4.BMP
+alt n
+wait 300
+key 28
+wait 300
+alt p
+wait 1500
+snap P0.BMP
+key 1B
+wait 800
+alt n
+wait 300
+key 24
+wait 300
+alt p
+wait 1500
+snap P1.BMP
+key 1B
+wait 800
+key 1B
+wait 2000

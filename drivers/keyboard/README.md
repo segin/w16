@@ -105,11 +105,14 @@ Details observed and reproduced:
 - **AnsiToOem/OemToAnsi** (and Buff): tables from the public code pages
   (below). The string forms go on into the next selector at a 64K
   boundary; the Buff forms wrap within the segment (KB1, "huge").
-- **SetSpeed**: Windows' speed (bits 0-4, 31 the fastest) is the
-  keyboard's rate counted the other way (IBM: 0 the fastest), the delay
-  (bits 5-6) as it is; command F3h to port 60h, the answers polled with
-  interrupts off. Repeats per held key match Windows 3.1's (`tests/kbprobe.sh
-  rep`: KB2 with `kb2speed` 31, 95, 0, 96).
+- **SetSpeed**: Windows' speed (bits 0-4, 31 the fastest) becomes the
+  keyboard's rate (IBM: 0 the fastest) through a table observed on 3.1
+  (`rate_of`: each speed's repeats in 10 s against each raw rate's; not
+  31 - speed, which w16 used until 2026-11-22: speed 16 repeated half as
+  fast), the delay (bits 5-6) as it is; command F3h to port 60h, the
+  answers polled with interrupts off. Repeats per held key match Windows
+  3.1's (`tests/kbprobe.sh rep`: KB2 with `kb2speed` 31, 95, 0, 96;
+  `repini`: WIN.INI's values through USER, w16's USER and driver).
 - **EnableKBSysReq** starts at 0 (DDK); KERNEL turns CVWBreak on at
   boot (Pietrek ch. 1), hence 2 when a program first asks (KB1).
 

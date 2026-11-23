@@ -487,18 +487,31 @@ SETSPEED:
         mov al, 0F3h
         call kbd_send
         ; Windows' speed counts up (31 the fastest), the keyboard's rate
-        ; down (0 the fastest: IBM PC/AT); the delay as it is (KB2's
-        ; repeat counts against Windows 3.1's driver's)
+        ; down (0 the fastest: IBM PC/AT), through rate_of; the delay as
+        ; it is
+        push bx
+        mov bl, [bp + 6]
+        and bx, 1Fh
+        mov ah, [cs:rate_of + bx]
+        pop bx
         mov al, [bp + 6]
-        mov ah, al
-        and ax, 1F60h
-        xor ah, 1Fh
+        and al, 60h
         or al, ah
         call kbd_send
         popf
         mov ax, [bp + 6]
 .r:     pop bp
         retf 2
+
+; Windows' speed 0..31 -> the keyboard's typematic rate (IBM PC/AT: 0 is
+; 30 a second, 31 is 2). Observed: Windows 3.1's driver, WIN.INI
+; KeyboardSpeed 0..31 at KeyboardDelay 0, 'a' held 10 s in DOSBox, the
+; repeats counted and matched against this driver's for each raw rate
+; (2026-11-22; tests/kbprobe.sh repini checks four of them). Not 31 -
+; speed: 16 gives 7 (16 a second), not 15 (8).
+rate_of:
+        db 31, 31, 31, 26, 23, 20, 18, 17, 15, 13, 12, 11, 10,  9,  9,  8
+        db  7,  6,  6,  5,  4,  4,  3,  3,  2,  2,  1,  1,  1,  0,  0,  0
 
 ; kbd_send: AL to the keyboard (port 60h) once the controller takes
 ; input, then its answer read (polled, interrupts off). Gives up after a

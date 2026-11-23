@@ -1,0 +1,12 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Desktop: the cursor blink bar, one page to Fast (Page Down) from 530, OK: WIN.INI
+; CursorBlinkRate (the bar's milliseconds) and GetCaretBlinkTime after it
+run CONTROL.EXE DESKTOP
+wait 4000
+alt r
+wait 300
+key 22
+wait 500
+key 0D
+wait 2000
+caretblink C:\CMP.LOG

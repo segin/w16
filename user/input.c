@@ -323,6 +323,7 @@ void input_enable(void)
 
     S_ENABLESYSTEMTIMERS();
     KB_ENABLE((FARPROC)keybd_event_entry, keystate);
+    keyboard_speed_init();
     MS_ENABLE((FARPROC)mouse_event_entry);
     D_MOVECURSOR(ptCursor.x, ptCursor.y);
     set_cursor_shape(load_icon_cursor(0, IDC_ARROW, TRUE));

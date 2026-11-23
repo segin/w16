@@ -1,0 +1,17 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! saver WINDOWS/SSAAA.SCR !Starfield Simulatio
+; A screen saver whose name sorts before "(None)" (cpl audit L2): "(None)",
+; then the second entry, chosen: Test and Setup, OK (SYSTEM.INI
+; SCRNSAVE.EXE, WIN.INI ScreenSaveActive)
+blinktime 65535
+run CONTROL.EXE DESKTOP
+wait 4000
+alt a
+wait 300
+key 24
+wait 300
+key 28
+wait 500
+snap D0.BMP
+key 0D
+wait 2000

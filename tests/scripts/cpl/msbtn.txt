@@ -1,0 +1,43 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! ini WINDOWS/WIN.INI windows:MouseSpeed=0
+; Mouse, real input (cpl audit M3): the left button held over the dialog
+; (the L box inverted), dragged out of the dialog and released there; the
+; TEST box double-clicked (inverted), the dialog then moved half off the
+; screen and back (repainted); Cancel
+blinktime 65535
+run CONTROL.EXE MOUSE
+wait 4000
+mmove 41 208
+wait 300
+mdown 41 208
+wait 300
+snap M0.BMP
+mmove 450 420
+wait 300
+mup 450 420
+wait 500
+snap M1.BMP
+mmove 100 205
+wait 300
+dblclick 100 205
+wait 500
+snap M2.BMP
+move -250 34 360 205
+wait 500
+move 16 34 360 205
+wait 800
+snap M3.BMP
+mmove 41 208
+wait 300
+mdown 41 208
+wait 300
+move -250 34 360 205
+wait 500
+move 16 34 360 205
+wait 800
+snap M4.BMP
+mup 41 208
+wait 500
+snap M5.BMP
+key 1B
+wait 2000

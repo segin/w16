@@ -2505,7 +2505,9 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
                 for f in "$1"/[0-9]*.png; do
                     sn=$(basename "$f")
                     [ -f "$2/$sn" ] || { r="$3: no $sn"; return; }
-                    n=$(magick compare -metric AE "$2/$sn" "$f" "$out/$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                    magick "$f" -fill black -draw "$clkmask" "$out/.clk-a.png"
+                    magick "$2/$sn" -fill black -draw "$clkmask" "$out/.clk-b.png"
+                    n=$(magick compare -metric AE "$out/.clk-b.png" "$out/.clk-a.png" "$out/$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
                     n=${n%% *}
                     [ "$n" = 0 ] || { r="$3: $sn: $n pixels differ"; return; }
                 done
@@ -2520,6 +2522,11 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
         for pk in ${part:-$dparts}; do
             ap=${pk%-*} st=${pk#*-}
             s=$root/tests/scripts/input/cplclick-$ap.txt
+            # Desktop: the cursor blink sample blinks, and once the bar
+            # has moved its focused thumb's caret blinks at the new rate
+            # (as on 3.1, 2026-11-22): both left out of the screens
+            clkmask="rectangle 0,0 0,0"
+            [ "$ap" = dk ] && clkmask="rectangle 205,346 332,366 rectangle 339,334 348,356"
             case $st in
             tree)
                 set -- -T "$root/build/w16" -i 'WIN.INI:windows:run=CONTROL.EXE' \
@@ -2528,7 +2535,7 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
                 "$root/tests/inputrun.sh" -s -b 40 -t 300 "$s" "$out/cplclick-$ap-t286" "$@" \
                     > "$out/cplclick-$ap-t286.txt" 2>&1 || true
                 "$root/tests/inputrun.sh" -e "$out/cplclick-$ap-t286/boot.png" -E "$out/cplclick-$ap-t286" \
-                    -b 40 -t 300 "$s" "$out/cplclick-$ap-t386" "$@" -3 > "$out/cplclick-$ap-t386.txt" 2>&1 || true
+                    -M "$clkmask" -b 40 -t 300 "$s" "$out/cplclick-$ap-t386" "$@" -3 > "$out/cplclick-$ap-t386.txt" 2>&1 || true
                 clkcmp "$out/cplclick-$ap-t286" "$out/cplclick-$ap-t386" "$pk" 1 W16 ;;
             *)
                 cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/cplclick-$ap-WIN.INI"
@@ -2543,7 +2550,7 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
                     rm -rf "$out/cplclick-$ap-us"
                     # shellcheck disable=SC2086
                     "$root/tests/inputrun.sh" -e "$out/cplclick-$ap-ref/boot.png" -E "$out/cplclick-$ap-ref" \
-                        -b 25 -t 300 "$s" "$out/cplclick-$ap-us" -r "$@" $w16cp \
+                        -M "$clkmask" -b 25 -t 300 "$s" "$out/cplclick-$ap-us" -r "$@" $w16cp \
                         -f "$user=WINDOWS/SYSTEM/USER.EXE" > "$out/cplclick-$ap-us.txt" 2>&1 || true
                     clkcmp "$out/cplclick-$ap-ref" "$out/cplclick-$ap-us" "$pk" 1 WINDOWS
                 else
