@@ -158,28 +158,11 @@ libentry:
         mov ax, 1
         retf
 
-; ---- 18: WEP(bSystemExit) -> 1 (SN1: 2 bytes off, DX kept)
+; ---- 18: WEP(bSystemExit) -> 1 (SN1: 2 bytes off, DX kept). Nothing is
+; stopped: 3.1's leaves a sound that is playing to finish (soundbeep
+; beep-msnone and SN1's last segment: stopping it here cut the sound)
 global WEP
 WEP:
-        push ds
-        push bx
-        push cx
-        push dx
-        push si
-        push di
-        push es
-        mov ax, DGROUP
-        mov ds, ax
-        call stopall
-        call freequeue
-        mov byte [opened], 0
-        pop es
-        pop di
-        pop si
-        pop dx
-        pop cx
-        pop bx
-        pop ds
         mov ax, 1
         retf 2
 
