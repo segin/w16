@@ -341,12 +341,10 @@ INICOM:
         mov [si + P.hwnd], ax
         mov [si + P.rxcnt], ax
         mov [si + P.rxin], ax
-        mov [si + P.rxout], ax
-        mov [si + P.rxsize], ax
-        mov [si + P.txcnt], ax
+        mov [si + P.rxout], ax          ; (the sizes are setque's: USER's
+        mov [si + P.txcnt], ax          ; OpenComm calls it before inicom)
         mov [si + P.txin], ax
         mov [si + P.txout], ax
-        mov [si + P.txsize], ax
         cmp byte [si + P.isopen], 0
         jne .again
         ; the FIFO as it was, for trmcom (CM1: the FIFO after a close is
@@ -356,18 +354,17 @@ INICOM:
         in al, dx
         and al, 0C0h
         mov [si + P.savefifo], al
+        ; no interrupt from the UART before the vector is ours: the
+        ; interrupts are programmed after the hook
         mov dx, [si + P.base]
         add dx, U_IER
         xor al, al
         out dx, al
-        mov byte [si + P.fresh], 1
-        call program
         mov byte [si + P.isopen], 1
         call hook
-        jmp .ok
 .again: mov byte [si + P.fresh], 1
         call program
-.ok:    xor ax, ax
+        xor ax, ax
         jmp .ret
 .lpt:   call copydcb
         xor ax, ax

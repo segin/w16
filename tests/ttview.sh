@@ -3,11 +3,13 @@
 # rasterises with w16's fixed-point gdi/ttf/ttfx.c itself, a Windows 2.x
 # program) on each system asked for, and check what it drew against the
 # host's drawing of the same page (build/host/ttvhost, the same code):
-# the page bit for bit, and the screen's client area showing exactly it
-# (tests/ttf/ttvcmp.py). TTVIEW gets "/T [/R n] C:\FONT.TTF" through
-# C:\TTVIEW.CMD, writes C:\TTVIEW.PG, .SCR and .LOG and ends Windows.
+# the page both hinted (w16's autohinter, gdi/ttf/ttfhint.c) and unhinted
+# bit for bit, and the screen's client area showing exactly the one shown
+# (tests/ttf/ttvcmp.py). TTVIEW gets "/T [/R n] [/U] [/2] [/G] C:\FONT.TTF"
+# through C:\TTVIEW.CMD, writes C:\TTVIEW.PG (hinted), TTVIEWU.PG
+# (unhinted), .SCR and .LOG and ends Windows.
 #
-#   usage: tests/ttview.sh [-f FONT.TTF] [-r N] [-o DIR] [-s] SYSTEM...
+#   usage: tests/ttview.sh [-f FONT.TTF] [-r N] [-o DIR] [-s] [-u] [-2] [-g] SYSTEM...
 #     SYSTEM   w386    Windows/386 2.11 (tests/w386run.sh: MS-DOS 4.00,
 #                      real-mode Windows under WIN386)
 #              std     Windows 3.1 Standard mode (WIN /S)
@@ -17,9 +19,15 @@
 #                      (DOSBox-X cputype=286) at TTV_CYCLES (default
 #                      "fixed 2000", roughly a 12 MHz 80286), for timing
 #     -f FONT  the font (default tests/fixtures/fonts/LiberationSans-Regular.ttf)
-#     -r N     render the page N times (TTVIEW /R: timing)
+#     -r N     render each page N times (TTVIEW /R: timing)
 #     -o DIR   results (default build/ttview): DIR/SYSTEM/TTVIEW.{PG,SCR,LOG},
-#              screen.png (the capture), host.pg
+#              TTVIEWU.PG, screen.png (the capture), host.pg, host-u.pg
+#     -u       show the unhinted page (TTVIEW /U; default the hinted)
+#     -2       page 2, the specimen at 8-24 pixels to the em (TTVIEW /2)
+#     -g       show the specimen as Windows draws it with its own TrueType
+#              rasteriser (TTVIEW /G, 3.1 and later; implies -2): screen.png
+#              is Windows' rendering, not compared (the font is also put
+#              in WINDOWS\SYSTEM, where TTVIEW makes its .FOT)
 #     -s       also run each without /T and take screenshots of TTVIEW's
 #              window (DIR/SYSTEM/shot*.png, view-*.png)
 # Needs the reference installs (.tools/ref/win31, .tools/ref/w386, MS-DOS
@@ -28,10 +36,12 @@
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 font=$root/tests/fixtures/fonts/LiberationSans-Regular.ttf
-out=$root/build/ttview reps=1 shots=
-while getopts f:r:o:s opt; do
+out=$root/build/ttview reps=1 shots= opts= shown=h page2=
+while getopts f:r:o:su2g opt; do
     case $opt in
     f) font=$OPTARG ;; r) reps=$OPTARG ;; o) out=$OPTARG ;; s) shots=1 ;;
+    u) opts="$opts /U" shown=u ;; 2) opts="$opts /2" page2=-2 ;;
+    g) opts="$opts /G" shown=g page2=-2 gdi=1 ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
 done
@@ -39,7 +49,8 @@ shift $((OPTIND - 1))
 [ $# -gt 0 ] || set -- w386 std enh w16
 exe=$root/build/dos/TTVIEW.EXE
 mkdir -p "$out"
-"$root/build/host/ttvhost" "$font" "$out/host.pg"
+"$root/build/host/ttvhost" $page2 "$font" "$out/host.pg"
+"$root/build/host/ttvhost" -u $page2 "$font" "$out/host-u.pg"
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 rc=0
 for sys in "$@"; do
@@ -49,14 +60,14 @@ for sys in "$@"; do
     for mode in test view; do
         [ $mode = view ] && [ -z "$shots" ] && continue
         if [ $mode = test ]; then
-            printf '/T /R %s C:\\TTFONT.TTF\r\n' "$reps" > "$work/TTVIEW.CMD"
+            printf '/T /R %s%s C:\\TTFONT.TTF\r\n' "$reps" "$opts" > "$work/TTVIEW.CMD"
         else
-            printf 'C:\\TTFONT.TTF\r\n' > "$work/TTVIEW.CMD"
+            printf '%s C:\\TTFONT.TTF\r\n' "$opts" > "$work/TTVIEW.CMD"
         fi
         case $sys in
         w386)
             if [ $mode = test ]; then
-                W386_GET="TTVIEW.PG TTVIEW.SCR TTVIEW.LOG" W386_OUT=$d W386_TIMEOUT=${TTV_TIMEOUT:-120} \
+                W386_GET="TTVIEW.PG TTVIEWU.PG TTVIEW.SCR TTVIEW.LOG" W386_OUT=$d W386_TIMEOUT=${TTV_TIMEOUT:-120} \
                     "$root/tests/w386run.sh" "$exe" "$font=TTFONT.TTF" "$work/TTVIEW.CMD=TTVIEW.CMD" \
                     > "$d/run.txt" 2>&1 || true
             else
@@ -74,21 +85,32 @@ for sys in "$@"; do
             w16) set -- -T "$root/build/w16" -c 'WIN /S /B' ;;
             286) set -- -r -p 286 -c 'WIN /S /B' ;;
             esac
+            # -g: a copy in the system directory, where a .FOT made the
+            # portable way finds it (TTVIEW /G)
+            [ -n "${gdi:-}" ] && [ $sys != w16 ] && set -- "$@" -f "$font=WINDOWS/SYSTEM/TTFONT.TTF"
             [ $sys = 286 ] && export DROPIN_CYCLES="${TTV_CYCLES:-fixed 2000}"
             slow=$([ $sys = 286 ] && echo 1 || echo)
             rm -rf "$work/in"
             # the script, its last wait long enough for a slow render (the
-            # screen holds still while TTVIEW renders): on the 80286, 300 s
+            # screen holds still while TTVIEW renders): on the 80286, 300 s.
+            # /T: instead of the last settle and shot, until TTVIEW has
+            # ended Windows (it renders the page twice, hinted and not, and
+            # captures the screen itself; a settle could outlast Windows)
             wait=$([ -n "$slow" ] && echo '1200 300' || echo '120 3')
-            sed "s/^settle 120 3$/settle $wait/" \
-                "$root/tests/scripts/input/ttview.txt" > "$work/ttview.txt"
+            if [ $mode = test ]; then
+                sed '/^settle 120 3$/,$d' "$root/tests/scripts/input/ttview.txt" > "$work/ttview.txt"
+                echo "waitexit $([ -n "$slow" ] && echo 1400 || echo 160)" >> "$work/ttview.txt"
+            else
+                sed "s/^settle 120 3$/settle $wait/" \
+                    "$root/tests/scripts/input/ttview.txt" > "$work/ttview.txt"
+            fi
             "$root/tests/inputrun.sh" -s -b "$([ -n "$slow" ] && echo 900 || echo 90)" \
                 -t "${TTV_TIMEOUT:-$([ -n "$slow" ] && echo 1500 || echo 180)}" \
                 "$work/ttview.txt" "$work/in" "$@" \
                 -f "$exe=TTVIEW.EXE" -f "$font=TTFONT.TTF" -f "$work/TTVIEW.CMD=TTVIEW.CMD" \
                 -i 'WIN.INI:windows:run=C:\TTVIEW.EXE' > "$d/$mode.txt" 2>&1 || true
             if [ $mode = test ]; then
-                for f in TTVIEW.PG TTVIEW.SCR TTVIEW.LOG; do
+                for f in TTVIEW.PG TTVIEWU.PG TTVIEW.SCR TTVIEW.LOG; do
                     [ -f "$work/in/work/c/$f" ] && cp "$work/in/work/c/$f" "$d/"
                 done
             fi
@@ -100,9 +122,10 @@ for sys in "$@"; do
         esac
     done
     echo "== $sys"
-    if [ -f "$d/TTVIEW.LOG" ] && [ -f "$d/TTVIEW.PG" ] && [ -f "$d/TTVIEW.SCR" ]; then
+    if [ -f "$d/TTVIEW.LOG" ] && [ -f "$d/TTVIEW.PG" ] && [ -f "$d/TTVIEWU.PG" ] && [ -f "$d/TTVIEW.SCR" ]; then
         tr -d '\r' < "$d/TTVIEW.LOG"
-        python3 "$root/tests/ttf/ttvcmp.py" "$out/host.pg" "$d/TTVIEW.PG" "$d/TTVIEW.SCR" "$d/screen.png" || rc=1
+        python3 "$root/tests/ttf/ttvcmp.py" "$out/host.pg" "$d/TTVIEW.PG" "$out/host-u.pg" "$d/TTVIEWU.PG" \
+            "$d/TTVIEW.SCR" $shown "$d/screen.png" || rc=1
     else
         echo "FAIL: TTVIEW wrote no results ($d/run.txt)"
         rc=1

@@ -119,24 +119,27 @@ static void vline(ttfx_u8 TTFX_FAR *bits, int x, int y0, int y1)
 
 void ttv_name(const ttfx_font *f, char *out, int size)
 {
-    static const int ids[] = { 4, 1 };
+    ttv_nameid(f, 4, out, size);
+    if (!out[0])
+        ttv_nameid(f, 1, out, size);
+}
+
+void ttv_nameid(const ttfx_font *f, int id, char *out, int size)
+{
     ttfx_u8 buf[128];
-    int k, i, n = 0, len;
-    out[0] = 0;
-    for (k = 0; k < 2 && !out[0]; k++) {
-        len = ttfx_GetFontNameString(f, buf, sizeof buf, TTFX_PLATFORM_ID_MICROSOFT, 1, 0x409, ids[k]);
-        if (len < 0)
-            len = ttfx_GetFontNameString(f, buf, sizeof buf, TTFX_PLATFORM_ID_MICROSOFT, 0, 0x409, ids[k]);
-        if (len > 0) {                  /* UTF-16BE */
-            for (i = 0; i + 1 < len && i + 1 < (int)sizeof buf && n < size - 1; i += 2)
-                out[n++] = buf[i] || buf[i + 1] >= 0x80 ? '?' : (char)buf[i + 1];
-        } else {
-            len = ttfx_GetFontNameString(f, buf, sizeof buf, TTFX_PLATFORM_ID_MAC, 0, 0, ids[k]);
-            for (i = 0; i < len && i < (int)sizeof buf && n < size - 1; i++)
-                out[n++] = (char)buf[i];
-        }
-        out[n] = 0;
+    int i, n = 0, len;
+    len = ttfx_GetFontNameString(f, buf, sizeof buf, TTFX_PLATFORM_ID_MICROSOFT, 1, 0x409, id);
+    if (len < 0)
+        len = ttfx_GetFontNameString(f, buf, sizeof buf, TTFX_PLATFORM_ID_MICROSOFT, 0, 0x409, id);
+    if (len > 0) {                      /* UTF-16BE */
+        for (i = 0; i + 1 < len && i + 1 < (int)sizeof buf && n < size - 1; i += 2)
+            out[n++] = buf[i] || buf[i + 1] >= 0x80 ? '?' : (char)buf[i + 1];
+    } else {
+        len = ttfx_GetFontNameString(f, buf, sizeof buf, TTFX_PLATFORM_ID_MAC, 0, 0, id);
+        for (i = 0; i < len && i < (int)sizeof buf && n < size - 1; i++)
+            out[n++] = (char)buf[i];
     }
+    out[n] = 0;
 }
 
 int ttv_page(const ttfx_font *f, ttfx_u8 TTFX_FAR *bits, int *failed)
@@ -190,5 +193,56 @@ int ttv_page(const ttfx_font *f, ttfx_u8 TTFX_FAR *bits, int *failed)
         hline(bits, 0, 32 * 20 - 1, y + i * 22 < TTV_H - 1 ? y + i * 22 : TTV_H - 1);
     for (i = 0; i <= 32; i++)
         vline(bits, i < 32 ? i * 20 : TTV_W - 1, y, y + 7 * 22 < TTV_H ? y + 7 * 22 : TTV_H - 1);
+    return n;
+}
+
+int ttv_line(const ttfx_font *f, int i, int *em, int *y, char *text, int size)
+{
+    static const char sample[] = "Hamburgefonts: The quick brown fox jumps 0123456789";
+    static const char *const alpha[2] = { "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz &?!",
+                                          "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123" };
+    int asc, dsc, gap, k, j = 0, e = 16, yy = 0;
+    const char *s;
+    if (i < 0 || i >= TTV_LINES)
+        return 0;
+    ttfx_GetFontVMetrics(f, &asc, &dsc, &gap);
+    /* the lines' ems: 16 (the name), 8-24, 11, 13 */
+    for (k = 0; k <= i; k++) {
+        if (k)                          /* the line before's descent and gap */
+            yy += (int)ttfx_MulDivRound((ttfx_i32)gap - dsc, e, f->unitsPerEm);
+        e = !k ? 16 : k <= 17 ? 7 + k : k == 18 ? 11 : 13;
+        yy += (int)ttfx_MulDivRound(asc, e, f->unitsPerEm);
+    }
+    *em = e;
+    *y = yy;
+    if (!i) {
+        ttv_name(f, text, size);
+        return 1;
+    }
+    if (i <= 17) {
+        if (e >= 10)
+            text[j++] = (char)('0' + e / 10);
+        text[j++] = (char)('0' + e % 10);
+        text[j++] = ' ';
+        s = sample;
+    } else
+        s = alpha[i - 18];
+    for (; *s && j < size - 1; s++)
+        text[j++] = *s;
+    text[j] = 0;
+    return 1;
+}
+
+int ttv_sizes(const ttfx_font *f, ttfx_u8 TTFX_FAR *bits, int *failed)
+{
+    char text[80];
+    int i, n = 0, em, y;
+    ttfx_u32 k;
+    for (k = 0; k < (ttfx_u32)TTV_STRIDE * TTV_H; k++)
+        bits[k] = 0;
+    *failed = 0;
+    for (i = 0; ttv_line(f, i, &em, &y, text, sizeof text); i++)
+        if (y < TTV_H)
+            n += draw_text(f, bits, 2, y, em, text, failed);
     return n;
 }

@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #include "../../gdi/ttf/ttfx.h"
 #include "ref.h"
 
@@ -99,6 +100,71 @@ static int exact_on(const ttfx_point *p, const int *cnt, int nc, long long cx, l
         }
     }
     return w != 0 || at;
+}
+
+/* rule 3 along row y (TTFX_HINT_DROPOUT), evaluated on its own: the
+   row's crossings with the outline (exact rationals), in order; each run
+   where the non-zero winding leaves 0 and comes back that holds no pixel
+   centre turns on the pixel the middle of the crossings' 26.6 floors is
+   in. Puts those pixels' x in xs (at most max); returns how many */
+struct cross { long long fl, num, den; int dir; };
+
+static int cross_cmp(const void *a, const void *b)
+{
+    const struct cross *p = a, *q = b;
+    /* p->fl + p->num / p->den against q's (den > 0) */
+    long long l = (p->fl * p->den + p->num) * q->den, r = (q->fl * q->den + q->num) * p->den;
+    return l < r ? -1 : l > r;
+}
+
+static int dropout_row(const ttfx_point *p, const int *cnt, int nc, int y, int *xs, int max)
+{
+    static struct cross cr[4096];
+    long long cy = (long long)y * 64 + 32;
+    int c, k, m = 0, n = 0, w = 0, i, nd = 0;
+    struct cross *s = 0;
+    for (c = 0; c < nc; c++) {
+        const ttfx_point *q = p + m;
+        int cn = cnt[c], j = cn - 1;
+        m += cn;
+        for (k = 0; k < cn; j = k++) {
+            long long x0, y0, x1, y1, t;
+            int dir;
+            if (q[j].y == q[k].y)
+                continue;
+            if (q[j].y < q[k].y) {
+                x0 = q[j].x; y0 = q[j].y; x1 = q[k].x; y1 = q[k].y; dir = 1;
+            } else {
+                x0 = q[k].x; y0 = q[k].y; x1 = q[j].x; y1 = q[j].y; dir = -1;
+            }
+            if (!(y0 <= cy && cy < y1) || n == 4096)
+                continue;
+            t = (cy - y0) * (x1 - x0);
+            cr[n].fl = x0 + floordiv(t, y1 - y0);
+            cr[n].num = t - floordiv(t, y1 - y0) * (y1 - y0);
+            cr[n].den = y1 - y0;
+            cr[n].dir = dir;
+            n++;
+        }
+    }
+    qsort(cr, n, sizeof cr[0], cross_cmp);
+    for (i = 0; i < n; i++) {
+        if (!w && !s)
+            s = &cr[i];
+        w += cr[i].dir;
+        if (!w) {
+            /* crossings at the same point (a vertex on the row) are one */
+            if (!cr[i].num && i + 1 < n && !cr[i + 1].num && cr[i + 1].fl == cr[i].fl)
+                continue;
+            /* a centre 64 i + 32 with s <= it <= this crossing? */
+            long long lo = s->fl + (s->num != 0), hi = cr[i].fl;
+            long long first = floordiv(lo - 32 + 63, 64);     /* ceiling */
+            if (first * 64 + 32 > hi && nd < max)
+                xs[nd++] = (int)floordiv((s->fl + cr[i].fl) >> 1, 64);
+            s = 0;
+        }
+    }
+    return nd;
 }
 
 /* the same rule in floating point on stb_truetype's points (pixels) */
@@ -291,6 +357,100 @@ static void size_test(ttfx_font *f, int px, const int *glyphs, int ng, struct su
     }
 }
 
+/* the autohinter (ttfhint.c), at 6-72 pixels to the em: each hinted
+   bitmap exactly the scan-conversion rule on the hinted outline (ttfx's
+   own flattening of it), every hinted point inside the glyph's bitmap box
+   (hinting moves points within it only); and the time, hinted against
+   unhinted */
+static void hint_test(ttfx_font *f, const int *glyphs, int ng)
+{
+    static const int ems[] = { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 28, 32,
+                               36, 48, 72 };
+    long px = 0, bad = 0, outside = 0, changed = 0, n = 0, dif = 0, drops = 0;
+    int i, gi, x, y, round;
+    clock_t t[2] = { 0, 0 };
+    for (i = 0; i < (int)(sizeof ems / sizeof ems[0]); i++) {
+        ttfx_scale s = ttfx_ScaleForMappingEmToPixels(f, ems[i]);
+        for (gi = 0; gi < ng; gi++) {
+            int g = glyphs[gi], ix0, iy0, ix1, iy1, w, h, nv, nc, k, m;
+            ttfx_bitmap bm, ub;
+            ttfx_vertex *v;
+            ttfx_point *pts;
+            int *cnt;
+            ttfx_GetGlyphBitmapBox(f, (ttfx_u16)g, s, s, 0, 0, &ix0, &iy0, &ix1, &iy1);
+            w = ix1 - ix0;
+            h = iy1 - iy0;
+            if (w <= 0 || h <= 0)
+                continue;
+            bm.w = ub.w = w;
+            bm.h = ub.h = h;
+            bm.stride = ub.stride = (unsigned)(w + 7) / 8;
+            bm.pixels = calloc(bm.stride, h);
+            ub.pixels = calloc(bm.stride, h);
+            for (round = 0; round < 2; round++) {
+                clock_t c0 = clock();
+                ttfx_SetHinting(f, round ? TTFX_HINT_DEFAULT : 0);
+                if (!ttfx_RenderGlyph(f, round ? &bm : &ub, (ttfx_u16)g, s, s, 0, 0, ix0, iy0))
+                    fail("hinted render", g, ems[i], round);
+                t[round] += clock() - c0;
+            }
+            n++;
+            if (memcmp(bm.pixels, ub.pixels, bm.stride * h))
+                changed++;
+            for (k = 0; k < (int)bm.stride * h; k++)
+                dif += __builtin_popcount(bm.pixels[k] ^ ub.pixels[k]);
+            nv = ttfx_GetGlyphShape(f, (ttfx_u16)g, &v);
+            if (!ttfx_Flatten(f, v, nv, s, s, 0, 0, ix0, iy0, &pts, &cnt, &nc))
+                fail("hinted flatten", g, ems[i], 0);
+            ttfx_FreeShape(f, v);
+            for (k = m = 0; k < nc; k++)
+                m += cnt[k];
+            for (k = 0; k < m; k++)
+                if (pts[k].x < 0 || pts[k].y < 0 || pts[k].x > w * 64 || pts[k].y > h * 64) {
+                    outside++;
+                    if (verbose)
+                        printf("  hinted point outside: glyph %d em %d: %d,%d in %dx%d\n", g, ems[i],
+                               (int)pts[k].x, (int)pts[k].y, w, h);
+                }
+            for (y = 0; y < h; y++) {
+                int dx[64], nd = dropout_row(pts, cnt, nc, y, dx, 64), d;
+                for (x = 0; x < w; x++) {
+                    int on = (bm.pixels[y * bm.stride + (x >> 3)] >> (7 - (x & 7))) & 1;
+                    int ex = exact_on(pts, cnt, nc, (long long)x * 64 + 32, (long long)y * 64 + 32);
+                    for (d = 0; d < nd && !ex; d++)
+                        if (dx[d] == x) {
+                            ex = 1;
+                            drops++;
+                        }
+                    px++;
+                    if (on != ex) {
+                        bad++;
+                        if (verbose)
+                            printf("  hinted: glyph %d em %d at %d,%d: %d, the rules say %d\n", g, ems[i], x, y,
+                                   on, ex);
+                    }
+                }
+            }
+            free(pts);
+            free(cnt);
+            free(bm.pixels);
+            free(ub.pixels);
+        }
+    }
+    ttfx_SetHinting(f, 0);
+    printf("  hinted, %d sizes 6-72 px to the em x %d characters: %ld of %ld glyphs differ from unhinted (%ld pixels);\n"
+           "    against the exact rules (1-3) on the hinted outline: %ld of %ld pixels different (%ld by rule 3); points outside the box: %ld;\n"
+           "    time hinted %.0f ms, unhinted %.0f ms\n",
+           (int)(sizeof ems / sizeof ems[0]), ng, changed, n, dif, bad, px, drops, outside,
+           t[1] * 1000.0 / CLOCKS_PER_SEC, t[0] * 1000.0 / CLOCKS_PER_SEC);
+    if (bad)
+        fail("hinted bitmaps against the exact rule", (int)bad, 0, 0);
+    if (outside)
+        fail("hinted points outside the box", (int)outside, 0, 0);
+    if (!changed)
+        fail("hinting changed nothing", 0, 0, 0);
+}
+
 static int test_font(const char *path)
 {
     FILE *fp = fopen(path, "rb");
@@ -320,6 +480,9 @@ static int test_font(const char *path)
         printf("FAIL %s: not loaded\n", path);
         return 1;
     }
+    if (f.hint != TTFX_HINT_DEFAULT)
+        fail("hinting not on by default", f.hint, 0, 0);
+    ttfx_SetHinting(&f, 0);             /* the comparisons with stb_truetype: unhinted */
     printf("%s: %ld bytes, %u glyphs, %u units per em, cmap %u/%u\n", path, datalen, f.numGlyphs,
            f.unitsPerEm, f.index_map_platform, f.index_map_encoding);
 
@@ -404,6 +567,7 @@ static int test_font(const char *path)
             glyphs[ng++] = ttfx_FindGlyphIndex(&f, cp);
     for (i = 0; i < (int)(sizeof sizes / sizeof sizes[0]); i++)
         size_test(&f, sizes[i], glyphs, ng, &S);
+    hint_test(&f, glyphs, ng);
     free(glyphs);
     printf("  sizes 6-300 px (%d sizes x %d characters, %ld pixels):\n", (int)(sizeof sizes / sizeof sizes[0]),
            ng, S.px);
