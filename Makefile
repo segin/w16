@@ -1107,7 +1107,7 @@ $(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX16.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/VXB.386 $(DOS)/SBD.COM
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX16.EXE $(DOS)/VX17.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/VXB.386 $(DOS)/SBD.COM
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -1143,6 +1143,12 @@ $(DOS)/VX16.EXE: $(B)/tests/start.o $(B)/tests/vx16.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vx16.map file { $(B)/tests/start.o $(B)/tests/vx16.o }
+# VX17.EXE: KERNEL's idle loop seen from a program (tests/apps/vx17.c,
+# vx17s.asm; tests/kidlerun.sh)
+$(DOS)/VX17.EXE: $(B)/tests/start.o $(B)/tests/vx17.o $(B)/tests/vx17s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vx17.map file { $(B)/tests/start.o $(B)/tests/vx17.o $(B)/tests/vx17s.o }
 # VXP.386: the probe VxD (tests/vxd/vxp.asm)
 $(DOS)/VXP.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
 	@mkdir -p $(@D) $(B)/tests

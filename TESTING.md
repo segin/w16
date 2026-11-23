@@ -309,7 +309,20 @@ messages); CONF `ms`, `w16` or `std` (the reference install under
 Microsoft's or w16's WIN386, or Standard mode), `tree`, `treems` or
 `treestd` (w16's install tree the same ways); `VX16_ONLY` picks phases,
 `DROPIN_CYCLES="fixed 30000"` counts instructions instead of host time
-(ARCHITECTURE.md 12.14). `tests/qtplay.sh` takes `QTPLAY_W16OPTS` and
+(ARCHITECTURE.md 12.14). KERNEL's idle loop: `tests/kidlerun.sh OUTDIR
+CONF [BOX]` runs VX17 (`make vxprobes`) as WIN.INI run=; it counts the
+idle calls a waiting Windows makes (protected-mode INT 28h and INT 2Fh
+1689h, DPMI 0300h calls), a 55 ms timer's WM_TIMERs, a busy loop and
+message round trips, with no DOS box and then one running BOX (a VX14
+mode, default `b`), and in 386 Enhanced mode VXT.386 reports each VM's
+run time, V86 INT 28h, Release_Time_Slice and the VMM's idle callbacks
+per phase (DOSBox-X, `tools/kidlesum.py` sums them). CONF: `ms`, `msk`,
+`w16`, `wk`, `tree` (386 Enhanced: Microsoft's or w16's KRNL386 under
+Microsoft's or w16's WIN386, the tree), `std`, `std286`, `stdk`,
+`stdk286`, `treestd`, `tree286` (Standard mode); `KIDLE_MS5=1` loads
+MS5.COM first, which counts what reaches real mode; `KIDLE_PIF` sets the
+box's PIF (e.g. `background=0`) (ARCHITECTURE.md 12.15).
+`tests/qtplay.sh` takes `QTPLAY_W16OPTS` and
 `tests/sb16/sbaudio.sh` `SBAUDIO_OPTS`/`SBAUDIO_CONF` (more dropin.sh
 options, a COM1 for the VMM's trace) for the w16 side. XMS and EMS in a DOS box:
 `tests/v86mmrun.sh OUTDIR [w16]` runs VX15 (`make vxprobes`) in a box and

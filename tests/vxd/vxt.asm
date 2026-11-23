@@ -18,7 +18,14 @@
 ;     the hooks the devices installed earlier), how often the VMM's
 ;     Release_Time_Slice was called while it ran, Wake_Up_VM and
 ;     Adjust_Exec_Priority for it (Hook_Device_Service), and
-;     Get_Time_Slice_Priority's EAX, ECX, EDX, ESI.
+;     Get_Time_Slice_Priority's EAX, ECX, EDX, ESI;
+;   - KERNEL's idle loop (tests/kidlerun.sh, ARCHITECTURE.md 12.15): each
+;     VM's INT 2Fh AX=1689h in V86 mode, with BX=0 and in all ("1689=");
+;     the report's first line counts the Call_When_Idle callbacks ("cwi=",
+;     the VMM's "Windows and every other VM idle"); a VM's INT 2Fh with AX
+;     B170h-B17Fh (a probe's mark, tests/apps/vx17.c) prints "VXT mark",
+;     reports at once and starts the counts again, so that the lines
+;     between two marks are one phase.
 ; Black box (ARCHITECTURE.md 3): only what the services return and what
 ; callers pass. Sources: the Windows 3.1 DDK's Virtual Device Adaptation
 ; Guide (the services named, Client_Reg_Struc, the control block's
@@ -175,6 +182,16 @@ setup:
         mov eax, 21h
         mov esi, h21
         call hookint
+        mov esi, idlecb
+        int 20h
+        dd 0001003Ah                    ; Call_When_Idle
+        pushfd
+        mov esi, msg_cwi1
+        call puts
+        pop eax
+        and eax, 1
+        call puthex
+        call crlf
         ; service hooks
         xor ebx, ebx
 .s:     mov eax, [svc_ids + ebx * 4]
@@ -259,12 +276,44 @@ h16:    push eax
         ret
 
 h2f:    cmp word [ebp + 1Ch], 1680h
-        jne .x
+        jne .n80
         push eax
         VMIDX
         inc dword [p80 + eax * 4]
         pop eax
 .x:     stc
+        ret
+.n80:   cmp word [ebp + 1Ch], 1689h
+        jne .n89
+        push eax
+        VMIDX
+        inc dword [p89 + eax * 4]
+        cmp word [ebp + 10h], 0         ; Client_BX
+        jne .b1
+        inc dword [p89b0 + eax * 4]
+.b1:    pop eax
+        stc
+        ret
+.n89:   push eax                        ; a probe's mark: B170h-B17Fh
+        mov ax, [ebp + 1Ch]
+        and ax, 0FFF0h
+        cmp ax, 0B170h
+        pop eax
+        jne .x
+        pushad
+        mov esi, msg_mark
+        call puts
+        movzx eax, word [ebp + 1Ch]
+        call puthex
+        call crlf
+        call dump
+        popad
+        stc
+        ret
+
+; ---- Call_When_Idle: counted, passed on (carry) ----
+idlecb: inc dword [ncwi]
+        stc
         ret
 
 h28:    push eax
@@ -420,6 +469,13 @@ regs:   mov esi, msg_eax
 ; ---- every 2 seconds ----
 report:
         pushad
+        call dump
+        call arm
+        popad
+        ret
+
+dump:
+        pushad
         int 20h
         dd 0001003Fh                    ; Get_System_Time
         mov edx, eax
@@ -442,6 +498,11 @@ report:
         mov esi, msg_idle
         call puts
         pop eax
+        call puthex
+        mov esi, msg_cwi
+        call puts
+        xor eax, eax
+        xchg eax, [ncwi]
         call puthex
         call crlf
         mov ebx, [sysvm_h]
@@ -491,6 +552,16 @@ report:
         xor eax, eax
         xchg eax, [i28 + edi * 4]
         call puthex
+        mov esi, msg_p89
+        call puts
+        xor eax, eax
+        xchg eax, [p89 + edi * 4]
+        call puthex
+        mov al, '/'
+        call putc
+        xor eax, eax
+        xchg eax, [p89b0 + edi * 4]
+        call puthex
         mov esi, msg_d0b
         call puts
         xor eax, eax
@@ -535,7 +606,6 @@ report:
         dd 0001003Bh                    ; Get_Next_VM_Handle
         cmp ebx, [sysvm_h]
         jne .vm
-        call arm
         popad
         ret
 
@@ -641,6 +711,13 @@ kbo       times NVM dd 0
 p80       times NVM dd 0
 i28       times NVM dd 0
 d0b       times NVM dd 0
+p89       times NVM dd 0
+p89b0     times NVM dd 0
+ncwi      dd 0
+msg_cwi1  db 'VXT Call_When_Idle cf=', 0
+msg_cwi   db ' cwi=', 0
+msg_mark  db 'VXT mark ', 0
+msg_p89   db ' 1689/bx0=', 0
 svc_ids   dd 00010038h, 00010039h, 0001001Eh
           dd 00180000h, 00180001h, 00180002h
 svc_stubs:
