@@ -4339,7 +4339,7 @@ mode.
 
 **Tests** (boot-test case sb16, parts enh and cont): `tests/sb16/sbaudio.sh`
 sides mse (Microsoft's WIN386 and MMSYSTEM with SB16.DRV and w16's VSBD),
-w16e (w16's), qtmse and qtw16e (QuickTime's movie); `tests/sbvxdprobe.sh`
+w16e (w16's), qtmse (QuickTime's movie; qtw16e by hand, below); `tests/sbvxdprobe.sh`
 ms against w16 with `tools/sbvxdcmp.py`: sbbox (a box plays while
 Windows has nothing open: SBD's log and tones as 3.1's), sbwin (a box
 wants the card while SBP plays: the message box screen as 3.1's but the
@@ -4364,6 +4364,9 @@ screens differ. Without a sound device w16 shows every frame but takes
 frames. Each read of the DMA count is now one trapped reading (VDMAD
 gives both bytes of one, SB16.DRV reads once in Enhanced mode: before,
 the movie took 2-4 s). Not done: finding where w16's Enhanced mode loses
-the time. Plain DOSBox: the Enhanced-mode sound tests run in DOSBox-X
+the time. Under w16's WIN386 with Windows 3.1's own TIMER.DRV and
+VTDAPI.386 (sbaudio.sh's side qtw16e) QuickTime's "play" stopped in most
+runs on 2026-11-23 (it passed once): UNVERIFIED why; the side is left out
+of the boot-test part enh. Plain DOSBox: the Enhanced-mode sound tests run in DOSBox-X
 only (the sound capture needs it); SB16.DRV's devices in Enhanced mode
 were not tried in plain DOSBox.
