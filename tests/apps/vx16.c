@@ -24,6 +24,8 @@
  *   dib    SetDIBitsToDevice of a 160 x 120 8-bit DIB to the screen
  *   peek   PeekMessage(PM_REMOVE) calls with no message waiting
  *   msgs   message round trips (PostAppMessage, GetMessage)
+ *   text, fill, line, scroll, stretch, getdc, lbsort, edit, xsend, galloc,
+ *   prof   drawing, USER and KERNEL work (the performance audit: see each)
  * WIN.INI [vx16]: secs=4, wait=5 (seconds of messages before the first
  * phase), only=LIST (the phases to run, default all).
  * Output: TK.LOG as it goes; C:\VX16.LOG at the
@@ -548,6 +550,31 @@ int __cdecl tmain(void)
             }
         }
         report("xsend", n);
+    }
+    if (want("galloc")) {
+        /* a 100 KB zeroed block and back: descriptors set (tiles),
+         * memory cleared, several descriptors at once */
+        n = 0;
+        start();
+        for (;;) {
+            HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, 100000L);
+            if (g) GlobalFree(g);
+            n++;
+            if (!(n & 3) && done()) break;
+        }
+        report("galloc", n);
+    }
+    if (want("prof")) {
+        char t[32];
+        WritePrivateProfileString("vx16", "key", "value", "C:\\VX16.INI");
+        n = 0;
+        start();
+        for (;;) {
+            GetPrivateProfileString("vx16", "key", "", t, sizeof(t), "C:\\VX16.INI");
+            n++;
+            if (!(n & 15) && done()) break;
+        }
+        report("prof", n);
     }
     if ((UINT)hmm >= 32) FreeLibrary(hmm);
     out("VX16 done\r\n");
