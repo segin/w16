@@ -97,11 +97,25 @@ void memset(void *d, int c, u32 n)
     while (n--) *p++ = (u8)c;
 }
 
+/* dwords, then the bytes left (REP MOVSD, REP MOVSB) */
+void copy_fast(void *d, const void *s, u32 n);
+#pragma aux copy_fast = \
+    "mov eax, ecx" "shr ecx, 2" "rep movsd" "mov ecx, eax" "and ecx, 3" "rep movsb" \
+    parm [edi] [esi] [ecx] modify exact [eax ecx esi edi];
+
+/* forward, byte by byte where the destination overlaps the source from
+ * above (an XMS move inside a block: Windows 3.1's result is the bytes
+ * copied one at a time, MEMLOAD's overlap-up), else a dword at a time
+ * (XMS and EMS moves, the instance data at each VM switch) */
 void memcpy(void *d, const void *s, u32 n)
 {
     u8 *p = d;
     const u8 *q = s;
-    while (n--) *p++ = *q++;
+    if (p > q && p < q + n) {
+        while (n--) *p++ = *q++;
+        return;
+    }
+    copy_fast(d, s, n);
 }
 
 int memcmp(const void *a, const void *b, u32 n)
@@ -777,7 +791,7 @@ static u32 tk_count[TK_N];
 static void software_int(struct cregs *r, int vec)
 {
     tk_count[(vec & 0xFF) + ((r->eflags & EFL_VM) ? 0 : 256)]++;
-    if (vm_trace && cur_vm != &sysvm) trace("[%d:%x/%x %x:%x]", cur_vm->id, vec, r->eax & 0xFFFF, r->cs, r->eip);
+    if (vm_trace && cur_vm != &sysvm) trace("[%d:%x/%x b%x %x:%x]", cur_vm->id, vec, r->eax & 0xFFFF, r->ebx & 0xFFFF, r->cs, r->eip);
     if ((r->eflags & EFL_VM) && vxd_v86_int_hooks(r, vec)) return;  /* a device serviced it */
     if (r->eflags & EFL_VM) {
         if (vec == 0x2F && int2f_v86(r)) return;
@@ -927,6 +941,13 @@ static void heartbeat(struct cregs *r)
         trace(", ss:sp %x:%x", r->ss, r->esp & 0xFFFF);
         for (i = 0; i < 8; i++) trace(" %04x", sp[i]);
         trace(", ax %x bx %x cx %x dx %x ds %x es %x", r->eax, r->ebx, r->ecx, r->edx, r->ds, r->es);
+    }
+    {   /* each VM: idle, suspended (count), ended, closing, DOS calls, critical, priority boost, at */
+        struct vm *v;
+        trace(", VMs");
+        for (v = vm_list; v; v = v->next)
+            trace(" %d:i%d s%d/%d e%d c%d d%d/%d/%d p%d %x:%x", v->id, v->idle, v->suspended, v->susp_count,
+                  v->ended, v->closing, v->ndos, v->indos, v->crit, v->exec_prio, v->r.cs, v->r.eip);
     }
     trace("\n");
 }

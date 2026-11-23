@@ -68,6 +68,7 @@ struct shvm {
     int hk_pending;                     /* a hot key's event not acted on (function 5) */
     char title[32];                     /* function 3's block +2Eh: the window's title */
     u32 hwnd;                           /* function 15h */
+    u16 caller_ds;                      /* function 3's ES: the creating WINOA386's data segment */
     u32 cb_sel, cb_off;                 /* function 9: its event procedure */
     int pif_excl;                       /* the block's +00h bit 01h: Exclusive */
 };
@@ -341,6 +342,7 @@ static void create(struct cregs *r)
     }
     s->vm = v;
     s->block = (u32)b;
+    s->caller_ds = (u16)r->es;
     /* a VM that starts in a window: the block's first byte, bit 2
      * (Windows 3.1, VXS.386: 04h for a PIF that starts windowed, 00h for
      * DOSPRMPT.PIF; the same 4 as function 7's status word); its video
@@ -541,9 +543,26 @@ void shell_api(struct cregs *r)
         if ((s = sh_of(vm_of(r->ebx))) != NULL && lin_user_ok(s->block, 2, 1))
             *(u16 *)s->block = (u16)((*(u16 *)s->block & ~0x000Fu) | (AX(r) & 0x000F));
         return;
-    case 0x15:                          /* WINOA386's window, for the VM just created */
-        for (s = shvms; s && s->hwnd; s = s->next)
+    case 0x15: {                        /* WINOA386's window, for the VM just created */
+        /* which VM: EBX the VM's handle (w16's WINOA386), else the one
+         * whose function 3 came from the data segment in BX (Microsoft's
+         * WINOA386 passes its DS there: its block for function 3 was in
+         * it), else the oldest without a window. Before, the first without
+         * one: three boxes started together (MEMLOAD C) had their windows
+         * given to the wrong VMs, and a box whose program ended destroyed
+         * another box's VM while it ran */
+        struct shvm *t, *old = NULL;
+        v = vm_of(r->ebx);
+        for (s = shvms; s && (s->hwnd || !v || s->vm != v); s = s->next)
             ;
+        if (!s)
+            for (t = shvms; t; t = t->next)
+                if (!t->hwnd && t->caller_ds == BX(r)) s = t;      /* the oldest such */
+        if (!s) {
+            for (t = shvms; t; t = t->next)
+                if (!t->hwnd) old = t;
+            s = old;
+        }
         if (s) s->hwnd = SI(r);
         /* a windowed VM started as an icon (WinExec with SW_SHOWMINNOACTIVE)
          * gets no function 5: it runs now, without the focus (Windows 3.1,
@@ -555,6 +574,7 @@ void shell_api(struct cregs *r)
         r->eax = 0;
         trace("SHELL: VM %d's window %x\n", s ? s->vm->id : 0, SI(r));
         return;
+    }
     case 0x0C:                          /* an event record back */
         /* EAX 1 (after a switching key, Windows 3.1): the devices' focus
          * and the execution focus to the System VM, EAX 1 back */

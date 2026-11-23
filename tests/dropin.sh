@@ -45,7 +45,8 @@
 #                before, so a screen that differs is still taken at the
 #                time limit
 #     -W FILE    without -s: end the run as soon as C:\FILE (a path under
-#                C:\, e.g. a probe's log) exists and has not changed for 2
+#                C:\, e.g. a probe's log; several, comma-separated: all of
+#                them) exists and has not changed for 2
 #                seconds (DROPIN_WSECS in the environment: that many), at
 #                the latest after SECS seconds
 #     -n         only prepare the scratch drive (with -o) and dosbox.conf;
@@ -298,7 +299,12 @@ if [ -z "$shot" ] && [ -n "$endfile" ]; then
     dpid=$! last= since=
     while kill -0 "$dpid" 2>/dev/null; do
         sleep 0.5
-        st=$(stat -c '%s %Y' "$work/c/$endfile" 2>/dev/null) || continue
+        st=
+        for _ef in $(printf '%s' "$endfile" | tr ',' ' '); do
+            _es=$(stat -c '%s %Y' "$work/c/$_ef" 2>/dev/null) || { st=; break; }
+            st="$st $_es"
+        done
+        [ -n "$st" ] || continue
         if [ "$st" != "$last" ]; then last=$st since=$(date +%s); continue; fi
         if [ $(($(date +%s) - since)) -ge ${DROPIN_WSECS:-2} ]; then kill "$dpid" 2>/dev/null; break; fi
     done
