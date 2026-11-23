@@ -378,6 +378,87 @@ interrupt load shows in the stretch, which is the same without it.
   ends. (The longest stretch printed then is the longest one before
   the hang: the fatal one never made progress.)
 
+## The movie in 386 Enhanced mode (2026-11-22)
+
+Task: a user's report: w16's install tree alone in plain DOSBox 0.74-3,
+`WIN /3` (w16's WIN386 and KRNL386, master e3a72d9), QuickTime installed
+from C:\TMP\QT, the sample movie played: Windows ended with
+`w16: exception 000D at 069F:0723 (TIMER:1 base 004CF260 limit 063F)
+err=0004`, SI=04B4, SS = WIN386's host stack (base 00300000), SP=0FC0,
+ES = MMSYSTEM's interrupt stack. Run names on installation-05:
+`w16-timerqt` (the reproduction) and `w16-timerqt-vx` (VX4, the fix).
+
+**Reproduced** at once by the new part `quicktime@enh`
+(`tests/qtplay.sh -T 386 -E`): the same report, the same CS:IP, SI, SP.
+
+**The cause** (not TIMER.DRV's code, not MMSYSTEM's). TIMER's code
+segment is 626h bytes (`nasm -l` listing of drivers/timer/timer.asm, the
+map), so 0723h is past its end: DOSBox does not check CS limits, and
+execution ran off into the memory after the segment until something
+loaded a selector of index 0. It got there by the `ret` of `runevents`:
+after StackLeave, back on the host stack, `pop si` and `ret` took two
+words a nested interrupt's frame had written over them (SI 049Ch + 18h
+= 04B4h, the "return address" 0723h a selector: the interrupted CS). In
+386 Enhanced mode TIMER's INT 08h handler runs on WIN386's host stack and
+calls each callback on MMSYSTEM's stack (StackEnter) with interrupts
+enabled. When the next tick came during QuickTime's callback, w16's
+WIN386 put its frame on the host stack below `hstk_low`, the lowest SP
+it had seen at a trap there: the handler's OUT 20h (end of interrupt).
+The words pushed after it (runevents' return address and SI) lay below,
+and CLI and STI, handled by `cli_sti_fast`, do not note the SP.
+
+**3.1** (VX4, `tests/dos/vx4.asm`, kinds 3 and 4, `tests/vxobs.sh irq`
+under DOSBox-X): a PM timer handler that ends the interrupt, pushes 8
+marker words, moves to a stack of its own and enables interrupts gets the
+next tick's frame on *that* stack (SS its own, SP 10 bytes below where it
+was: 4D46h -> 4D3Ch), and all 8 markers survive. The Virtual Device
+Adaptation Guide says the same: Begin_Use_Locked_PM_Stack (VPICD's) only
+switches stacks on its first call and counts the rest. w16 before the
+fix: the frame on the host stack (SP 0FDEh), 0 of 8 markers left; after
+it: 3.1's numbers. 3.1's own TIMER.DRV never gets here in Enhanced mode
+(its callbacks come from VTDAPI.386, ARCHITECTURE.md 21.2), so its
+behaviour with freed callbacks or ended tasks was not the question.
+
+**The fix** (`win386/vmm/dpmi.c` nest_stack, used by run_hw_handler and
+the PS/2 callback): while a handler runs (hstk_depth > 0), an interrupt
+gets its frame on the protected-mode stack the VM is on: the interrupted
+code's SS:SP when it came in protected mode, else (in V86 code a handler
+called) the stack that code left protected mode from, noted at its last
+trap (pmw_ss/pmw_sp, kept per nesting level by hstk_run). On the host
+stack itself, as before. The first version moved only the frames of
+interrupts that came in protected mode; with it the movie played, but in
+two runs of five Windows still ended in TIMER:1, once at the drag with
+`exception 000D at 069F:010E (TIMER:1) err=0000`: DriverProc's `retf 16` (listing) with
+AX..BP 0, SI 0229h, SP 0FE4h on the host stack, i.e. execution resumed
+inside TIMER at a garbage address and popped the INT 08h handler's
+words. The likely path (not traced): the nested tick's handler, now on
+MMSYSTEM's stack, chains to SYSTEM.DRV and the BIOS in V86 mode, and an
+IRQ there (the mouse, during the drag) still got its frame at hstk_low on
+the host stack, over the outer handler's words. 3.1's counter puts that
+one on the client's protected-mode stack as well. With both parts: 4 of
+4 runs at once lived through everything, and VX4's nested tick is still
+3.1's.
+
+**TIMER.DRV after the drivers audit** (master 4f798f7: runevents copies
+the event's callback, ID and dwUser before StackEnter, setev searches
+under CLI, wrap-safe times) is no help here: the frame still lands over
+runevents' return address and SI. Merged master without the WIN386 fix:
+`exception 000D at 069F:0023 (TIMER:1)` before the Movie Player came up.
+
+**Left over** (part `enh` prints them, does not check them): the movie
+takes 22-28 s against 3.1's 12 s (ARCHITECTURE.md 21.5; 3.1 needs 12 s
+without a sound device too); the speaker button (SB16.DRV, no devices in
+Enhanced mode, another task); and in 3 runs of 7 under load the drag
+during play was not taken at all (the window stayed, the movie played
+on; never on 3.1): UNVERIFIED why.
+
+**Not the cause:** the INT 21h ring's repeated 3D00h/3E00h (and 4200h,
+3F00h) from KERNEL:1 07CE are KERNEL's own DOS calls (its INT 21h
+wrapper) while the movie plays: opens with a seek and a read (segments
+or resources loaded from a module file) and an open closed at once (an
+existence check); the file name was not looked at. MMSYSTEM's timeSetEvent/timeKillEvent
+bookkeeping and DriverCallback played no part.
+
 ## Debugging aids added (docs/w16-settings.md)
 
 - `[w16] hangwatch=SECONDS`: the boot watchdog kept running after the

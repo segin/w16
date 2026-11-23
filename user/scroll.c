@@ -946,6 +946,18 @@ LRESULT WINAPI __loadds ScrollBarWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
                      MAKELONG(0, h));
         return 0;
     }
+    case WM_KEYUP:
+        /* the key let go: SB_ENDSCROLL, as after the mouse (3.1 SDK;
+           observed: Control Panel's Keyboard applet sets the delay again
+           on it, tests/scripts/cpl/kbspeedw.txt) */
+        switch (wp) {
+        case VK_UP: case VK_LEFT: case VK_DOWN: case VK_RIGHT:
+        case VK_PRIOR: case VK_NEXT: case VK_HOME: case VK_END:
+            send_message(GetParent(h), (w->style & SBS_VERT) ? WM_VSCROLL : WM_HSCROLL,
+                         SB_ENDSCROLL, MAKELONG(0, h));
+            return 0;
+        }
+        return 0;
     }
     return DefWindowProc(h, msg, wp, lp);
 }

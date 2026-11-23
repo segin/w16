@@ -267,6 +267,7 @@ extern volatile DWORD __far tickcount;   /* interrupt-time data: fixed segment *
 /* ---- input (input.c) ---- */
 void input_init(void);
 void input_enable(void);
+void keyboard_speed_init(void);     /* misc.c: the typematic rate */
 void input_disable(void);
 BOOL input_message(HQUEUE hq, HWND hfilter, UINT lo, UINT hi, BOOL remove, MSG __far *m);
 extern BYTE __far keystate[256];
@@ -308,6 +309,7 @@ HWND create_window(DWORD exstyle, LPCSTR cls, LPCSTR title, DWORD style,
 BOOL destroy_window(HWND h);
 void destroy_abandoned(HWND h);   /* its task ended inside its destruction */
 void clip_window_destroyed(HWND h);     /* clip.c */
+void clip_snapshot(BOOL window);        /* clip.c: Print Screen */
 void savebits_invalidated(HWND by, HRGN rgn);     /* savebits.c */
 void savebits_forget_all(void);
 BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags);

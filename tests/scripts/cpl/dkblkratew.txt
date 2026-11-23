@@ -1,0 +1,41 @@
+;! w16 USER.EXE WINDOWS/SYSTEM/USER.EXE
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; (dkblkrate with w16's USER as well: its caret timer, SetCaretBlinkTime)
+; Desktop: the cursor blink sample blinks at the bar's rate as the bar
+; moves (530 at the start, Home: Fast, End: Slow), and Cancel puts the
+; caret's rate back; then Home and OK: Notepad's caret blinks at the new
+; rate (the user's report: "Cursor Blink Rate does not do anything")
+run CONTROL.EXE DESKTOP
+wait 4000
+blinkrate C:\CMP.LOG 4000 id 3BF
+alt r
+wait 300
+key 24
+wait 300
+blinkrate C:\CMP.LOG 4000 id 3BF
+caretblink C:\CMP.LOG
+key 23
+wait 300
+blinkrate C:\CMP.LOG 4000 id 3BF
+key 1B
+wait 2000
+caretblink C:\CMP.LOG
+run NOTEPAD.EXE
+wait 3000
+blinkrate C:\CMP.LOG 4000 caret
+close
+wait 1500
+run CONTROL.EXE DESKTOP
+wait 4000
+alt r
+wait 300
+key 24
+wait 300
+key 0D
+wait 2000
+caretblink C:\CMP.LOG
+run NOTEPAD.EXE
+wait 3000
+blinkrate C:\CMP.LOG 4000 caret
+close
+wait 1500

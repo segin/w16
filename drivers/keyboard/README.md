@@ -105,11 +105,14 @@ Details observed and reproduced:
 - **AnsiToOem/OemToAnsi** (and Buff): tables from the public code pages
   (below). The string forms go on into the next selector at a 64K
   boundary; the Buff forms wrap within the segment (KB1, "huge").
-- **SetSpeed**: Windows' speed (bits 0-4, 31 the fastest) is the
-  keyboard's rate counted the other way (IBM: 0 the fastest), the delay
-  (bits 5-6) as it is; command F3h to port 60h, the answers polled with
-  interrupts off. Repeats per held key match Windows 3.1's (`tests/kbprobe.sh
-  rep`: KB2 with `kb2speed` 31, 95, 0, 96).
+- **SetSpeed**: Windows' speed (bits 0-4, 31 the fastest) becomes the
+  keyboard's rate (IBM: 0 the fastest) through a table observed on 3.1
+  (`rate_of`: each speed's repeats in 10 s against each raw rate's; not
+  31 - speed, which w16 used until 2026-11-22: speed 16 repeated half as
+  fast), the delay (bits 5-6) as it is; command F3h to port 60h, the
+  answers polled with interrupts off. Repeats per held key match Windows
+  3.1's (`tests/kbprobe.sh rep`: KB2 with `kb2speed` 31, 95, 0, 96;
+  `repini`: WIN.INI's values through USER, w16's USER and driver).
 - **EnableKBSysReq** starts at 0 (DDK); KERNEL turns CVWBreak on at
   boot (Pietrek ch. 1), hence 2 when a program first asks (KB1).
 
@@ -150,7 +153,9 @@ Keys (KB2, every event against Windows 3.1's under the same scan codes):
   every make and break reported with its own code and E0 flag.
 - Typematic repeats come as further makes.
 - Alt+Print Screen (scan code 54h): VK_SNAPSHOT with BX 0, Print Screen BX
-  1 (DDK: active window, whole screen). Ctrl+Alt+SysReq: CVWBreak (KERNEL)
+  1: Windows 3.1's USER then copies the active window, the whole screen
+  (boot-test case `kbdsnap`; 3.1's driver's VK_SNAPSHOT key-up carries
+  01 too). Ctrl+Alt+SysReq: CVWBreak (KERNEL)
   or INT 2 as EnableKBSysReq says.
 
 While a DOS program runs (Standard mode), USER calls Disable before and
@@ -199,14 +204,17 @@ windows.h, the US key caps, and corrected by KB1's comparison.
   part with w16's driver against every w16 part with Microsoft's),
   `kbdwrite` (Windows Write), `kbdwoados` (the MS-DOS Prompt): every
   screen pixel-identical (the woados screens up to the text cursor).
+- Boot-test case `kbdsnap` (KB2, `tests/scripts/input/kbsnap.txt`, in
+  DOSBox-X: DOSBox 0.74 sends no Print Screen scan codes): Print Screen
+  puts a 640 x 480 bitmap on the clipboard, Alt+Print Screen the active
+  window's 400 x 300, and only VK_SNAPSHOT's key-ups reach the program, as
+  with Microsoft's driver and USER; on Microsoft's USER and on w16's.
 - The install tree (`build/w16/SYSTEM/KEYBOARD.DRV`, boot-test `tree`).
 
 ## Not verified / not done
 
 - 386 Enhanced mode (VKD virtualises the keyboard; the driver is the
   same in the DDK's account).
-- Print Screen and Alt+Print Screen: DOSBox under the harness sends no
-  Print Screen scan codes, so VK_SNAPSHOT's BX is the DDK's account.
 - Ctrl+Break (E0 46h) and DoSignal: DOSBox sends Pause for Ctrl+Pause.
 - Ctrl+Alt+Del, Ctrl+Alt+SysReq (the debugger hooks), ScreenSwitchEnable
   (OS/2 only).
