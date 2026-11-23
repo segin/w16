@@ -1010,7 +1010,10 @@ int main(int argc, char **argv)
     intdos(&r, &r);
     info.conv_free = r.x.bx;
     _ffree(page);
-    _ffree(ini);
+    /* SYSTEM.INI stays: the VMM's profile services read it (VxDs ask for
+     * their settings while they initialise) */
+    info.ini_lin = ((unsigned long)FP_SEG(ini) << 4) + FP_OFF(ini);
+    info.ini_len = inilen;
 
     if (pm_go(&info) == (int)W386_FATAL) {
         /* the VMM ended Windows before the System VM ran: its message */

@@ -129,7 +129,7 @@ static void broadcast(u32 msg, u32 esi, u32 edx, u32 edi, int rev)
  * win386-vxds.md). Its services as Windows 3.1's answered VXP:
  * VTD_Get_Version AX=030Ah, the fastest period 1 ms in EBX, the slowest
  * 54 ms (36h) in ECX; VTD_Get_Interrupt_Period 54 ms. */
-#define NBUILTIN 3
+#define NBUILTIN 4
 static void vtd_init(void);
 /* w16's VDD (vdd.c, in this module): its DDB for other devices' dynamic
  * links (Windows 3.1's: "VDD", 000Ah, 2.00, init order 28000000h, 14
@@ -143,6 +143,12 @@ static struct ddb v86mm_ddb = {
 static struct ddb vdd_ddb = {
     0, 0x030A, 0x000A, 2, 0, 0, { 'V', 'D', 'D', ' ', ' ', ' ', ' ', ' ' },
     0x28000000, 0, 0, 0, 0, 0, 0, 0, 14
+};
+/* w16's SHELL (shell.c) for other devices' links: Windows 3.1's "SHELL",
+ * 0017h, init order B0000000h, 6 services (its API is vxdapi.c's) */
+static struct ddb shell_ddb = {
+    0, 0x030A, 0x0017, 3, 0, 0, { 'S', 'H', 'E', 'L', 'L', ' ', ' ', ' ' },
+    0xB0000000, 0, 0, 0, 0, 0, 0, 0, 6
 };
 static struct ddb vtd_ddb = {
     0, 0x030A, 0x0005, 3, 10, 0, { 'V', 'T', 'D', ' ', ' ', ' ', ' ', ' ' },
@@ -410,6 +416,8 @@ void vxd_init(void)
     devs[ndevs++] = &vdd_ddb;
     v86mm_ddb.svc_table = (u32)make_slots(0x06, v86mm_ddb.svc_count);
     devs[ndevs++] = &v86mm_ddb;
+    shell_ddb.svc_table = (u32)make_slots(0x17, shell_ddb.svc_count);
+    devs[ndevs++] = &shell_ddb;
     for (i = 0; i < info->vxd_count; i++) {
         struct ddb *d = (struct ddb *)list[i];
         devs[ndevs++] = d;
@@ -423,11 +431,12 @@ void vxd_init(void)
             devs[j] = devs[j - 1];
         devs[j] = d;
     }
-    /* DDB_Next: each device's DDB names the one before it in init order,
-     * the VMM's ends the list. Windows 3.1 links them (VXP.386, last in
-     * init order, found its DDB_Next set: tests/vxd/vxp.asm); UNVERIFIED
-     * in which order */
-    for (i = 0; i < ndevs; i++) devs[i]->next = i ? (u32)devs[i - 1] : 0;
+    /* DDB_Next: each device's DDB names the one after it in init order,
+     * the last's is 0. Windows 3.1: VXB.386 (tests/vxd/vxm.c, SBPROBE),
+     * loaded just before VSBD.386 with the same init order, found VSBD's
+     * DDB as its DDB_Next; from VXB, with VSBD's after it, the chain had
+     * 4 devices to its end (VXP.386 had found its DDB_Next set) */
+    for (i = 0; i < ndevs; i++) devs[i]->next = i + 1 < ndevs ? (u32)devs[i + 1] : 0;
     /* VPICD (w16's module) owns the interrupts: without it nothing runs.
      * Windows 3.1 without *vpicd stops with this message (ARCHITECTURE.md
      * 12.2: device 0003h, service 0001h, VPICD_Virtualize_IRQ) */
@@ -800,6 +809,106 @@ static int v86hook_service(u32 svc, struct svcregs *s)
     return 1;
 }
 
+/* ---- the profile services (SYSTEM.INI): Get_Profile_String (B3h),
+ * Get_Next_Profile_String (B4h), Get_Profile_Decimal_Int (ABh),
+ * Get_Profile_Hex_Int (AFh), Get_Profile_Boolean (B1h), from the DDK's
+ * descriptions. The loader's copy of the file is copied once, each line
+ * ended with a NUL, so that a value is a string the caller can keep; the
+ * section NULL is [386Enh]; keys and sections ignore case; the first
+ * entry of the key counts (Get_Next_Profile_String: the next) ---- */
+static char *prof;
+static u32 prof_len;
+
+static int lc(int c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
+static int prof_eq(const char *a, const char *b, u32 n)
+{
+    while (n--) if (lc(*a++) != lc(*b++)) return 0;
+    return 1;
+}
+static u32 slen(const char *s) { u32 n = 0; while (s[n]) n++; return n; }
+
+static void prof_init(void)
+{
+    u32 i;
+    if (prof || !info->ini_lin || !info->ini_len) return;
+    prof = kmalloc(info->ini_len + 2);
+    if (!prof) return;
+    memcpy(prof, (void *)info->ini_lin, info->ini_len);
+    prof_len = info->ini_len;
+    prof[prof_len] = prof[prof_len + 1] = 0;
+    for (i = 0; i < prof_len; i++) if (prof[i] == '\r' || prof[i] == '\n' || prof[i] == 0x1A) prof[i] = 0;
+}
+
+/* the value of the first entry key in section sec after position from
+ * (0: the start), or NULL */
+static char *prof_find(const char *sec, const char *key, char *from)
+{
+    u32 i = 0, kn = slen(key), sn = sec ? slen(sec) : 6;
+    int in = 0;
+    prof_init();
+    if (!prof) return NULL;
+    if (!sec) sec = "386Enh";
+    while (i < prof_len) {
+        char *l = prof + i, *p = l;
+        u32 n = slen(l);
+        i += n + 1;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '[') {
+            in = prof_eq(p + 1, sec, sn) && p[1 + sn] == ']';
+            continue;
+        }
+        if (!in || !prof_eq(p, key, kn)) continue;
+        p += kn;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p != '=') continue;
+        p++;
+        while (*p == ' ' || *p == '\t') p++;
+        if (from && p <= from) continue;
+        return p;
+    }
+    return NULL;
+}
+
+static int prof_service(u32 svc, struct svcregs *s)
+{
+    char *v;
+    u32 n = 0;
+    int any = 0, ok = 1;
+    switch (svc) {
+    case 0xB3:                          /* Get_Profile_String: EDX default, ESI, EDI */
+        v = prof_find((const char *)s->esi, (const char *)s->edi, NULL);
+        if (v) s->edx = (u32)v; else s->eflags |= EFL_CF;
+        return 1;
+    case 0xB4:                          /* Get_Next_Profile_String: EDX the last, EDI */
+        v = prof_find(NULL, (const char *)s->edi, (char *)s->edx);
+        if (v) s->edx = (u32)v; else s->eflags |= EFL_CF;
+        return 1;
+    case 0xAB:                          /* Get_Profile_Decimal_Int: EAX default */
+    case 0xAF:                          /* Get_Profile_Hex_Int */
+    case 0xB1:                          /* Get_Profile_Boolean */
+        v = prof_find((const char *)s->esi, (const char *)s->edi, NULL);
+        s->eflags &= ~EFL_ZF;
+        if (!v) { s->eflags |= EFL_CF; return 1; }
+        if (!*v) { s->eflags |= EFL_ZF; return 1; }   /* there, no value */
+        if (svc == 0xB1) {
+            if (prof_eq(v, "yes", 3) || prof_eq(v, "on", 2) || prof_eq(v, "true", 4) || *v == '1') s->eax = ~0u;
+            else if (prof_eq(v, "no", 2) || prof_eq(v, "off", 3) || prof_eq(v, "false", 5) || *v == '0') s->eax = 0;
+            else s->eflags |= EFL_CF;
+            return 1;
+        }
+        for (; *v; v++) {
+            int d = *v >= '0' && *v <= '9' ? *v - '0'
+                  : svc == 0xAF && lc(*v) >= 'a' && lc(*v) <= 'f' ? lc(*v) - 'a' + 10 : -1;
+            if (d < 0) { if (*v != ' ' && *v != '\t' && *v != ';' && !(svc == 0xAF && lc(*v) == 'h')) ok = 0; break; }
+            n = n * (svc == 0xAF ? 16 : 10) + d;
+            any = 1;
+        }
+        if (any && ok) s->eax = n; else s->eflags |= EFL_CF;
+        return 1;
+    }
+    return 0;
+}
+
 /* ---- the VMM's services ---- */
 void __cdecl svc_dispatch(struct svcregs *s)
 {
@@ -849,12 +958,20 @@ void __cdecl svc_dispatch(struct svcregs *s)
         return;
     }
     if (dev == 1 && list_service(svc, s)) return;
+    if (dev == 1 && prof_service(svc, s)) return;
     if (dev == 1 && io_service(svc, s)) return;
     if (dev == 1 && tmo_service(svc, s)) return;
     if (dev == 1 && nest_service(svc, s)) return;
     if (dev == 1 && v86hook_service(svc, s)) return;
     if (dev == 5) { vtd_service(svc, s); return; }
     if (dev == 0x06) { v86mm_service(svc, s); return; }
+    if (dev == 0x17) {
+        if (!shell_service(svc, s)) {
+            trace("VMM: SHELL service %x is not implemented (called from %x)\n", svc, *(u32 *)(s + 1));
+            s->eflags |= EFL_CF;
+        }
+        return;
+    }
     if (dev == 0x0A) {
         /* (the rest of the VDD's services: carry, traced, UNVERIFIED) */
         if (!vdd_service(svc, s)) {

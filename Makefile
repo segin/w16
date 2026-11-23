@@ -1095,12 +1095,19 @@ $(W386)/VSD.386: $(W386VSD) win386/vxd/vsd.lnk
 W386VDMAD := $(W386)/vxd/vdmadddb.o $(W386)/vxd/vdmad.o $(W386)/vxd/vxdrt.o
 $(W386)/VDMAD.386: $(W386VDMAD) win386/vxd/vdmad.lnk
 	$(WLINK) @win386/vxd/vdmad.lnk name $@ option map=$(W386)/vdmad.map file { $(W386VDMAD) }
+# VSBD.386: w16's Sound Blaster virtual device (win386/vxd/vsbd.c), an
+# external VxD beside SB16.DRV (SYSTEM.INI [386Enh] device=vsbd.386)
+W386VSBD := $(W386)/vxd/vsbdddb.o $(W386)/vxd/vsbd.o $(W386)/vxd/vxdrt.o
+$(DOS)/VSBD.386: $(W386VSBD) win386/vxd/vsbd.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @win386/vxd/vsbd.lnk name $@ option map=$(W386)/vsbd.map file { $(W386VSBD) }
+	python3 tools/leautodata.py $@
 W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VSD=$(W386)/VSD.386 VMPOLL=$(W386)/VMPOLL.386 VDMAD=$(W386)/VDMAD.386
 $(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VSD.386 $(W386)/VMPOLL.386 $(W386)/VDMAD.386 tools/mkw3.py
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/SBD.COM
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/VXB.386 $(DOS)/SBD.COM
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -1165,6 +1172,17 @@ $(DOS)/VXM.386: $(B)/tests/vxmddb.o $(B)/tests/vxm.o $(W386)/vxd/vxdrt.o tests/v
 $(DOS)/VXMR.386: $(B)/tests/vxmddb.o $(B)/tests/vxmr.o $(W386)/vxd/vxdrt.o tests/vxd/vxm.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/vxd/vxm.lnk name $@ file { $(B)/tests/vxmddb.o $(B)/tests/vxmr.o $(W386)/vxd/vxdrt.o }
+	python3 tools/leautodata.py $@
+# VXB.386: the Sound Blaster VxD's probe (tests/vxd/vxm.c built with SBPROBE)
+$(B)/tests/vxb.o: tests/vxd/vxm.c $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	wcc386 -q -zq -bt=nt -mf -zl -s -ecc -3s -ox -dSBPROBE -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(B)/tests/vxbddb.o: tests/vxd/vxmddb.asm $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	$(NASM) -f obj -DSBPROBE -I$(W386INC)/ -o $@ $<
+$(DOS)/VXB.386: $(B)/tests/vxbddb.o $(B)/tests/vxb.o $(W386)/vxd/vxdrt.o tests/vxd/vxm.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/vxd/vxm.lnk name $@ file { $(B)/tests/vxbddb.o $(B)/tests/vxb.o $(W386)/vxd/vxdrt.o }
 	python3 tools/leautodata.py $@
 # SBD.COM: Sound Blaster DMA playback in a DOS box (tests/dos/sbd.asm,
 # tests/vdmadprobe.sh)
@@ -3072,6 +3090,12 @@ $(DOS)/SB16.DRV: $(SB16OBJS) $(B)/sb16/sb16.res drivers/sb16/sb16.lnk tools/nema
 	python3 tools/nemark.py $@ 3.10 8309 08
 dos: $(DOS)/SB16.DRV
 install-tree: $(W16SYS)/SB16.DRV
+# (VSBD.386, win386/vxd/vsbd.c: the card in 386 Enhanced mode)
+dos: $(DOS)/VSBD.386
+install-tree: $(W16SYS)/VSBD.386
+$(W16SYS)/VSBD.386: $(DOS)/VSBD.386
+	@mkdir -p $(@D)
+	cp $< $@
 $(W16SYS)/SB16.DRV: $(DOS)/SB16.DRV
 	@mkdir -p $(@D)
 	cp $< $@

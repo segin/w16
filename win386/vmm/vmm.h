@@ -302,6 +302,7 @@ void dpmi_pm_farcall(u32 sel, u32 off, const u16 *args, int n, struct cregs *r);
 /* shell.c, vdd.c: w16's SHELL and VDD (devices in the VMM module) */
 void shell_init(void);
 void shell_api(struct cregs *r);
+int shell_service(u32 svc, struct svcregs *r);   /* device 0017h's services */
 void shell_vm_ended(struct vm *v);
 void shell_vm_init(struct vm *v);   /* VM_Init done: VMPOLL from the PIF */
 void shell_vm_crashed(struct vm *v);

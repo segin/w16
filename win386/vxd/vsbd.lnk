@@ -1,0 +1,5 @@
+# VSBD.386: w16's Sound Blaster virtual device (win386/vxd/vsbd.c), device 0445h
+format windows vxd
+option quiet
+option nodefaultlibs
+export VSBD_DDB.1

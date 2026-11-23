@@ -228,7 +228,7 @@ int shell_display_changed(struct vm *v, int cursor)
 
 /* SHELL's event: WINOA386's procedure in the System VM, (hwnd, msg,
  * wParam, lParam = the record) */
-struct postarg { u32 msg, wparam; struct vm *vm; u32 gen; };
+struct postarg { u32 msg, wparam; struct vm *vm; u32 gen; u32 data; };
 
 static void post_now(struct vm *sys, void *arg)
 {
@@ -243,7 +243,7 @@ static void post_now(struct vm *sys, void *arg)
     memset(e, 0, sizeof(*e));
     e->vm = VMH(a->vm);
     e->hwnd = (u16)s->hwnd;
-    e->data = a->wparam;
+    e->data = a->data;
     e->msg = (u16)a->msg;
     args[0] = (u16)s->hwnd;
     args[1] = (u16)a->msg;
@@ -263,9 +263,72 @@ static void post(struct vm *v, u32 msg, u32 wparam)
     if (!a) return;
     a->msg = msg;
     a->wparam = wparam;
+    a->data = wparam;
     a->vm = v;
     a->gen = v->gen;
     vm_event(&sysvm, post_now, a);
+}
+
+/* SHELL_Message (SHELL service 4: EBX the VM, EAX the MB_ flags, ECX the
+ * text, EDI the caption, ESI a callback with EDX): a DOS VM's message goes
+ * to its WINOA386 as w16's event SHELL_EV_MESSAGE (wParam the flags, the
+ * event record's data the text's linear address), which shows it in a
+ * message box with the VM's title (Windows 3.1: VSBD.386's contention
+ * message came so, captioned with the box's title, the box inactive behind
+ * it: ARCHITECTURE.md 24.6). UNVERIFIED: the event Windows 3.1's SHELL
+ * sends for it (w16's WINOA386 has this one; Microsoft's ignores it), a
+ * caption given in EDI (not shown), the System VM's messages (carry: none
+ * shown), the callback (called at once with IDOK) */
+#define SHELL_EV_MESSAGE 0x4F0
+#define NMSG 4                          /* texts WINOA386 can read (ring 3) */
+static char (*msgbuf)[256];
+static u32 msg_next;
+static int shell_message(struct svcregs *r)
+{
+    char *t;
+    u32 i;
+    struct vm *v = vm_of(r->ebx);
+    struct shvm *s = v ? sh_of(v) : NULL;
+    struct postarg *a;
+    trace("SHELL: SHELL_Message for VM %d: %x \"%s\"\n", v ? v->id : 0, r->eax, (const char *)r->ecx);
+    if (!msgbuf && (msgbuf = kmalloc(NMSG * 256 + 4096)) != NULL) {
+        msgbuf = (char (*)[256])(((u32)msgbuf + 4095) & ~4095u);
+        make_user((u32)msgbuf, NMSG * 256);
+    }
+    if (!s || !s->cb_sel || !msgbuf || !(a = kmalloc(sizeof(*a)))) { r->eflags |= EFL_CF; return 1; }
+    /* the text where the VM's WINOA386 can read it (the device's own
+     * memory is ring 0's) */
+    t = msgbuf[msg_next++ % NMSG];
+    for (i = 0; i < 255 && ((const char *)r->ecx)[i]; i++) t[i] = ((const char *)r->ecx)[i];
+    t[i] = 0;
+    a->msg = SHELL_EV_MESSAGE;
+    a->wparam = r->eax & 0xFFFF;
+    a->data = (u32)t;
+    a->vm = v;
+    a->gen = v->gen;
+    vm_event(&sysvm, post_now, a);
+    r->eax = (u32)a;
+    if (r->esi) {
+        struct svcregs c;
+        memset(&c, 0, sizeof(c));
+        c.eax = 1;
+        c.edx = r->edx;
+        vmm_call_proc(r->esi, &c);
+    }
+    return 1;
+}
+
+/* the SHELL device's services (device 0017h) for other VxDs */
+int shell_service(u32 svc, struct svcregs *r)
+{
+    switch (svc) {
+    case 0x0000:                        /* SHELL_Get_Version (UNVERIFIED value) */
+        r->eax = (r->eax & 0xFFFF0000u) | 0x030A;
+        return 1;
+    case 0x0004:
+        return shell_message(r);
+    }
+    return 0;
 }
 
 static void focus3(struct vm *v, u32 edi, int all)

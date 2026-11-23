@@ -309,16 +309,54 @@ static int dmaalloc(void)
     return 1;
 }
 
+/* 386 Enhanced mode: the card is one VM's at a time, VSBD.386's to give
+   (win386/vxd/vsbd.c, ARCHITECTURE.md 24.6): taken (API function 1) for
+   the enable and while a wave device is open, given back (2) after, as
+   Windows 3.1's SNDBLST2.DRV takes Windows 3.1's VSBD.386's. Without the
+   VxD in Enhanced mode no devices: the card is not ours to touch */
+static BYTE enh, vsbd, takes;
+static void enable_card(void);
+
+int sb_take(void)
+{
+    if (!enh)
+        return 1;
+    if (!vsbd)
+        return 0;
+    if (takes++)
+        return 1;
+    if (HIWORD(sb_vxd(1, sb_port))) {   /* another VM has it */
+        takes = 0;
+        return 0;
+    }
+    return 1;
+}
+
+void sb_give(void)
+{
+    if (!enh || !vsbd || !takes)
+        return;
+    if (!--takes)
+        sb_vxd(2, sb_port);
+}
+
 static void enable(void)
 {
     if (enabled)
         return;
     enabled = 1;
-    /* 386 Enhanced mode: not without a VxD that gives the system VM the
-       card's ports, IRQ and DMA (README): no devices, and the card left
-       alone */
-    if (GetWinFlags() & WF_ENHANCED)
-        return;
+    enh = (GetWinFlags() & WF_ENHANCED) != 0;
+    if (enh) {
+        vsbd = sb_vxd_entry() != 0;
+        if (!vsbd || !sb_take())
+            return;
+    }
+    enable_card();
+    sb_give();
+}
+
+static void enable_card(void)
+{
     config();
     if (sb_dspver >= 0x400 && sb_dma8 < 4 && sb_dma16 >= 5 && sb_dma16 <= 7 && dmaalloc()) {
         mpu_ok = (BYTE)mpu_reset();
@@ -334,6 +372,11 @@ static void enable(void)
 
 static void disable(void)
 {
+    if (enabled && sb_ok && !sb_take()) {
+        /* another VM has the card: ours goes without touching it */
+        sb_unhook();
+        sb_ok = mpu_ok = 0;
+    }
     if (!enabled)
         return;
     enabled = 0;
@@ -351,6 +394,7 @@ static void disable(void)
         GlobalDOSFree(LOWORD(dosmem));
         dosmem = 0;
     }
+    sb_give();
 }
 
 /* ---- the configuration dialog (DRV_CONFIGURE; sb16.rc): the five

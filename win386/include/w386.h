@@ -107,6 +107,10 @@ struct w386_info {
        conventional memory (a segment, 0: none; dma_buf_kb of it) */
     w_u16 dma_buf_kb;
     w_u16 dma_buf_seg;
+    /* SYSTEM.INI's text (the loader's copy, in its own memory: shared by
+       every VM) for the VMM's profile services during initialisation */
+    w_u32 ini_lin;
+    w_u32 ini_len;
 };
 #pragma pack()
 

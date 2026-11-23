@@ -24,6 +24,11 @@ VXM_DDB:
         ENTRY vxm_cb, _vxm_callback
         ENTRY vxm_io, _vxm_iohandler
         ENTRY vxm_tmo, _vxm_timeout
+%ifdef SBPROBE
+        ENTRY vxb_v86, _vxb_v86_api
+        ENTRY vxb_pm, _vxb_pm_api
+        VXDCALL _vpicd_irq_status, 3, 0Bh
+%endif
 
 ; VMM
         VXDCALL _vmm_install_io, 1, 96h

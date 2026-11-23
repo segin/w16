@@ -22,6 +22,9 @@
  *   mci STRING          mciSendString(STRING) with the probe's window;
  *                       logs the answer and the returned string
  *   snd FILE            sndPlaySound(FILE, SND_SYNC); logs the answer
+ *   exec CMDLINE        WinExec(CMDLINE, SW_SHOWNORMAL): a DOS program in a
+ *                       box beside what plays (tests/sbvxdprobe.sh); logs
+ *                       the answer
  *   config              the driver of [drivers] wave= opened with OpenDriver,
  *                       DRV_QUERYCONFIGURE and DRV_CONFIGURE sent (its dialog)
  * Sources: the Multimedia Programmer's Guide (the wave, MIDI, MMIO and
@@ -417,6 +420,10 @@ int __cdecl __far tmain(void)
             while (*p == ' ')
                 p++;
             mci(p);
+        } else if (is(cmd, "exec")) {
+            while (*p == ' ')
+                p++;
+            lg("exec %s = %u", (LPSTR)p, WinExec(p, SW_SHOWNORMAL));
         }
     }
     lg("SBP end");
