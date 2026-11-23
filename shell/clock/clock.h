@@ -99,7 +99,7 @@ int s_len(const char FAR *s);
 void s_cpy(char FAR *d, const char FAR *s, int n);
 void s_cat(char FAR *d, const char FAR *s, int n);
 int s_utoa(char *buf, unsigned v);
-int s_atoi(const char FAR **p);
+BOOL s_atoi(const char FAR **p, int *out);
 void icon_frame(HDC dc);
 
 /* ---- fontdlg.c ---- */

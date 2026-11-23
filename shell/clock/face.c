@@ -68,8 +68,12 @@ static void sizes(HDC dc)
     msize = MulDiv(25, fmin, GetDeviceCaps(dc, HORZRES));
     msizev = MulDiv(msize, g_aspv, g_asph);
     rad = fmin / 2 - msize / 2 - 4;
+    if (rad < 0)
+        rad = 0;
     if (msize < 2)                      /* observed: 2 across, 1 down */
         msize = 2;
+    if (msizev < 1)
+        msizev = 1;
 }
 
 /* a point at index i on a circle of radius r round the centre */

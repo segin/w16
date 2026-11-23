@@ -57,13 +57,18 @@ static DWORD dos_date(void);
 
 void time_now(CLOCKTIME *t)
 {
-    DWORD tm = dos_time(), d = dos_date();
+    DWORD d1, tm, d2;
+    do {
+        d1 = dos_date();
+        tm = dos_time();
+        d2 = dos_date();
+    } while (d1 != d2);
     t->hour = HIBYTE(HIWORD(tm));
     t->minute = LOBYTE(HIWORD(tm));
     t->second = HIBYTE(LOWORD(tm));
-    t->year = (int)HIWORD(d);
-    t->month = HIBYTE(LOWORD(d));
-    t->day = LOBYTE(LOWORD(d));
+    t->year = (int)HIWORD(d2);
+    t->month = HIBYTE(LOWORD(d2));
+    t->day = LOBYTE(LOWORD(d2));
 }
 
 /* ---- colours ---- */
@@ -116,8 +121,8 @@ static void load_settings(RECT *pos, BOOL *havepos, BOOL *maximized)
     GetPrivateProfileString(s_sect, "Options", "", buf, sizeof buf, s_ini);
     p = buf;
     for (i = 0; i < 6; i++) {
-        int n = s_atoi(&p);
-        if (n < 0)
+        int n;
+        if (!s_atoi(&p, &n) || n < 0)
             break;
         v[i] = n;
     }
@@ -132,7 +137,7 @@ static void load_settings(RECT *pos, BOOL *havepos, BOOL *maximized)
     if (GetPrivateProfileString(s_sect, "Position", "", buf, sizeof buf, s_ini)) {
         int r[4];
         p = buf;
-        for (i = 0; i < 4 && (r[i] = s_atoi(&p)) != -1; i++)
+        for (i = 0; i < 4 && s_atoi(&p, &r[i]); i++)
             ;
         if (i == 4) {
             pos->left = r[0];
@@ -203,7 +208,7 @@ static void save_settings(void)
 
 static void set_title(void)
 {
-    char t[48], d[32];
+    char t[48], d[48];
     s_cpy(t, s_app, sizeof t);
     if (IsIconic(g_wnd) || (g_opt.analog && !g_opt.nodate)) {   /* observed (CK4) */
         intl_date(&now, d, !IsIconic(g_wnd));
@@ -269,7 +274,7 @@ static void start_timer(void)
 static void relayout(void)
 {
     digi_reset();
-    InvalidateRect(g_wnd, NULL, FALSE);   /* WM_PAINT erases (observed: once) */
+    InvalidateRect(g_wnd, NULL, TRUE);
 }
 
 static void about(void)
@@ -344,7 +349,7 @@ static void tick(void)
     HDC dc;
     time_now(&now);
     if (old.second == now.second && old.minute == now.minute && old.hour == now.hour &&
-        old.day == now.day)
+        old.day == now.day && old.month == now.month && old.year == now.year)
         return;
     if (old.day != now.day || old.month != now.month || old.year != now.year) {
         set_title();
@@ -386,7 +391,6 @@ LRESULT FAR PASCAL __export ClockWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     case WM_PAINT: {
         PAINTSTRUCT ps;
         BeginPaint(w, &ps);
-        erase(ps.hdc);
         paint(ps.hdc);
         EndPaint(w, &ps);
         return 0;
@@ -441,6 +445,10 @@ LRESULT FAR PASCAL __export ClockWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
         KillTimer(w, TIMER_ID);
         if (started)
             save_settings();
+        if (g_opt.notitle && menu) {
+            DestroyMenu(menu);
+            menu = NULL;
+        }
         digi_free();
         PostQuitMessage(0);
         return 0;
@@ -496,8 +504,10 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
     wc.hbrBackground = NULL;
     wc.lpszMenuName = NULL;
     wc.lpszClassName = s_class;
-    if (!RegisterClass(&wc))
+    if (!RegisterClass(&wc)) {
+        free_colors();
         return 0;
+    }
     menu = LoadMenu(inst, MAKEINTRESOURCE(IDM_MENU));
 
     if (!havepos) {
@@ -516,12 +526,17 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
     g_wnd = CreateWindow(s_class, s_app, style, pos.left, pos.top,
                          pos.right - pos.left, pos.bottom - pos.top, NULL,
                          g_opt.notitle ? NULL : menu, inst, NULL);
-    if (!g_wnd)
+    if (!g_wnd) {
+        if (menu)
+            DestroyMenu(menu);
+        free_colors();
         return 0;
+    }
     if (!SetTimer(g_wnd, TIMER_ID, 1000, NULL)) {
         LoadString(inst, IDS_NOTIMER, text, sizeof text);
         MessageBox(NULL, text, s_app, MB_OK | MB_ICONHAND | MB_SYSTEMMODAL);
         DestroyWindow(g_wnd);
+        free_colors();
         return 0;
     }
     {

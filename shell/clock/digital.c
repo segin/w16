@@ -111,17 +111,24 @@ static void layout(HDC dc, const CLOCKTIME *t)
         DeleteObject(dfont);
     tfont = dfont = NULL;
     w = icon ? ccx - 8 : ccx * 7 / 8;
+    if (w < 1)
+        w = 1;
     cap = withdate ? ccy * 3 / 8 : ccy * 7 / 8;
+    if (cap < 1)
+        cap = 1;
     f = make_font(1000);
     old = SelectObject(dc, f);
     e = GetTextExtent(dc, meas, nmeas);
     if (withdate)
         de = GetTextExtent(dc, date, s_len(date));
     SelectObject(dc, old);
-    h = MulDiv(1000, w, LOWORD(e));
+    h = LOWORD(e) ? MulDiv(1000, w, LOWORD(e)) : cap;
     DeleteObject(f);
+    if (h < 1)
+        h = 1;
     if (h > cap)
         h = cap;
+    tcy = 0;
     for (;;) {
         tfont = make_font(h);
         old = SelectObject(dc, tfont);
@@ -142,10 +149,15 @@ static void layout(HDC dc, const CLOCKTIME *t)
     if (bm)
         DeleteObject(bm);
     bmcx = ext[2];
-    bm = CreateDiscardableBitmap(dc, embossed ? ext[2] + 4 : ext[2], tcy);
+    bm = (bmcx > 0 && tcy > 0)
+        ? CreateDiscardableBitmap(dc, embossed ? bmcx + 4 : bmcx,
+                                  embossed ? tcy + 4 : tcy)
+        : NULL;
     dcy = 0;
     if (withdate) {
-        int hd = MulDiv(1000, w, LOWORD(de));
+        int hd = LOWORD(de) ? MulDiv(1000, w, LOWORD(de)) : (h * 3 / 4);
+        if (hd < 1)
+            hd = 1;
         if (hd > h * 3 / 4)
             hd = h * 3 / 4;
         dfont = make_font(hd);
@@ -200,7 +212,7 @@ static void part(HDC dc, int a, int b, const char *s)
     if (!embossed) {
         SetTextColor(dc, GetSysColor(COLOR_BTNTEXT));
         text(dc, l, y0, ETO_OPAQUE | ETO_CLIPPED, l, r, s);
-    } else if (r - l <= bmcx) {
+    } else if (mem && bm && r - l <= bmcx) {
         rc.left = 0;
         rc.top = 0;
         rc.right = r - l + 4;
@@ -243,6 +255,7 @@ BOOL digi_changed(const CLOCKTIME *t)
 void digi_paint(HDC dc, const CLOCKTIME *t, BOOL all)
 {
     char hh[4], mm[4], ss[4], ap[16], sep[4];
+    HFONT omfont = NULL;
     HBITMAP obm = NULL;
     if (!valid || IsIconic(g_wnd) != icon)
         layout(dc, t);
@@ -253,15 +266,16 @@ void digi_paint(HDC dc, const CLOCKTIME *t, BOOL all)
     SetBkColor(dc, GetSysColor(COLOR_BTNFACE));
     SetTextAlign(dc, TA_TOP | TA_LEFT);
     mem = NULL;
-    if (embossed) {
+    if (embossed && bm) {
         mem = CreateCompatibleDC(dc);
-        obm = SelectObject(mem, bm);
-        SelectObject(mem, tfont);
-        SetBkColor(mem, GetSysColor(COLOR_BTNFACE));
-        SetTextAlign(mem, TA_TOP | TA_LEFT);
+        if (mem) {
+            obm = SelectObject(mem, bm);
+            omfont = SelectObject(mem, tfont);
+            SetBkColor(mem, GetSysColor(COLOR_BTNFACE));
+            SetTextAlign(mem, TA_TOP | TA_LEFT);
+        }
     }
     if (all) {
-        SelectObject(dc, g_brface);     /* for the date's line */
         s_cpy(sep, g_sep, sizeof sep);
         part(dc, p_s1, p_mm, sep);
         if (withsecs)
@@ -278,6 +292,7 @@ void digi_paint(HDC dc, const CLOCKTIME *t, BOOL all)
     if (t->hour != last_hour)
         part(dc, p_hh, p_hh + 2, hh);
     if (mem) {
+        SelectObject(mem, omfont);
         SelectObject(mem, obm);
         DeleteDC(mem);
         mem = NULL;
@@ -290,6 +305,7 @@ void digi_paint(HDC dc, const CLOCKTIME *t, BOOL all)
         intl_date(t, date, TRUE);
         if (all || !same(date, last_date)) {
             RECT rc;
+            SelectObject(dc, g_brface);
             PatBlt(dc, 0, ydate, ccx, dcy, PATCOPY);
             SelectObject(dc, dfont);
             SetTextColor(dc, GetSysColor(COLOR_BTNTEXT));

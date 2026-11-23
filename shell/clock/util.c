@@ -42,24 +42,27 @@ int s_utoa(char *buf, unsigned v)
     return n;
 }
 
-/* the next decimal number in *p, skipping what comes before it; -1 and
-   *p unchanged at the end of the string */
-int s_atoi(const char FAR **p)
+/* the next decimal number in *p, skipping what comes before it; returns
+   FALSE and leaves *p unchanged at the end of the string or bare '-' */
+BOOL s_atoi(const char FAR **p, int *out)
 {
     const char FAR *s = *p;
     int v = 0, neg = 0;
     while (*s && !(*s >= '0' && *s <= '9') && *s != '-')
         s++;
     if (!*s)
-        return -1;
+        return FALSE;
     if (*s == '-') {
         neg = 1;
         s++;
+        if (!(*s >= '0' && *s <= '9'))
+            return FALSE;
     }
     while (*s >= '0' && *s <= '9')
         v = v * 10 + (*s++ - '0');
     *p = s;
-    return neg ? -v : v;
+    *out = neg ? -v : v;
+    return TRUE;
 }
 
 /* The frame round the minimized clock (observed, both faces): a black
