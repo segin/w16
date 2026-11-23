@@ -534,6 +534,21 @@ int __cdecl tmain(void)
         GlobalFree(h);
         report("edit", n);
     }
+    if (want("xsend")) {
+        /* SendMessage to another task's window (Program Manager's): two
+         * task switches a call */
+        HWND w = FindWindow("Progman", NULL);
+        n = 0;
+        if (w) {
+            start();
+            for (;;) {
+                SendMessage(w, WM_NULL, 0, 0);
+                n++;
+                if (!(n & 15) && done()) break;
+            }
+        }
+        report("xsend", n);
+    }
     if ((UINT)hmm >= 32) FreeLibrary(hmm);
     out("VX16 done\r\n");
     f = _lcreat("C:\\VX16.LOG", 0);
