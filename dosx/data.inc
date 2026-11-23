@@ -23,11 +23,12 @@ s_w16sec        db '[w16]', 0
 s_largemem      db 'largememory', 0
 
 optab           dw op_reflect, op_int31, op_int21, op_excdef, op_int10, op_int15
-                dw op_int13, op_int2526, op_int33
+                dw op_int13, op_int2526, op_int33, op_int28
 OP_COUNT        equ ($ - optab) / 2
 
 ; variables
 imgseg          dw 0
+idle28_left     db 1    ; op_int28: INT 28h calls until the next goes to real mode
 psp_seg         dw 0
 imglin          dd 0
 cpu_type        db 0

@@ -602,6 +602,16 @@ clr_cf: push es
         pop es
         ret
 
+; op_int28: INT 28h from protected mode (int28_stub): every tenth to real
+; mode as op_reflect would send it, the others end here
+op_int28:
+        dec byte [idle28_left]
+        jz .go
+        ret
+.go:    mov byte [idle28_left], 10
+        mov ax, 2800h
+        jmp r0_reflect
+
 ; op_reflect: the default protected-mode handler of vector n: the same
 ; interrupt in real mode with the client's general registers; the
 ; arithmetic flags come back in the interrupt frame.
@@ -1136,6 +1146,7 @@ vectors_init:
         mov word [pmvec+4Bh*4], int4b_stub
         mov word [pmvec+21h*4], int21_stub
         mov word [pmvec+2Fh*4], int2f_stub
+        mov word [pmvec+28h*4], int28_stub
         mov word [pmvec+31h*4], int31_stub
         mov word [pmvec+01h*4], iret_stub
         mov word [pmvec+03h*4], iret_stub

@@ -130,6 +130,7 @@ OP_INT15        equ 5
 OP_INT13        equ 6
 OP_INT2526      equ 7
 OP_INT33        equ 8
+OP_INT28        equ 9
 
 FL_CF   equ 0001h
 FL_IF   equ 0200h

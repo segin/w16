@@ -148,6 +148,18 @@ int31_stub:
 iret_stub:
         iret
 
+; INT 28h in protected mode (DOS idle: KERNEL's idle loop makes one each
+; pass): one in ten goes to real mode (op_int28). Windows 3.1 (VX17 and
+; MS5, tests/kidlerun.sh, ARCHITECTURE.md 12.15): Microsoft's DOSX let
+; exactly a tenth of KERNEL's protected-mode INT 28h reach real mode,
+; under its KRNL286, its KRNL386 and w16's alike
+int28_stub:
+        cli
+        push 0
+        push OP_INT28
+        call (G_GATE | 3):0
+        iret
+
 ; where ring-3 code DOSX called (exception handlers, callbacks, interrupt
 ; handlers for real-mode interrupts) comes back to
 ret3_stub:
@@ -159,9 +171,12 @@ ret3_stub:
 ; (TK18, DX1); everything else goes to real mode
 int2f_stub:
         cmp ax, 1686h
-        jne .v
+        jne .k
         xor ax, ax
         iret
+.k:     cmp ax, 1689h           ; KERNEL's idle call: ends here (MS5:
+        jne .v                  ; none reached real mode under
+        iret                    ; Microsoft's DOSX, ARCHITECTURE.md 12.15)
 .v:     cmp ax, 168Ah
         jne .chain
         push es
