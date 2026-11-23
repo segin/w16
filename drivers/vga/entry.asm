@@ -233,7 +233,13 @@ _irq_restore:
         push bp
         mov bp, sp
         push word [bp + 6]
-        popf
+        ; IF explicitly: in 386 Enhanced mode the driver runs below IOPL,
+        ; where POPF leaves it alone, and every drawing call left
+        ; interrupts off (ARCHITECTURE.md 12.14)
+        test byte [bp + 7], 2
+        jz .n
+        sti
+.n:     popf
         pop bp
         retf
 

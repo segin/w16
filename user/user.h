@@ -99,8 +99,12 @@ WORD get_ss(void);
 #pragma aux get_ss = "mov ax, ss" value [ax];
 WORD irq_off(void);
 #pragma aux irq_off = "pushf" "pop ax" "cli" value [ax];
+/* the flags back, interrupts enabled explicitly when they were: in 386
+ * Enhanced mode Windows' code runs below IOPL, where POPF leaves IF alone,
+ * and interrupts stayed off after every message call (ARCHITECTURE.md
+ * 12.14: QuickTime's movie at half speed, timer ticks held off) */
 void irq_restore(WORD);
-#pragma aux irq_restore = "push ax" "popf" parm [ax];
+#pragma aux irq_restore = "push ax" "test ah, 2" "jz L1" "sti" "L1:" "popf" parm [ax];
 
 /* ---- windows (win.c) ---- */
 typedef struct WND {            /* layout: Pietrek, Windows Internals, table 4-2 */

@@ -428,7 +428,15 @@ _pit_count:
         mov ah, al
         in al, 40h
         xchg al, ah
-        popf
+        ; IF back explicitly (386 Enhanced mode: POPF leaves it alone
+        ; below IOPL, ARCHITECTURE.md 12.14)
+        push bp
+        mov bp, sp
+        test byte [bp + 3], 2
+        pop bp
+        jz .n
+        sti
+.n:     popf
         retf
 
 ; WORD atom_in(WORD ds, WORD atom, LPSTR buf, WORD n): GetAtomName with

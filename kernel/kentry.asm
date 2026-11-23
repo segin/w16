@@ -735,7 +735,15 @@ _seg_move:
         pop si
         mov ss, di                      ; sel, now at its new base, or SS
         mov sp, si
-        popf
+        ; the caller's IF back explicitly: in 386 Enhanced mode POPF
+        ; leaves it alone below IOPL (ARCHITECTURE.md 12.14)
+        push bp
+        mov bp, sp
+        test byte [bp + 3], 2
+        pop bp
+        jz .ifoff
+        sti
+.ifoff: popf
         pop es
         pop ds
         pop di

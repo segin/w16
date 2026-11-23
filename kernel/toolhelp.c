@@ -290,7 +290,8 @@ void KAPI InitTask1(u32 proc)
 static u16 cli_save(void);
 #pragma aux cli_save = "pushf" "pop ax" "cli" value [ax] modify exact [ax];
 static void flags_restore(u16 f);
-#pragma aux flags_restore = "push ax" "popf" parm [ax] modify exact [];
+/* (IF explicitly: in 386 Enhanced mode POPF leaves it alone, 12.14) */
+#pragma aux flags_restore = "push ax" "test ah, 2" "jz L1" "sti" "L1:" "popf" parm [ax] modify exact [];
 
 u32 KAPI_ES GetSetKernelDOSProc(u32 proc)
 {

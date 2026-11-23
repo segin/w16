@@ -163,6 +163,19 @@ ini_system      db 'SYSTEM.INI', 0
 
 segment _TEXT
 
+; popfi: the flags pushed before a cli back, interrupts enabled again
+; explicitly when they were (in 386 Enhanced mode POPF leaves IF alone
+; below IOPL: ARCHITECTURE.md 12.14)
+%macro popfi 0
+        push bp
+        mov bp, sp
+        test byte [bp + 3], 2
+        pop bp
+        jz %%n
+        sti
+%%n:    popf
+%endmacro
+
 ; ---- LibEntry: DS = DGROUP. The keyboard type from SYSTEM.INI. ----
 global libentry
 libentry:
@@ -498,7 +511,7 @@ SETSPEED:
         and al, 60h
         or al, ah
         call kbd_send
-        popf
+        popfi
         mov ax, [bp + 6]
 .r:     pop bp
         retf 2
@@ -1134,7 +1147,7 @@ lights_:
         cli
         and [es:KB_FLAG], bl
         or [es:KB_FLAG], ah
-        popf
+        popfi
         pop es
         mov ah, 1
         int 16h

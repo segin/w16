@@ -308,7 +308,8 @@ static u16 wd_old_cs, wd_old_ip;
 static u16 irq_off(void);
 #pragma aux irq_off = "pushf" "cli" "pop ax" value [ax];
 static void irq_restore(u16 f);
-#pragma aux irq_restore = "push ax" "popf" parm [ax];
+/* (IF explicitly: in 386 Enhanced mode POPF leaves it alone, 12.14) */
+#pragma aux irq_restore = "push ax" "test ah, 2" "jz L1" "sti" "L1:" "popf" parm [ax];
 
 static u8 cmos_get(u8 reg)
 {
