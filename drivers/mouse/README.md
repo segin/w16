@@ -143,7 +143,11 @@ mode kernel idle call) on every pass, which 3.1's KRNL286 never makes.
 Without it (kernel/task.c, idle) the same test gave 0 in 40. DOSBox
 0.74 does nothing with 1689h (its source); the call doubled the idle
 loop's switches to real mode and back through the DOS extender, and so
-the chance that IRQ 12 comes during one.
+the chance that IRQ 12 comes during one. (Later, ARCHITECTURE.md 12.15:
+3.1's KERNEL makes 1689h too, but in protected mode, where Microsoft's
+DOSX ends it; and it sends INT 28h from protected mode, of which
+Microsoft's DOSX passes one in ten to real mode. w16's KERNEL now does
+the same, so its idle loop goes to real mode a tenth as often as before.)
 
 **Where the interrupt is lost: Microsoft's DOSX with Microsoft's
 MOUSE.DRV** (`tests/mousestress.sh`, MD3 `tests/apps/md3.c`, on
