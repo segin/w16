@@ -1,0 +1,13 @@
+/* ttview.rc - TTVIEW.EXE's Open dialog (Windows 2.x styles only; the menu
+   is made in code: 2.x cannot read wrc's menu resources) */
+#include <windows.h>
+
+OPEN DIALOG 20, 20, 184, 52
+STYLE WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+CAPTION "Open TrueType Font"
+BEGIN
+    LTEXT "&File name:", -1, 6, 9, 44, 8
+    EDITTEXT 200, 52, 7, 126, 12, ES_AUTOHSCROLL
+    DEFPUSHBUTTON "OK", IDOK, 44, 30, 40, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 100, 30, 40, 14
+END

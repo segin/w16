@@ -1574,8 +1574,46 @@ $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
 	    option map=$(B)/tests/wrmet.map file { $(B)/tests/start.o $(B)/tests/wrmet.o }
 
 
-test: dos fonts grpcheck $(B)/host/pwtest $(B)/hlpdump
+# TTVIEW.EXE: a TrueType viewer for Windows 2.x and later that rasterises
+# with gdi/ttf/ttfx.c itself (tests/apps/ttview.c; tests/ttview.sh): 80286
+# code, no floating point (tests/ttf/cpu286.sh checks the objects), fixed
+# segments, marked 2.0 and, in the NE other-flags byte, 02h: a 2.x program
+# that runs in protected mode (SDK vol. 4, the NE header; without it 3.1
+# would not start it as the shell)
+TTV_O := $(B)/ttview/ttview.o $(B)/ttview/ttvpage.o $(B)/ttview/ttfx.o
+dos: $(DOS)/TTVIEW.EXE
+$(B)/ttview/%.o: tests/apps/%.c tests/apps/ttvpage.h gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/ttview/ttfx.o: gdi/ttf/ttfx.c gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/ttview/ttview.res: tests/apps/ttview.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/TTVIEW.EXE: $(B)/shell/start.o $(B)/shell/write/i4.o $(TTV_O) $(B)/ttview/ttview.res \
+                   tests/apps/ttview.lnk tools/nemark.py tests/ttf/cpu286.sh
+	@mkdir -p $(@D)
+	tests/ttf/cpu286.sh $(TTV_O) $(B)/shell/start.o $(B)/shell/write/i4.o
+	$(WLINK) @tests/apps/ttview.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/ttview/ttview.map option resource=$(B)/ttview/ttview.res \
+	    file { $(B)/shell/start.o $(B)/shell/write/i4.o $(TTV_O) }
+	python3 tools/nemark.py $@ 2.0 0202 02
+# ... and the same page drawn on the host, to compare with (tests/ttview.sh)
+$(B)/host/ttvhost: tests/ttf/ttvhost.c tests/apps/ttvpage.c tests/apps/ttvpage.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttvhost.c tests/apps/ttvpage.c gdi/ttf/ttfx.c
+
+# the fixed-point TrueType code (gdi/ttf/ttfx.c) against the floating-point
+# stb_truetype it was adapted from, on the host (tests/ttf/ttfxtest.c)
+$(B)/host/ttfxtest: tests/ttf/ttfxtest.c tests/ttf/ref.c tests/ttf/ref.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h \
+                    gdi/ttf/stb_truetype.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttfxtest.c tests/ttf/ref.c gdi/ttf/ttfx.c -lm
+
+test: dos fonts grpcheck $(B)/host/pwtest $(B)/hlpdump $(B)/host/ttfxtest
 	python3 tests/scripts/ss/pwtest.py $(B)/host/pwtest
+	$(B)/host/ttfxtest tests/fixtures/fonts/LiberationSans-Regular.ttf
 	WATCOM=$(WATCOM) tests/winhelp/hlpcheck.sh $(B)/hlpdump
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o

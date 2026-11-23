@@ -1,0 +1,9 @@
+; TTVIEW.EXE started by WIN.INI run= (tests/ttview.sh): Windows 3.1 shows
+; its Application Compatibility Warning for a program marked 2.x, Cancel
+; the default button: Shift+Tab to OK and Return; then let TTVIEW draw
+; (with /T it writes its results and ends Windows, which ends the run)
+shot 01-warning
+key shift+Tab
+key Return
+settle 120 3
+shot 02-ttview
