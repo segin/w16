@@ -718,6 +718,9 @@ static int list_service(u32 svc, struct svcregs *s)
  * V86 mode too ---- */
 static int nest_level;
 
+static u16 nest_args[16];
+static int nest_nargs, nest_call;
+static u32 nest_sel, nest_off;
 static int nest_service(u32 svc, struct svcregs *s)
 {
     struct cregs v;
@@ -748,10 +751,38 @@ static int nest_service(u32 svc, struct svcregs *s)
         c->eflags = (c->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);
         return 1;
     }
-    case 0x85:                          /* Resume_Exec: nothing is waiting here */
+    case 0x4D:                          /* Simulate_Push: EAX (a word: 16-bit clients) */
+        if (nest_nargs < (int)(sizeof(nest_args) / sizeof(nest_args[0])))
+            nest_args[nest_nargs++] = (u16)s->eax;
+        return 1;
+    case 0x48:                          /* Simulate_Far_Call: CX:EDX */
+        nest_sel = s->ecx & 0xFFFF;
+        nest_off = s->edx;
+        nest_call = 1;
+        return 1;
+    case 0x85:                          /* Resume_Exec: a far call simulated in
+                                         * protected mode runs now, to its return
+                                         * (VTDAPI.386's timer callbacks: Begin_Nest_Exec,
+                                         * Simulate_Push, Simulate_Far_Call, Resume_Exec,
+                                         * End_Nest_Exec) */
+        if (nest_call && !(c->eflags & EFL_VM) && cur_vm == &sysvm && sysvm.pm) {
+            struct cregs in, out;
+            memset(&in, 0, sizeof(in));
+            in.eax = c->eax; in.ebx = c->ebx; in.ecx = c->ecx; in.edx = c->edx;
+            in.esi = c->esi; in.edi = c->edi; in.ebp = c->ebp;
+            in.ds = c->ds; in.es = c->es;
+            dpmi_pm_farcall_regs(&in, nest_sel, nest_off, nest_args, nest_nargs, &out);
+            c->eax = out.eax; c->ebx = out.ebx; c->ecx = out.ecx; c->edx = out.edx;
+            c->esi = out.esi; c->edi = out.edi;
+        } else if (nest_call)
+            trace("VMM: Resume_Exec of %x:%x in V86 mode not done\n", nest_sel, nest_off);
+        nest_call = 0;
+        nest_nargs = 0;
         return 1;
     case 0x86:                          /* End_Nest_Exec */
         if (nest_level) nest_level--;
+        nest_call = 0;
+        nest_nargs = 0;
         return 1;
     case 0x8D:                          /* Save_Client_State: EDI a buffer */
         memcpy((void *)s->edi, c, sizeof(*c));

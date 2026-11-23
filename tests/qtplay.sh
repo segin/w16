@@ -176,6 +176,12 @@ if [ -n "$treek" ] && grep -qi '^wave=sb16.drv' "$tree/SYSTEM.INI"; then
     refsnd="-f $out/SNDBLST2.DRV=WINDOWS/SYSTEM/SNDBLST2.DRV -i drivers:wave=sndblst2.drv
         -i drivers:midi=sndblst2.drv -i sndblst.drv:port=220 -i sndblst.drv:int=7"
 fi
+# in 386 Enhanced mode with its VxD, as Setup installs the two (the tree
+# has w16's VSBD.386: assets/SYSTEM.INI)
+if [ -n "$refsnd" ] && [ -n "$enh" ]; then
+    python3 -I "$root/tools/szdd.py" "$root/.tools/ref/win31/src/VSBD.38_" "$out/VSBD.386"
+    refsnd="$refsnd -f $out/VSBD.386=WINDOWS/SYSTEM/VSBD.386 -i 386Enh:+device=vsbd.386"
+fi
 newref=
 if [ -z "$refdir" ]; then
     refdir=$out/ref newref=1

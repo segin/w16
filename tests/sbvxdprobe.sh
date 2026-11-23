@@ -57,6 +57,10 @@ if [ -f "$root/tests/sb16/$sc.sbp" ]; then
     set -- "$@" -f "$root/build/dos/SBP.EXE=SBP.EXE" -f "$root/tests/sb16/$sc.sbp=SBP.TXT" \
         -i 'boot:shell=C:\SBP.EXE'
 fi
+# SBVXD_W16MM=1: w16's MMSYSTEM.DLL and MMTASK.TSK (w16's side)
+[ -z "${SBVXD_W16MM:-}" ] || [ "$side" != w16 ] ||
+    set -- "$@" -f "$root/build/dos/MMSYSTEM.DLL=WINDOWS/SYSTEM/MMSYSTEM.DLL" \
+        -f "$root/build/dos/MMTASK.TSK=WINDOWS/SYSTEM/MMTASK.TSK"
 for kv in ${SBVXD_INI:-}; do set -- "$@" -i "$kv"; done
 DROPIN_CAPTURE=$o/cap DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 DROPIN_MACHINE=svga_s3 \
 DROPIN_CONF="[serial]

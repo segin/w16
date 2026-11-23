@@ -713,6 +713,58 @@ void vm_event(struct vm *v, void (*fn)(struct vm *, void *), void *arg)
 
 int dpmi_in_handler(void);
 
+/* ---- the devices' events (the DDK: Schedule_Global_Event 0Eh,
+ * Schedule_VM_Event 0Fh, Call_Global_Event 10h, Call_VM_Event 11h,
+ * Cancel_Global_Event 12h, Cancel_VM_Event 13h, Call_Priority_VM_Event
+ * 14h, Cancel_Priority_VM_Event 15h): the procedure is called in the VM
+ * (a global event: the current one) when it can take it, EBX the VM, EDX
+ * the reference data, EBP its client registers; ESI back the handle.
+ * Windows 3.1's VTDAPI.386 uses Call_Priority_VM_Event (MMSYSTEM's timer
+ * events in 386 Enhanced mode: MCISEQ under w16's WIN386 stopped on it).
+ * UNVERIFIED: the priority boost and the flags (here: no boost, always as
+ * soon as the VM runs with interrupts on), a Call_ run at once when it
+ * could be (here: always queued) ---- */
+struct devev { u32 proc, ref, cancelled; };
+static void devev_run(struct vm *v, void *arg)
+{
+    struct devev *d = arg;
+    struct cregs *r = vmm_trap_state(NULL);
+    struct svcregs s;
+    vmm_trap_state(r);
+    if (!d->cancelled && r) {
+        memset(&s, 0, sizeof(s));
+        s.ebx = VMH(v);
+        s.edx = d->ref;
+        s.ebp = (u32)v->client;
+        vxd_client(r, v->client);
+        vmm_call_proc(d->proc, &s);
+        vxd_client_back(r, v->client);
+    }
+    kfree(d);
+}
+static int event_service(u32 svc, struct svcregs *s)
+{
+    struct devev *d;
+    struct vm *v;
+    switch (svc) {
+    case 0x0E: case 0x10:               /* Schedule/Call_Global_Event: ESI, EDX */
+    case 0x0F: case 0x11: case 0x14:    /* Schedule/Call_(Priority_)VM_Event: EBX too */
+        v = (svc == 0x0E || svc == 0x10) ? cur_vm : vm_of(s->ebx);
+        if (!v || !s->esi || (d = kmalloc(sizeof(*d))) == NULL) { s->esi = 0; return 1; }
+        d->proc = s->esi;
+        d->ref = s->edx;
+        d->cancelled = 0;
+        vm_event(v, devev_run, d);
+        s->esi = (u32)d;
+        return 1;
+    case 0x12: case 0x13: case 0x15:    /* Cancel_*: ESI the handle (0: nothing) */
+        if (s->esi) ((struct devev *)s->esi)->cancelled = 1;
+        s->esi = 0;
+        return 1;
+    }
+    return 0;
+}
+
 static int events_ok(struct cregs *r)
 {
     if (cur_vm != &sysvm) return 1;
@@ -941,6 +993,7 @@ static u32 cpu_percent(struct vm *v)
 int vm_service(u32 svc, struct svcregs *s)
 {
     struct vm *v;
+    if (event_service(svc, s)) return 1;
     switch (svc) {
     case 0x0001:                        /* Get_Cur_VM_Handle */
         s->ebx = VMH(cur_vm);

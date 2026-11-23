@@ -298,6 +298,7 @@ void vm_event(struct vm *v, void (*fn)(struct vm *, void *), void *arg);   /* ru
 void io_vm_gone(struct vm *v);
 void dpmi_pm_int(int vec, struct cregs *r);
 void dpmi_pm_farcall(u32 sel, u32 off, const u16 *args, int n, struct cregs *r);
+void dpmi_pm_farcall_regs(const struct cregs *in, u32 sel, u32 off, const u16 *args, int n, struct cregs *r);
 
 /* shell.c, vdd.c: w16's SHELL and VDD (devices in the VMM module) */
 void shell_init(void);

@@ -72,7 +72,7 @@ static void outb(vu32 port, vu32 v);
 #pragma aux outb = "out dx, al" parm [edx] [eax] modify exact [];
 
 static vu32 sb_port = 0x220, sb_irq = 7, sb_dma = 1, dsp_ver;
-static vu32 sys_vm, owner, irq_h, taken_once;
+static vu32 sys_vm, owner, irq_h, taken_once, nocard;
 static vu32 warned[16];                 /* VMs told already (until they get the card) */
 static struct vid vid;
 
@@ -192,6 +192,7 @@ void __cdecl vsbd_api_proc(struct vregs *r)
         c->eax = (c->eax & 0xFFFF0000u) | 0x0300;
         return;
     case 1:                             /* take the card */
+        if (nocard) { c->eax &= 0xFFFF0000u; return; }
         if (owner && owner != vm) {
             c->eax = (c->eax & 0xFFFF0000u) | 2;
             c->eflags |= VF_CF;
@@ -239,7 +240,8 @@ static vu32 dsp_version(void)
     return v | inb(sb_port + 0x0A);
 }
 
-/* [SECTION] KEY= (hex or decimal) */
+/* [SECTION] KEY= (hex or decimal); *found set when it is there */
+static int found;
 static vu32 profile(const char *sec, const char *key, vu32 def, int hex)
 {
     struct vregs s;
@@ -248,7 +250,9 @@ static vu32 profile(const char *sec, const char *key, vu32 def, int hex)
     s.esi = (vu32)sec;
     s.edi = (vu32)key;
     if (hex) vmm_profile_hex(&s); else vmm_profile_dec(&s);
-    return (s.eflags & (VF_CF | VF_ZF)) ? def : s.eax;
+    if (s.eflags & (VF_CF | VF_ZF)) return def;
+    found = 1;
+    return s.eax;
 }
 
 void __cdecl vsbd_control(struct vregs *r)
@@ -262,13 +266,26 @@ void __cdecl vsbd_control(struct vregs *r)
         /* the card's settings: Windows 3.1's Sound Blaster drivers' section,
          * w16's SB16.DRV's */
         sb_port = profile("sndblst.drv", "port", sb_port, 1);
-        sb_irq = profile("sndblst.drv", "int", sb_irq, 0);
         sb_dma = profile("sndblst.drv", "dma", sb_dma, 0);
         sb_port = profile("sb16.drv", "port", sb_port, 1);
-        sb_irq = profile("sb16.drv", "int", sb_irq, 0);
         sb_dma = profile("sb16.drv", "dma", sb_dma, 0);
-        if (sb_irq == 2) sb_irq = 9;
+        found = 0;
+        sb_irq = profile("sndblst.drv", "int", sb_irq, 0);
+        sb_irq = profile("sb16.drv", "int", sb_irq, 0);
         dsp_ver = dsp_version();
+        if (!dsp_ver) {
+            /* no card: nothing to share (the API lets every VM have it) */
+            nocard = 1;
+            break;
+        }
+        if (!found && dsp_ver >= 0x400) {
+            /* the SB16's mixer says its IRQ (register 80h), as SB16.DRV
+             * reads it */
+            outb(sb_port + 4, 0x80);
+            i = inb(sb_port + 5);
+            sb_irq = (i & 2) ? 5 : (i & 4) ? 7 : (i & 1) ? 9 : (i & 8) ? 10 : sb_irq;
+        }
+        if (sb_irq == 2) sb_irq = 9;
         for (i = 0; i < NPORTS; i++) {
             clr(&s);
             s.edx = port_n(i);
