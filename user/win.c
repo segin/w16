@@ -723,7 +723,7 @@ BOOL destroy_window(HWND h)
        its ACTIVATE names the dying window as the active one - where w16
        does it afterwards; done here, with the same choice of window, Task
        List's End Task and tiling went wrong: boot test taskman. Left:
-       docs/notes/user-audit-triage.md) */
+       docs/notes/user-audit-triage.md, in git history) */
     wasvis = is_visible(w);
     rc = w->rcWindow;
     if (wasvis)

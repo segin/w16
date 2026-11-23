@@ -453,7 +453,7 @@
 #              Left, the restore button clicked, Accessories maximised,
 #              the Window menu, Ctrl+F4 (tests/scripts/input/mdimax.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
-#   uaudit     the USER audit (docs/notes/user-audit-triage.md): probes US29
+#   uaudit     the USER audit (docs/notes/user-audit-triage.md, in git history): probes US29
 #              (with its helper task US29A and DLL US29D) and US30 (the
 #              hooks) as the shell on 3.1 and on w16's USER, their OBS lines
 #              identical; and US29's runs that 3.1 itself does not survive

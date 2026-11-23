@@ -1,6 +1,6 @@
 /*
  * us29.c - probe US29: what Windows 3.1's USER does in the places the
- * USER audit found unsafe in w16 (docs/notes/user-audit-triage.md).
+ * USER audit found unsafe in w16 (docs/notes/user-audit-triage.md, in git history).
  *
  * Run as the shell, with its helper task US29A.EXE (us29a.c) and DLL
  * US29D.DLL (us29d.c) in C:\, on Windows 3.1 (tests/dropin.sh -r) and

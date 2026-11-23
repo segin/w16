@@ -1,6 +1,6 @@
 /*
  * us30.c - probe US30: where Windows 3.1's USER calls the hooks w16 did
- * not call (USER audit, item 8; docs/notes/user-audit-triage.md), with
+ * not call (USER audit, item 8; docs/notes/user-audit-triage.md, in git history), with
  * which code, wParam and lParam, and what a nonzero return does.
  *
  * Run as the shell on Windows 3.1 (tests/dropin.sh -r) and with w16's
@@ -128,7 +128,7 @@ LRESULT FAR PASCAL __export __loadds cbt_proc(int code, WPARAM w, LPARAM l)
     }
     /* the activation after a's DESTROYWND is not compared: 3.1 activates
        the next window before a goes, w16 after (left:
-       docs/notes/user-audit-triage.md) */
+       docs/notes/user-audit-triage.md, in git history) */
     if (code == HCBT_DESTROYWND && (HWND)w == ha)
         frozen = 1;
     return CallNextHookEx(hk, code, w, l);

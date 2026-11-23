@@ -2335,7 +2335,7 @@ $(DOS)/US31B.EXE: $(B)/tests/start.o $(B)/tests/us31b.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us31b.map file { $(B)/tests/start.o $(B)/tests/us31b.o }
 dos: $(DOS)/US31B.EXE
-# US29: the USER audit's probe (tests/apps/us29.c; docs/notes/user-audit-triage.md),
+# US29: the USER audit's probe (tests/apps/us29.c; docs/notes/user-audit-triage.md, in git history),
 # its helper task US29A (us29a.c) and DLL US29D (us29d.c)
 $(B)/tests/us29.o: tests/apps/us29ref.h tests/apps/tklog.h
 $(DOS)/US29.EXE: $(B)/tests/start.o $(B)/tests/us29.o $(B)/tests/us29s.o $(B)/tests/mevent.o tests/apps/app.lnk tests/apps/us29.lnk
