@@ -177,7 +177,7 @@ static void unlock_in(WORD sel, HLOCAL h)
    NULL if there is no memory for it. Read from the control's block
    (EM_GETHANDLE), not with GetWindowText, whose count is an int: w16's
    USER returns nothing for 32767 characters or more (3.1's copies them;
-   docs/notes/notepad-audit-triage.md C1). */
+   Notepad audit C1, ARCHITECTURE.md 15.1). */
 LPSTR edit_text(WORD *len)
 {
     WORD n = (WORD)SendMessage(g_edit, WM_GETTEXTLENGTH, 0, 0), i;

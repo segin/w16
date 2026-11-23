@@ -1,5 +1,5 @@
 ; NP12: Page Setup margins against the printer's page (Generic / Text Only,
-; 8.5 x 11 inches; docs/notes/notepad-audit-triage.md H2, M1): on 3.1
+; 8.5 x 11 inches; Notepad audit H2, M1): on 3.1
 ; left + right or top + bottom of 8.5 or 11 or more give "The Margin values
 ; are not correct" (8.4 and 10.9 do not), the focus back in Left
 ; expand TTY.DR_ WINDOWS/SYSTEM/TTY.DRV

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Notepad and Windows' end (docs/notes/notepad-audit-triage.md M5):
+# Notepad and Windows' end (the Notepad audit's M5, ARCHITECTURE.md 15.1):
 # WM_QUERYENDSESSION posted to Notepad (SNAP's postwin) with text typed and
 # one of its dialogs open, Microsoft's Notepad and w16's, on the reference
 # 3.1. A system-modal box stops SNAP, so each case is a whole-screen

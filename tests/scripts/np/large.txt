@@ -1,4 +1,4 @@
-; NP11: a large file (docs/notes/notepad-audit-triage.md C1, C2): 51190
+; NP11: a large file (Notepad audit C1, C2; ARCHITECTURE.md 15.1): 51190
 ; bytes of 64-character lines, "zq" typed at its end, Save As (the text
 ; read past 32767 characters); Word Wrap (3.1's refuses with "too much
 ; text", w16's wraps: either keeps the text; its OK clicked);
