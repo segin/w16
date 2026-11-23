@@ -333,7 +333,7 @@
 #              WIN /3: until 2026-11-22 the movie ended Windows with a
 #              #GP in TIMER:1 (a nested interrupt's frame put on WIN386's
 #              host stack over TIMER's words while its callback ran on
-#              MMSYSTEM's stack; win386/vmm/dpmi.c hstk_base)
+#              MMSYSTEM's stack; win386/vmm/dpmi.c nest_stack)
 #   mmsystem  w16's MMSYSTEM.DLL and MMTASK.TSK (ARCHITECTURE.md 23)
 #              against Microsoft's, on the reference 3.1
 #              (tests/mmsystem/mscen.sh): parts core (the probe MMP.EXE:
