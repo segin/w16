@@ -21,8 +21,13 @@
  * - Ranges, checked on OK with a "Control Panel" message (information):
  *   border width 1-50, icon spacing 32-512, granularity 0-49; a delay of
  *   0 minutes is taken.
- * - Cursor blink rate 200-1200 ms, 20 per step of the bar; Home is the
- *   Fast end (200), End the Slow one, as on the Mouse applet's bars.
+ * - Cursor blink rate 200-1200 ms, 20 per step of the bar, 250 per page;
+ *   Home is the Fast end (200), End the Slow one, as on the Mouse
+ *   applet's bars. The bar starts at WIN.INI CursorBlinkRate (530 when
+ *   absent), whatever the caret's rate is; every move of it sets the
+ *   caret's rate at once (SetCaretBlinkTime), and Cancel leaves the last
+ *   one (dkblk*.txt). The sample left of the bar is inverted at that rate:
+ *   yellow on a navy window, black on white (dkcolors.txt).
  * - Patterns: CONTROL.INI [Patterns] (name=8 numbers), "(None)" first,
  *   sorted. Screen savers: the Windows directory's *.SCR files, listed by
  *   the name in their module description ("SCRNSAVE : Blank Screen").
@@ -283,6 +288,20 @@ static void set_blink_bar(HWND dlg)
     SetScrollPos(GetDlgItem(dlg, IDC_DK_BLINK), SB_CTL, (BLINK_MAX - blink) / BLINK_STEP, TRUE);
     KillTimer(dlg, 1);
     SetTimer(dlg, 1, blink, NULL);
+}
+
+/* the blink sample (an empty static, IDC_DK_BLINKER): inverted and back
+   at the rate, as a caret is drawn (an empty static paints nothing of its
+   own: showing and hiding it showed nothing). A repaint of the static
+   only moves the phase. */
+static void blink_sample(HWND dlg)
+{
+    HWND b = GetDlgItem(dlg, IDC_DK_BLINKER);
+    HDC dc = GetDC(b);
+    RECT r;
+    GetClientRect(b, &r);
+    InvertRect(dc, &r);
+    ReleaseDC(b, dc);
 }
 
 /* ---- validation ---- */
@@ -571,25 +590,23 @@ BOOL FAR PASCAL __loadds DesktopProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         CheckDlgButton(dlg, IDC_DK_WRAP, wrap0);
         SetDlgItemInt(dlg, IDC_DK_GRAN, GetProfileInt(s_desk, "GridGranularity", 0), TRUE);
         SetDlgItemInt(dlg, IDC_DK_BORDER, GetProfileInt(s_win, "BorderWidth", 3), TRUE);
-        blink = GetCaretBlinkTime();
+        blink = GetProfileInt(s_win, "CursorBlinkRate", 530);    /* observed */
         if (blink < BLINK_MIN) blink = BLINK_MIN;
         if (blink > BLINK_MAX) blink = BLINK_MAX;
         SetScrollRange(sb, SB_CTL, 0, (BLINK_MAX - BLINK_MIN) / BLINK_STEP, FALSE);
         set_blink_bar(dlg);
         return TRUE;
     }
-    case WM_TIMER: {        /* the blink sample: a bar that blinks at the rate */
-        HWND b = GetDlgItem(dlg, IDC_DK_BLINKER);
-        ShowWindow(b, IsWindowVisible(b) ? SW_HIDE : SW_SHOW);
+    case WM_TIMER:          /* the blink sample */
+        blink_sample(dlg);
         return TRUE;
-    }
     case WM_HSCROLL: {
         int v = blink;
         switch (wp) {
         case SB_LINEUP:        v += BLINK_STEP; break;
         case SB_LINEDOWN:      v -= BLINK_STEP; break;
-        case SB_PAGEUP:        v += 5 * BLINK_STEP; break;     /* UNVERIFIED */
-        case SB_PAGEDOWN:      v -= 5 * BLINK_STEP; break;
+        case SB_PAGEUP:        v += 250; break;    /* observed: 530 -> 280 */
+        case SB_PAGEDOWN:      v -= 250; break;
         case SB_TOP:           v = BLINK_MIN; break;
         case SB_BOTTOM:        v = BLINK_MAX; break;
         case SB_THUMBTRACK:
@@ -600,6 +617,7 @@ BOOL FAR PASCAL __loadds DesktopProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         if (v > BLINK_MAX) v = BLINK_MAX;
         blink = v;
         set_blink_bar(dlg);
+        SetCaretBlinkTime(blink);       /* observed: at once, not on OK */
         return TRUE;
     }
     case WM_VSCROLL: {
