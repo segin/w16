@@ -14,6 +14,13 @@
  * Without a tail, the letters come from C:\WO2.INI [wo2] hooks=.
  * At start it also records GetWinOldApHooks (KERNEL.344) and what it points
  * to, GetWinFlags.
+ * C:\WO2.INI [wo2] eat=A,B: A seconds after it starts it takes the global
+ * heap in 64 KB blocks (moveable, not discardable) until GlobalAlloc
+ * fails, gives back the last four (256 KB: room for small allocations,
+ * none of 640 KB), and B seconds after it starts logs the switcher's
+ * list (block 17Ch, the records in use) and frees them all (a DOS
+ * program's start with its buffer's GlobalAlloc failing, the WINOLDAP
+ * audit's C1).
  */
 #include <windows.h>
 #include <toolhelp.h>
@@ -43,6 +50,54 @@ extern void __cdecl snap_now(WORD off);
 extern void __cdecl get_block(void);
 #define BLKSZ 0x540
 static WORD snaps_done;
+
+/* eat=A,B */
+static void lopen(void);
+static void lclose(void);
+static void out(const char *s);
+#define NEAT 600
+static HGLOBAL eaten[NEAT];
+static WORD neat, eat_at, free_at, ticks;
+
+static void eat_tick(void)
+{
+    char l[80];
+    int k;
+    ticks++;
+    if (eat_at && ticks == eat_at * 2) {
+        while (neat < NEAT && (eaten[neat] = GlobalAlloc(GMEM_MOVEABLE, 0x10000L)) != NULL)
+            neat++;
+        wsprintf(l, "-- eat: %u blocks of 64 KB, 4 given back\r\n", neat);
+        for (k = 0; k < 4 && neat; k++)
+            GlobalFree(eaten[--neat]);
+        lopen();
+        out(l);
+        lclose();
+    }
+    if (free_at && ticks == free_at * 2) {
+        /* what is in the switcher's list now (17Ch, the records' kinds
+           and names), as nothing swaps Windows out here */
+        lopen();
+        if (blksel) {
+            const BYTE FAR *b = (const BYTE FAR *)MAKELP(blksel, blkoff);
+            wsprintf(l, "-- eat: block 17Ch %02X\r\n", b[0x17C]);
+            out(l);
+            for (k = 0; k < 16; k++) {
+                const BYTE FAR *r = b + 0x1D9 + k * 0x32;
+                if (r[0x29] != 0x80) {
+                    wsprintf(l, "-- eat: record %d kind %02X [%.30s]\r\n", k, r[0x29], (LPCSTR)r);
+                    out(l);
+                }
+            }
+        }
+        lclose();
+        while (neat)
+            GlobalFree(eaten[--neat]);
+        lopen();
+        out("-- eat: all freed\r\n");
+        lclose();
+    }
+}
 
 #define REC 23
 #define MAXPEND 64
@@ -274,6 +329,16 @@ void __cdecl __far tmain(void)
         }
     }
     header(tl);
+    {
+        char e[24];
+        LPSTR p = e;
+        GetPrivateProfileString("wo2", "eat", "", e, sizeof e, "C:\\WO2.INI");
+        for (; *p >= '0' && *p <= '9'; p++)
+            eat_at = eat_at * 10 + (*p - '0');
+        if (*p == ',')
+            for (p++; *p >= '0' && *p <= '9'; p++)
+                free_at = free_at * 10 + (*p - '0');
+    }
     sel40 = get_0040h();
     hb = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, 65000L);
     bufsel = SELECTOROF(GlobalLock(hb));
@@ -325,8 +390,10 @@ void __cdecl __far tmain(void)
     lclose();
     SetTimer(NULL, 1, 500, NULL);
     while (GetMessage(&msg, NULL, 0, 0)) {
-        if (msg.message == WM_TIMER)
+        if (msg.message == WM_TIMER) {
             flush();
+            eat_tick();
+        }
         DispatchMessage(&msg);
     }
     flush();

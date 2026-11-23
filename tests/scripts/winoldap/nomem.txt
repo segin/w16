@@ -1,0 +1,30 @@
+# a DOS program's start with the global heap taken (WO2 eat=: 256 KB
+# left in 64 KB pieces, so no buffer for Windows' low memory). 3.1's
+# WINOLDAP switches all the same and Windows does not come back; w16's
+# says "Insufficient memory to run the application." and leaves the
+# switcher's list alone: WO2 logs it as it gives the heap back, 17Ch 0 and
+# only Windows' record (the WINOLDAP audit's C1: w16 had entered the
+# program's record and the Windows application's, 17Ch 2). No program is
+# run after it: once eat= has taken the heap, even a later program's
+# switch with Microsoft's WINOLDAP never came back to Windows.
+# opts: files=WC1 wait eat=15,70
+# expect: WO2.LOG -- eat: block 17Ch 00
+# expect: WO2.LOG -- eat: record 15 kind 68
+sleep 45
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\WC1.COM one
+key Return
+sleep 6
+shot nomem
+key Return
+sleep 4
+shot after
+sleep 50
+shot end
+key alt+F4
+sleep 3
+key Return
+sleep 8

@@ -23,7 +23,8 @@
 #     -t SECS    hard time limit (default 300)
 # WORUN_CONF in the environment: more dosbox.conf lines (sections and
 # settings), e.g. "[serial]" and "serial1=file file:PATH" for a VxD probe's
-# COM1 log (tests/pifread.sh)
+# COM1 log (tests/pifread.sh); WORUN_MOUNT: more options for C:'s mount,
+# e.g. "-size 512,128,2000,1000" (64 KB clusters: tests/winoldap.sh)
 # The script, one command per line ('#' comments):
 #     sleep S          wait S seconds (decimals allowed)
 #     key K...         xdotool key names: alt+Tab ctrl+Escape Return ...
@@ -87,7 +88,7 @@ if [ -n "$script" ]; then cp "$script" "$out/script.txt"; else printf 'sleep 40\
     printf '[mixer]\nnosound=true\n[speaker]\npcspeaker=false\n'
     if [ -n "$logs" ]; then printf '[log]\nlogfile=%s/dosbox.log\nint21=debug\nfileio=debug\nexec=debug\nfiles=debug\n' "$out"; fi
     if [ -n "${WORUN_CONF:-}" ]; then printf '%s\n' "$WORUN_CONF"; fi
-    printf '[autoexec]\nmount c "%s/c"\nc:\n' "$out"
+    printf '[autoexec]\nmount c "%s/c" %s\nc:\n' "$out" "${WORUN_MOUNT:-}"
     printf '%s\n' "$pre" | tr ';' '\n'
     printf 'cd \\WINDOWS\n%s\necho WINEXIT > C:\\OUT.TXT\nexit\n' "$wcmd"
 } > "$out/dosbox.conf"

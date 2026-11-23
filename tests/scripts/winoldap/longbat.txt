@@ -1,0 +1,23 @@
+# File > Run "C:\LONGBAT.PIF": a batch file 61 characters long, 64
+# characters of parameters, so " /c FILE  PARAMS" is 131 characters. 3.1's
+# WINOLDAP writes all of it to the block, over the grabber's path at 87h,
+# and its switch fails ("Cannot find the file WINOLDAP.GRB"); w16's writes
+# 128 (80h) and runs it, COMMAND.COM reads 126 (the WINOLDAP audit's H1)
+# opts: files=WC1 wait longbat
+# expect: blocks -> 80 20 2f 63 20 43 3a 5c 44 32 33
+# expect: WC.LOG tail=3C \[ a123456789b.*f12345678\] end=0D
+sleep 32
+key alt+f
+sleep 1
+key r
+sleep 2
+type c:\longbat.pif
+key Return
+sleep 3
+shot run
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 8

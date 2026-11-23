@@ -16,6 +16,10 @@
 #     Windows screens (where the DOS programs' icons are: w16 draws its own,
 #     ARCHITECTURE.md 6.8) masked; up to 40 pixels may differ on any
 #     screen (a blinking cursor or edit caret).
+# A scenario with "# expect: FILE REGEX" lines is one where 3.1's WINOLDAP
+# corrupts its own data or fails and w16's deliberately does not (the
+# WINOLDAP audit, ARCHITECTURE.md 9.8): only w16's runs, and each REGEX
+# must match FILE (C:\FILE, or "blocks", the snapshots).
 #
 #   usage: tests/winoldap.sh [-o DIR] [-m WINOLDAP.MOD] [-k KRNL286.EXE] [SCENARIO...]
 #     -o DIR   keep everything in DIR (new): DIR/NAME/{ms,w16}/*.png ...
@@ -64,6 +68,18 @@ printf 'echo batch here\r\nC:\\WC1.COM batarg\r\n' > "$work/files/T.BAT"
 printf 'wait\r\n' > "$work/files/WCWAIT.TXT"
 python3 "$root/tools/mkpif.py" "$ref/WINDOWS/_DEFAULT.PIF" "$work/files/PROBE.PIF" \
     'title=Probe Program' 'program=C:\WC1.COM' 'dir=C:\WINDOWS\SYSTEM' 'params=?'
+# long command tails (the audit's H1, H3): a PIF naming a batch file 61
+# characters long with 64 characters of parameters and no NUL
+deep='D2345678.901\D2345678.901\D2345678.901\D2345678.901'
+printf 'C:\\WC1.COM %%1\r\n' > "$work/files/TT.BAT"
+python3 "$root/tools/mkpif.py" "$ref/WINDOWS/_DEFAULT.PIF" "$work/files/LONGBAT.PIF" \
+    'title=Long Batch' "program=C:\\$deep\\TT.BAT" \
+    'params=a123456789b123456789c123456789d123456789e123456789f123456789g123'
+for p in 60 61; do      # tails of 127 and 128 characters
+    python3 "$root/tools/mkpif.py" "$ref/WINDOWS/_DEFAULT.PIF" "$work/files/LB$((p + 67)).PIF" \
+        'title=Long Batch' "program=C:\\$deep\\TT.BAT" \
+        "params=$(printf '%s' 'a123456789b123456789c123456789d123456789e123456789f123456789g123' | cut -c1-$p)"
+done
 # WINOLDAP_PIF=FILE: that PIF (with the same settings) instead, e.g. one
 # saved by w16's PIF Editor (tests/scripts/pifedit/PF12.txt)
 [ -z "${WINOLDAP_PIF:-}" ] || cp "$WINOLDAP_PIF" "$work/files/PROBE.PIF"
@@ -72,20 +88,27 @@ run_one() {   # run_one DIR WINOLDAP OPTIONS SCRIPT
     d=$1 m=$2 opts=$3 script=$4
     set -- -o "$d" -m "$m" -x "$script" -f "$dos/WO2.EXE=WO2.EXE" \
         -f "$work/files/WO2.INI=WO2.INI" -n 'windows:load=C:\WO2.EXE'
-    pre='SET TEMP=C:\WINDOWS\TEMP'
+    pre='SET TEMP=C:\WINDOWS\TEMP' mount=
     for o in $opts; do
         case $o in
         files=WC1) set -- "$@" -f "$dos/WC1.COM=WC1.COM" ;;
         wait) set -- "$@" -f "$work/files/WCWAIT.TXT=WCWAIT.TXT" ;;
         bat) set -- "$@" -f "$work/files/T.BAT=T.BAT" ;;
         pif) set -- "$@" -f "$work/files/PROBE.PIF=PROBE.PIF" ;;
+        longbat) set -- "$@" -f "$work/files/LONGBAT.PIF=LONGBAT.PIF" \
+                     -f "$work/files/LB127.PIF=LB127.PIF" -f "$work/files/LB128.PIF=LB128.PIF" \
+                     -f "$work/files/TT.BAT=$(printf '%s' "$deep" | tr '\\' /)/TT.BAT" ;;
+        eat=*)  # WO2 takes the global heap (tests/apps/wo2.c)
+                printf '[wo2]\r\nhooks=fdt\r\neat=%s\r\n' "${o#eat=}" > "$work/files/WO2E.INI"
+                set -- "$@" -f "$work/files/WO2E.INI=WO2.INI" ;;
+        size=*) mount="-size ${o#size=}" ;;
         rm=*) set -- "$@" -f "${o#rm=}=-" ;;
         notemp) pre= ;;
         esac
     done
     [ -z "$pre" ] || set -- "$@" -c "$pre"
     # shellcheck disable=SC2086
-    "$root/tests/worun.sh" "$@" $krnl > /dev/null 2>&1 || true
+    WORUN_MOUNT=$mount "$root/tests/worun.sh" "$@" $krnl > /dev/null 2>&1 || true
 }
 
 # the block snapshots, without the buffer's linear address
@@ -99,6 +122,21 @@ for n in $names; do
     script=$sdir/$n.txt
     [ -f "$script" ] || { echo "no scenario $n" >&2; exit 2; }
     opts=$(sed -n 's/^# opts: //p' "$script")
+    if grep -q '^# expect: ' "$script"; then
+        # where w16 differs from 3.1 on purpose (3.1 corrupts or fails):
+        # w16's run alone, each "# expect: FILE REGEX" (FILE in C:\, or
+        # "blocks": the snapshots as compared below) must match
+        run_one "$work/$n/w16" "$mod" "$opts" "$script"
+        blocks "$work/$n/w16" > "$work/$n/w16.blocks"
+        bad=
+        sed -n 's/^# expect: //p' "$script" > "$work/$n/expect"
+        while read -r f re; do
+            if [ "$f" = blocks ]; then t=$work/$n/w16.blocks; else t=$work/$n/w16/c/$f; fi
+            [ -f "$t" ] && tr -d '\r' < "$t" | grep -aEq -- "$re" || bad="$bad [$f $re]"
+        done < "$work/$n/expect"
+        if [ -z "$bad" ]; then echo "PASS $n"; else echo "FAIL $n:$bad"; failures=$((failures + 1)); fi
+        continue
+    fi
     run_one "$work/$n/ms" "$ref/WINDOWS/SYSTEM/WINOLDAP.MOD" "$opts" "$script"
     run_one "$work/$n/w16" "$mod" "$opts" "$script"
     bad=
