@@ -164,7 +164,7 @@ is newer. Neither mode needs anything of Microsoft's.
                           is built in; Evergreen, Ocean, Plum, Brick,
                           Midnight and High Contrast are w16's own)
   PROGMAN.INI             Program Manager's settings and its groups:
-  MAIN.GRP                  Main (DOS Prompt, Read Me, Control
+  MAIN.GRP                  Main (Command Prompt, Read Me, Control
                             Panel, File Manager, Registry Editor, PIF
                             Editor)
   ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
