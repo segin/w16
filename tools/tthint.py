@@ -25,6 +25,9 @@ extremum, so edges can be read off the points:
     common stem width as control value when the stem is near it), the
     first one pinned (blue zone) or rounded (MDAP); other points of an
     edge follow with ALIGNRP;
+  - every other edge (serif tips, dots, bar ends, gaps) is linked to the
+    nearest placed edge at its rounded distance, a pixel at least unless
+    the edges nearly touch (MDRP);
   - everything else moves with IUP (interpolation) in y, then in x.
 
 The font program holds the stem-linking functions (fpgm()). The prep
@@ -43,6 +46,8 @@ MDAP_R = 0x2F
 MIRP = 0xE0          # + flags: 0x10 set rp0, 0x08 min distance, 0x04 round, 1 black
 MIRP_STEM = MIRP | 0x10 | 0x08 | 0x04 | 0x01
 MDRP_STEM = 0xC0 | 0x10 | 0x08 | 0x04 | 0x01
+MDRP_LINK = MDRP_STEM                 # set rp0, minimum distance, round
+MDRP_NEAR = 0xC0 | 0x10 | 0x04 | 0x01  # set rp0, round
 SCANCTRL, SCANTYPE = 0x85, 0x8D
 MPPEM, LT, IF, EIF = 0x4B, 0x50, 0x58, 0x59
 RCVT, WCVTP = 0x45, 0x44
@@ -290,4 +295,32 @@ class Hinter:
             touched.add(b[2][0])
             align_rest(b)
             done.add(id(b))
+        # the rest: serif tips, dots, bar ends, gaps. Each edge not yet
+        # placed is linked to the nearest placed edge (nearest first, so
+        # chains build outwards) at its own rounded distance, at least a
+        # pixel unless it nearly touches (so serifs and dots stay visible
+        # and gaps stay open)
+        small = (min(table) if table else self.upem / 20) * 0.5
+        left = [cl for cl in cls if id(cl) not in done and cl[2][0] not in touched]
+        placed = [cl for cl in cls if id(cl) in done]
+        while left and placed:
+            best = None
+            for cl in left:
+                for ref in placed:
+                    d = abs(cl[1] - ref[1])
+                    over = ref[3][0] <= cl[3][1] and cl[3][0] <= ref[3][1]
+                    key = (0 if over else 1, d)
+                    if best is None or key < best[0]:
+                        best = (key, cl, ref)
+            key, cl, ref = best
+            left.remove(cl)
+            if key[1] > self.upem / 4 or (axis == 0 and key[0]):
+                continue      # (in x only beside an edge it overlaps:
+                              # a serif tip beside its stem)
+            code += push([ref[2][0]]) + bytes([SRP0])
+            code += push([cl[2][0]]) + bytes([MDRP_LINK if key[1] >= small else MDRP_NEAR])
+            touched.add(cl[2][0])
+            align_rest(cl)
+            done.add(id(cl))
+            placed.append(cl)
         return code

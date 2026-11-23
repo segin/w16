@@ -67,8 +67,8 @@ class Style:
             self.hair = 118 if b else 84
             self.n, self.ni = 2.05, 2.15
             self.thin = 142 if b else 94
-            self.sl = 108 if b else 98          # serif length beyond the stem
-            self.st = 84 if b else 64            # serif thickness
+            self.sl = 120 if b else 112          # serif length beyond the stem
+            self.st = 92 if b else 74            # serif thickness
             self.sb = 56 if b else 50            # bracket
         else:
             self.sv = 232 if b else 140
@@ -1462,7 +1462,7 @@ def g_1(s, L, R):
 def g_2(s, L, R):
     h = fig_h(s)
     w = R - L
-    sv, sh = s.svc * (0.98 if s.sans else 1.04), (s.shc if s.sans else s.hair * 1.2)
+    sv, sh = (s.svc * 0.98 if s.sans else s.sv * 0.94 if s.serif else s.svc * 1.04), (s.shc if s.sans else s.hair * 1.2)
     pts = [(L + w * 0.03, h * 0.7), (L + w * 0.5, h + s.ov - sh / 2), (R - sv / 2, h * 0.7),
            (L + w * 0.55, h * 0.32), (L + sv * 0.5, sh * 0.45)]
     tans = [(0.35, 1), (1, 0), (0, -1), (-1, -0.9), (-0.7, -1)]
@@ -1474,7 +1474,7 @@ def g_2(s, L, R):
 def g_3(s, L, R):
     h = fig_h(s)
     w = R - L
-    sv, sh = s.svc * (0.98 if s.sans else 1.04), (s.shc if s.sans else s.hair * 1.2)
+    sv, sh = (s.svc * 0.98 if s.sans else s.sv * 0.94 if s.serif else s.svc * 1.04), (s.shc if s.sans else s.hair * 1.2)
     ym = h * 0.55
     up = open_bowl(s, L + w * 0.06, R - w * 0.05, ym - sh / 2, h + s.ov, -90, 150, None, 0 if s.sans else 90, sv * 0.95, sh)
     lo = open_bowl(s, L, R, -s.ov, ym + sh / 2, -150, 90, 0 if s.sans else 90, None, sv, sh)
@@ -1503,7 +1503,7 @@ def g_4(s, L, R):
 def g_5(s, L, R):
     h = fig_h(s)
     w = R - L
-    sv, sh = s.svc * (0.98 if s.sans else 1.04), (s.shc if s.sans else s.hair * 1.2)
+    sv, sh = (s.svc * 0.98 if s.sans else s.sv * 0.94 if s.serif else s.svc * 1.04), (s.shc if s.sans else s.hair * 1.2)
     ytop = h
     xl = L + w * 0.1
     out = G.rect(xl, ytop - sh, R - w * 0.06, ytop)
@@ -1517,7 +1517,7 @@ def g_5(s, L, R):
 def g_6(s, L, R):
     h = fig_h(s)
     w = R - L
-    sv, sh = s.svc * (0.98 if s.sans else 1.04), (s.shc if s.sans else s.hair * 1.2)
+    sv, sh = (s.svc * 0.98 if s.sans else s.sv * 0.94 if s.serif else s.svc * 1.04), (s.shc if s.sans else s.hair * 1.2)
     yb = h * 0.62
     out = ring_box(s, (L, -s.ov, R, yb), (L + sv, -s.ov + sh, R - sv, yb - sh), 0)
     # the stem rising from the bowl's left side to the top right
@@ -1547,7 +1547,7 @@ def g_7(s, L, R):
 def g_8(s, L, R):
     h = fig_h(s)
     w = R - L
-    sv, sh = s.svc * (0.96 if s.sans else 1.0), (s.shc if s.sans else s.hair * 1.2)
+    sv, sh = (s.svc * 0.96 if s.sans else s.sv * 0.92 if s.serif else s.svc), (s.shc if s.sans else s.hair * 1.2)
     ym = h * 0.55
     up = ring_box(s, (L + w * 0.07, ym - sh * 0.6, R - w * 0.07, h + s.ov),
                   (L + w * 0.07 + sv * 0.9, ym + sh * 0.4, R - w * 0.07 - sv * 0.9, h + s.ov - sh), 0)
