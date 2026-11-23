@@ -301,7 +301,17 @@ such as `p` for a program polling the keyboard or `b` for a busy one)
 prints Windows' busy-loop and message counts with 0, 1, 2 and 4 boxes;
 `VMPOLL_VXT=1` adds the scheduling probe VxD VXT.386 (DOSBox-X, its log in
 OUTDIR/com1.txt). The boot-test case `win386idle` runs it under w16's and
-Microsoft's WIN386 (ARCHITECTURE.md 12.12). XMS and EMS in a DOS box:
+Microsoft's WIN386 (ARCHITECTURE.md 12.12). Where 386 Enhanced mode's
+time goes: `tests/vx16run.sh OUTDIR CONF` runs VX16 (`make vxprobes`) as
+WIN.INI run= and prints its counts by the CMOS clock (a busy loop, the
+clocks, timer events, trapped I/O, reflections, file reads, drawing,
+messages); CONF `ms`, `w16` or `std` (the reference install under
+Microsoft's or w16's WIN386, or Standard mode), `tree`, `treems` or
+`treestd` (w16's install tree the same ways); `VX16_ONLY` picks phases,
+`DROPIN_CYCLES="fixed 30000"` counts instructions instead of host time
+(ARCHITECTURE.md 12.14). `tests/qtplay.sh` takes `QTPLAY_W16OPTS` and
+`tests/sb16/sbaudio.sh` `SBAUDIO_OPTS`/`SBAUDIO_CONF` (more dropin.sh
+options, a COM1 for the VMM's trace) for the w16 side. XMS and EMS in a DOS box:
 `tests/v86mmrun.sh OUTDIR [w16]` runs VX15 (`make vxprobes`) in a box and
 prints its log of XMS and INT 67h results (`V86MM_PIF` the PIF's limits,
 `V86MM_INI` SYSTEM.INI keys such as `386Enh:NoEMMDriver=on`); the case

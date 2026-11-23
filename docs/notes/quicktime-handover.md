@@ -445,12 +445,13 @@ under CLI, wrap-safe times) is no help here: the frame still lands over
 runevents' return address and SI. Merged master without the WIN386 fix:
 `exception 000D at 069F:0023 (TIMER:1)` before the Movie Player came up.
 
-**Left over** (part `enh` prints them, does not check them): the movie
-takes 22-28 s against 3.1's 12 s (ARCHITECTURE.md 21.5; 3.1 needs 12 s
-without a sound device too); the speaker button (SB16.DRV, no devices in
-Enhanced mode, another task); and in 3 runs of 7 under load the drag
-during play was not taken at all (the window stayed, the movie played
-on; never on 3.1): UNVERIFIED why.
+**Left over then** (part `enh` printed them, did not check them): the
+movie took 22-28 s against 3.1's 12 s; the speaker button (SB16.DRV, no
+devices in Enhanced mode, another task); and in 3 runs of 7 under load
+the drag during play was not taken at all. All three gone on 2026-11-23
+and checked again since (ARCHITECTURE.md 12.14: interrupts left off by
+USER, KERNEL and the drivers below IOPL; VTD, the time-outs, the
+reflection stack in WIN386).
 
 **Not the cause:** the INT 21h ring's repeated 3D00h/3E00h (and 4200h,
 3F00h) from KERNEL:1 07CE are KERNEL's own DOS calls (its INT 21h

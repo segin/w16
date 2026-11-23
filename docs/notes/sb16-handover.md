@@ -115,14 +115,14 @@ SB16.DRV in Enhanced mode on top of it.
   SHELL_Message (w16's WINOA386 shows it), the VM event services and
   Simulate_Push/Simulate_Far_Call (Microsoft's VTDAPI's timer callbacks),
   DDB_Next forward.
-- [ ] QuickTime in Enhanced mode with sound (quicktime@enh, the tree now
-  loading VSBD.386): the sound plays but the movie drops frames (garbled
-  picture, ends after ~6 s against 3.1's 12, the close sequence's screens
-  differ): w16's Enhanced mode is about half 3.1's speed for QuickTime
-  (22-26 s without sound), with Microsoft's TIMER+VTDAPI as with w16's.
-  This part fails on this branch. And sbaudio's qtw16e (QuickTime, w16's
-  WIN386, Microsoft's TIMER+VTDAPI) stops at "play" in most runs: left
-  out of sb16@enh. Run names: w16-sb16enh (and w16-sb16enh-m: master).
+- [x] QuickTime in Enhanced mode with sound (quicktime@enh, the tree
+  loading VSBD.386): plays in 12 s with its sound, every check as on 3.1
+  (2026-11-23, run name w16-enhspeed: ARCHITECTURE.md 12.14). It had
+  dropped frames (garbled, ended after 4-6 s) because w16's USER, KERNEL
+  and drivers left interrupts off below IOPL, and w16's WIN386 then hung
+  now and then (the reflection stack's SP); sbaudio's qtw16e (Windows
+  3.1's TIMER.DRV and VTDAPI.386 under w16's WIN386) stopped at "play"
+  because of VTD and the VMM's time-outs: fixed, and back in sb16@enh.
 - [ ] Left: the event Microsoft's SHELL sends Microsoft's WINOA386 for
   SHELL_Message (under Microsoft's WINOA386 w16 shows no message); the
   box's icon behind the message; VSBD's 2 services and API function 0.

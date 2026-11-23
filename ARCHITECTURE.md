@@ -1476,6 +1476,38 @@ Message round trips with no boxes, 8 s: Windows 3.1 290,000; w16 73,000 before, 
 
 **Under load** (MEMLOAD.EXE, `tests/dos/memload.c`: an OpenWatcom 16-bit DOS program that uses the memory as applications do; `tests/memloadrun.sh OUT MODE [w16]`; boot-test case `win386memload`). X: the XMS limit taken in four blocks, each filled through 4 KB moves from conventional memory, a 4,097-byte move from one block's offset 100h to another's offset 3, an overlapping move inside a block downwards (checked) and upwards (its result recorded: Windows 3.1 copies byte by byte, so a 2-byte shift repeats the first word), everything read back and checked, all freed, one block of the total taken and its end written and read; then the HMA: released, requested, A20 on (05h), 8 KB at FFFF:E010 saved, written, read, compared with 0000:E000 (not the same), A20 off (06h: now it wraps), put back. E: 48 EMS pages over three handles filled through the frame, every page mapped again in a pseudo-random order and checked, 47h/48h and 4E00h/4E01h restoring a map, 50h mapping four pages at once, 57h moving 4 KB to a page and back and exchanging two whole pages. 3: XMS 3.0's 88h, 89h, 8Eh, 8Fh (Windows 3.1: AX 0, BL 80h, as for a 2.00 driver) and UMBs (10h B1h, 11h B2h, 12h 80h). C: three Background boxes started together, each running both workloads three times with data of its own, each checking that its blocks, pages and HMA stay its own. F: one box waiting for a file another makes a while later. Under Windows 3.1 every check passes; w16's logs equal 3.1's line for line (but for the speed lines). What it found: the HMA was one 64 KB for every VM (now each VM has its own HMA pages when there is no global HMA user, as the DDK describes, so two boxes writing it no longer see each other's data); only the first box made finds the HMA in use (3.1: the others got 93h for 02h; which box is made first when three start together varies, so C's line for it is not compared); DOSBox's own DOS keeps one current directory for all VMs, so MEMLOAD names its files by its own directory; the VMM's memcpy copied a byte at a time (XMS moves at three quarters of 3.1's rate; now a dword at a time, but byte by byte where the destination overlaps the source from above, as 3.1's result shows). It also found a SHELL bug any user starting several DOS programs at once could meet: SHELL function 15h (WINOA386's window for the VM it made) gave the window to the newest VM without one, so with three boxes started together windows went to the wrong VMs, and when one box's program ended its WINOA386 destroyed another box's VM while that one ran (the box vanished, its open files never closed). Microsoft's WINOA386 passes its own data segment in BX for 15h, the segment its function 3 block came from (ES): SHELL now matches the VM by it (w16's WINOA386 passes the VM's handle in EBX, also taken). Speed (KB/s by the VM's own ticks, one box): XMS fill and read-back 776/847 under 3.1, 582/621 before the memcpy change; EMS fill/read 735/698 and 665/698; in the boot test after the memcpy change, XMS 745/776 under both, EMS 665/735 under w16 and 735/698 under 3.1 (these vary by a tenth from run to run).
 
+### 12.14 Where 386 Enhanced mode's time went: QuickTime at half speed
+
+The report (2026-11-23): QuickTime's sample movie plays in 12 s under Windows 3.1 in 386 Enhanced mode (with and without a sound device), in w16's tree in 22-28 s without sound; with SB16.DRV and VSBD.386 (24.6) it followed the sound, dropped frames, ended garbled after 4-6 s (boot-test part `quicktime@enh` failed); under w16's WIN386 with Windows 3.1's TIMER.DRV and VTDAPI.386 (`tests/sb16/sbaudio.sh qtw16e`) "play" stopped for good in most runs. In Standard mode the tree plays it in 12 s.
+
+**Measuring.** VX16 (`tests/apps/vx16.c`, `tests/vx16run.sh OUT CONF`: WIN.INI run=, plain DOSBox at `cycles=max` as `tests/qtplay.sh`, or `DROPIN_CYCLES="fixed 30000"` for the instructions alone) counts one kind of work per phase for 4 s of the CMOS clock: a busy loop (and the same with a 1 ms periodic timeSetEvent running: what a millisecond timer costs), GetTickCount's and timeGetTime's advance, a 10 ms periodic event's calls, CLI/STI pairs, reads of port 21h (a trapped IN), INT 1Ah and INT 21h AH=19h from protected mode (reflections), 8 KB _lread calls, BitBlt and SetDIBitsToDevice to the screen, PeekMessage and message round trips; first it notes which calls come back with the interrupt flag clear. CONF: `ms`/`w16`/`std` (the reference install, Microsoft's KRNL386, Microsoft's or w16's WIN386, Standard mode), `tree`/`treems`/`treestd` (w16's tree with its WIN386, with Microsoft's, Standard mode). The VMM's heartbeat (`[w16] vmmtrace`, COM1 every 20 s) now also gives the real timer's period, the time-outs set, run and waiting, the device events queued, run and waiting, the nested far calls and the System VM's virtual PIC (mask, in service, requests); `tests/qtplay.sh` (`QTPLAY_W16OPTS`) and `tests/sb16/sbaudio.sh` (`SBAUDIO_OPTS`, `SBAUDIO_CONF`) pass options and a COM1 to the w16 side. QuickTime's movie bisected with `tests/qtplay.sh -E` over 3.1 (`-m WIN386.EXE`, `-m TIMER.DRV`) and with the tree (`QTPLAY_W16OPTS="-f ...=W16/SYSTEM/KRNL386.EXE"`).
+
+**Before** (master de92818, 4 s each): Microsoft's WIN386 over the tree was no faster for QuickTime (over 3.1: 20 s with Microsoft's WIN386, 22 s with w16's), so not only WIN386.
+
+| VX16 | 3.1's WIN386 (ref) | w16's (ref) | tree, w16's | tree, Microsoft's | tree, Standard |
+|---|---|---|---|---|---|
+| tick (ms) | 4009 | 3954 | **0** | **0** | 4010 |
+| tgt (ms) | 4001 | 3989 | **46** | **4** | 4000 |
+| tev (10 ms event) | 399 | **72** | 0 | 0 | 399 |
+| pic (IN 21h) | 1,753,600 | 66,624 | 76,224 | 1,919,040 | 2,766,400 |
+| int1a | 483,776 | 65,600 | 65,344 | 462,528 | 204,096 |
+| dos (21h AH=19h) | 1,496,064 | 108,672 | 35,584 | 265,664 | 292,672 |
+| read (8 KB) | 31,960 | 13,352 | 9,772 | 37,580 | 3,776 |
+| cli (pairs) | 1,167,616 | 1,096,960 | 1,122,048 | 1,113,344 | 23,833,344 |
+| loop | 38.4M | 37.6M | 39.8M | 40.1M | 38.2M |
+
+**The causes, and the fixes:**
+
+1. **Interrupts left off by w16's own code (the half speed).** In the tree GetTickCount did not advance at all while a program computed: USER's queue and timer code (`irq_restore`), KERNEL's (fault.c, toolhelp.c, the move-stack code), VGA.DRV's cursor critical section, KEYBOARD.DRV and TOOLHELP restored the flags with POPF after a CLI. Windows' code runs below IOPL in 386 Enhanced mode, where POPF does not change IF (Intel; the VMM sees no trap): every GetMessage, PeekMessage, PostAppMessage, PatBlt and ReleaseDC came back with interrupts off (VX16's list), and a task started with them off. QuickTime decodes between such calls, so its timer events and the sound card's interrupts waited for its next call. Now each enables interrupts again explicitly when they were on (as Windows 3.1's drivers do: TIMER.DRV and SYSTEM.DRV here had a `popfi` macro already). Movie over 3.1: 22 s -> 14 s; the tree with sound: its last frame 3.1's.
+2. **VTD did not virtualise the timer.** Ports 40h and 43h were the hardware's: w16's TIMER.DRV set the real timer to 1 ms, and the VMM counted every interrupt as 54.9 ms (its time-outs, VPICD's IRET time-outs, the time slices 55 times too fast); VTD_Begin_Min_Int_Period changed nothing, so Windows 3.1's VTDAPI.386 (whose MMSYSTEM events are VMM time-outs) ran every 55 ms at best (VX16 tev 72). Now VTD traps 40h and 43h (Windows 3.1's VTD has them: VSD's probe could not install a handler there, 12.8) and gives each VM a channel 0 of its own (count, mode, access, latch: the BIOS's 65536 counts in mode 3 until it writes one; reads give its own count); the real channel 0 runs in mode 2 at the shortest period a VM programmed or a device asked for (at least 1 ms), each real interrupt's counts go to the system time and to every VM's timer, and a VM gets a tick when its own period is over (one request at most: UNVERIFIED whether Windows 3.1 catches a VM up); the scheduler's slices still count 54.9 ms ticks; channel 1 and 2 control words go to the hardware; at exit the BIOS's mode 3 is set again. VX16 tev under VTDAPI: 72 -> 400 (3.1 399).
+3. **A time-out a millisecond early stopped Windows 3.1's TIMER.DRV (the qtw16e hang).** VTDAPI asks Get_System_Time for the time and sets a VMM time-out for an MMSYSTEM event; w16 counted the time-out from the last tick, which could be a millisecond before what Get_System_Time had just given, so it came when the event was not yet due: TIMER.DRV's callback found nothing to call and set nothing again, and MMSYSTEM's events (QuickTime's frame clock) stopped for good (traced with a ring of VTDAPI's API calls, time-outs and events in the heartbeat: the last callback returned without its usual timeSetEvent). The DDK says Get_System_Time "must call the timer device to update the clock": the clock time-outs count from is now the later of the last tick and the last Get_System_Time (VTDAPI's 10 ms periodic event stays exact: counted from "now" it came a tick late, 200 calls in 4 s). Also: a Begin_Nest_Exec block's simulated far call (VTDAPI's callbacks) is made in protected mode whenever the VM has a protected-mode program, as the DDK says, also when the VM was interrupted in V86 mode (KERNEL's idle INT 28h: most of the time while Windows waits); before, those were dropped ("Resume_Exec ... in V86 mode not done"). qtw16e: 3 of 3 (0 of 2 before); in `sb16@enh` again.
+4. **The reflection stack's SP taken down by code that was not on it (the tree's hang).** With w16's KRNL386 the movie with sound still stopped at 2-10 s in most runs (with Microsoft's KRNL386 on the same tree it played): the VMM ended with "the V86 reflection stack overflows" (its panic stops everything; seen through COM1 over a nullmodem link in plain DOSBox). A ring of the reflection stack's SP changes showed a hardware interrupt reflected to V86 code that ran on the WIN386 loader's data segment (the reflection stack's segment) at SP 05xxh, 27 KB below the stack's top: the nested call's frame start was taken as the reflection stack's, and the next reflection inside it overflowed. Now only an SP within the reflection stack counts as on it (`on_refstk`). 3 of 3 runs of `quicktime@enh` pass every check.
+5. **Trap costs.** A trapped IN cost w16 about 2,000 instructions (fixed cycles; 3.1 about 70); a profile by RDTSC in DOSBox-X (Pentium) split it: the decode 300, the handler call 220, the client registers' copies 200, VPICD's priority walk on the way out 500. Now memset stores dwords, a port finds its handler through a table (was a search of a hundred), VPICD returns at once when nothing is requested: 1.6 times as fast (VX16 pic 67,000 -> 103,000, int1a 64,000 -> 95,000, dos 118,000 -> 201,000, read 14,000 -> 18,000). Still a tenth of 3.1's for traps: not what QuickTime needs now (a 1 ms timer costs a program 23 per cent of its loop under w16's WIN386, 16 under Microsoft's).
+
+**After** (all of it): QuickTime's movie in 386 Enhanced mode 12 s on the tree with sound (`quicktime@enh`, every check including the length, the drag while playing and the dragged picture, 3 of 3), over 3.1 with Windows 3.1's TIMER.DRV under w16's WIN386 12 s, `qtw16e` 3 of 3. VX16 on the tree: tick 4010, tgt 4002, tev 399, no call returns with interrupts off.
+
+**Left, UNVERIFIED:** which V86 code runs on the loader's data segment at SP 05xxh (a hardware interrupt's handler in real mode reached from a protected-mode one; the VMM traces it once: "V86 code at ... on the loader's segment"); w16's KRNL386 idles with INT 28h in real mode through DPMI 0300h (about 20,000 a second while QuickTime waits for its next frame) where Pietrek (the scheduler's idle loop) describes KERNEL making INT 28h and then INT 2Fh 1689h; trapped I/O and reflections are still several times 3.1's cost; w16's VGA.DRV draws a memory bitmap to the screen at a tenth of Microsoft's rate (VX16 blt 192-204 against 2,028-2,264, dib 44-47 against 141-154, in both modes: Standard mode plays the movie in 12 s all the same).
+
 ## 13. SHELL
 
 `SHELL.DLL` (module SHELL) is the shell library of Windows 3.1: the registration database, drag and drop for receivers, `ShellExecute`/`FindExecutable`, icon extraction, the About box, environment substitution, and the shell hook. w16's is `shell/shelldll/` (`make shelldll`: `build/dos/SHELL.DLL`, also `build/w16/SYSTEM/SHELL.DLL`). It is a drop-in replacement: copied over `WINDOWS\SYSTEM\SHELL.DLL` it serves Microsoft's Program Manager, File Manager and applets. Windows 2.x has no SHELL.DLL (§8), so there is no 2.x build.
@@ -3354,14 +3386,18 @@ events before logging.
 
 ### 21.5 UNVERIFIED, and not done
 
-- 386 Enhanced mode timing: without VTDAPI.386, VTD's virtual 8254 makes
-  w16's one-shot events 20-80 ms late and a 5 ms periodic event about 65
-  calls a second instead of 200; the callbacks run on MMSYSTEM's stack.
-  QuickTime's sample movie there (boot-test part `quicktime@enh`) takes
-  22-26 s against 3.1's 12 s (also 12 s on 3.1 without a sound device).
-  Until 2026-11-22 the movie ended Windows: a tick during a callback put
-  its frame over the INT 08h handler's words on WIN386's host stack
-  (fixed in WIN386, 12; docs/notes/quicktime-handover.md).
+- 386 Enhanced mode timing: w16's TIMER.DRV runs on VTD's virtual 8254,
+  not VTDAPI.386; its callbacks run on MMSYSTEM's stack. On stock 3.1
+  (Microsoft's WIN386, USER and KERNEL: TPR, timer part 3) its one-shot
+  events come 20-80 ms late and a 5 ms periodic event about 65 times a
+  second instead of 200. On w16's tree (VX16, 12.14) a 10 ms periodic
+  event runs 397-400 times in 4 s under either WIN386; until 2026-11-23
+  it ran 0 times there (w16's USER and KERNEL left interrupts off below
+  IOPL), and QuickTime's sample movie (boot-test part `quicktime@enh`)
+  took 22-26 s against 3.1's 12 s: 12 s now. Until 2026-11-22 the movie
+  ended Windows: a tick during a callback put its frame over the INT 08h
+  handler's words on WIN386's host stack (fixed in WIN386, 12;
+  docs/notes/quicktime-handover.md).
   VTDAPI's interface (reached through INT 2Fh AX=1684h) was not observed;
   a logging hook in TMS.DRV, put in before the real driver loads, could
   record it.
@@ -4373,7 +4409,7 @@ mode.
 
 **Tests** (boot-test case sb16, parts enh and cont): `tests/sb16/sbaudio.sh`
 sides mse (Microsoft's WIN386 and MMSYSTEM with SB16.DRV and w16's VSBD),
-w16e (w16's), qtmse (QuickTime's movie; qtw16e by hand, below); `tests/sbvxdprobe.sh`
+w16e (w16's), qtmse and qtw16e (QuickTime's movie); `tests/sbvxdprobe.sh`
 ms against w16 with `tools/sbvxdcmp.py`: sbbox (a box plays while
 Windows has nothing open: SBD's log and tones as 3.1's), sbwin (a box
 wants the card while SBP plays: the message box screen as 3.1's but the
@@ -4387,20 +4423,17 @@ box's icon behind the message ("(Inactive SBD)" under 3.1).
 
 **QuickTime in 386 Enhanced mode** (boot-test part `quicktime@enh`, the
 tree alone, its SYSTEM.INI loading VSBD.386; Windows 3.1's side with
-SNDBLST2.DRV and its VSBD.386): the movie's sound plays (sbaudio.sh's
-qtw16e and qtmse sides: its sound track comes out), but on w16 the movie
-drops frames to keep up with its sound: its picture garbled, its end
-after about 6 s against 3.1's 12 (with Microsoft's TIMER.DRV and VTDAPI
-on w16's WIN386 too, so not the timer driver), and the close sequence's
-screens differ. Without a sound device w16 shows every frame but takes
-22-26 s (21.5): w16's 386 Enhanced mode runs QuickTime at about half
-3.1's speed, and with a sound clock to follow that shows as dropped
-frames. Each read of the DMA count is now one trapped reading (VDMAD
-gives both bytes of one, SB16.DRV reads once in Enhanced mode: before,
-the movie took 2-4 s). Not done: finding where w16's Enhanced mode loses
-the time. Under w16's WIN386 with Windows 3.1's own TIMER.DRV and
-VTDAPI.386 (sbaudio.sh's side qtw16e) QuickTime's "play" stopped in most
-runs on 2026-11-23 (it passed once): UNVERIFIED why; the side is left out
-of the boot-test part enh. Plain DOSBox: the Enhanced-mode sound tests run in DOSBox-X
-only (the sound capture needs it); SB16.DRV's devices in Enhanced mode
-were not tried in plain DOSBox.
+SNDBLST2.DRV and its VSBD.386): the movie plays with its sound in 12 s
+as on 3.1, its last frame, the close sequence, the drag while it plays
+and the dragged picture 3.1's (every check of `tests/qtplay.sh`, 3 of 3
+runs, 2026-11-23). Until then w16 dropped frames to keep up with the
+sound (garbled, ended after 4-6 s) and took 22-28 s without one; under
+w16's WIN386 with Windows 3.1's own TIMER.DRV and VTDAPI.386
+(sbaudio.sh's side qtw16e) "play" stopped for good in most runs. Where
+the time went and the fixes (interrupts left off by USER, KERNEL and the
+drivers; VTD's virtual timer; the time-outs' clock; Begin_Nest_Exec; the
+reflection stack; trap costs): 12.14. Each read of the DMA count is one
+trapped reading (VDMAD gives both bytes of one, SB16.DRV reads once in
+Enhanced mode: before, the movie took 2-4 s). Plain DOSBox: the
+Enhanced-mode sound tests (sbaudio.sh) run in DOSBox-X (the sound
+capture needs it); `quicktime@enh` plays the sound in plain DOSBox.

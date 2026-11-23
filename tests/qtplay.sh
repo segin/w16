@@ -47,13 +47,11 @@
 #                    WIN386 on stock 3.1, the tree's on the w16 side; with
 #                    -T 386 the user's setup of 2026-11-22 (plain DOSBox:
 #                    playing the movie ended Windows with a #GP in
-#                    TIMER:1, docs/notes/quicktime-handover.md). Known
-#                    differences are printed, not checked: a drag not
-#                    taken (now and then, UNVERIFIED why), the
-#                    movie's length (w16 about twice 3.1's 12 s: TIMER's
-#                    events late on WIN386's virtual 8254) and the dragged
-#                    picture (the speaker button: SB16.DRV has no devices
-#                    in Enhanced mode)
+#                    TIMER:1, docs/notes/quicktime-handover.md). Every
+#                    check as without -E since 2026-11-23 (ARCHITECTURE.md
+#                    12.14: until then w16 took twice 3.1's 12 s, with
+#                    sound ended the movie garbled after 4-6 s, and now
+#                    and then hung or did not take the drag)
 #     -R REFDIR      the stock 3.1 run made before (its shots); no new one
 # QTPLAY_W16OPTS in the environment: more tests/dropin.sh options for the
 # w16 side only, e.g. "-p 386 -i w16:vmmtrace=1" (DOSBox-X; with
@@ -262,12 +260,6 @@ else
         re=${re#p} we=${we#p}
         d=$(( ${re#0} - ${we#0} ))
         if [ $d -ge -1 ] && [ $d -le 1 ]; then :
-        elif [ -n "$enh" ]; then
-            # known: w16's TIMER.DRV in 386 Enhanced mode, without VTDAPI
-            # on WIN386's virtual 8254, calls events late (ARCHITECTURE.md
-            # 21.5); 3.1 takes 12 s with and without a sound device, w16
-            # 22-26 s (2026-11-22)
-            echo "known, not checked with -E: the last frame came in shot $we on w16, $re on 3.1"
         else fail "the last frame came in shot $we on w16, $re on 3.1"; fi
         echo "plays in about $(( ${re#0} * 2 )) s on 3.1, $(( ${we#0} * 2 )) s on w16"
     fi
@@ -333,12 +325,7 @@ dragged() {
 if [ -f "$refdir/c4b-dropped.png" ] && [ -f "$w/c4b-dropped.png" ]; then
     ra=$(dragged "$refdir") wa=$(dragged "$w")
     echo "the movie's window dragged while playing: $ra on 3.1, $wa on w16"
-    if [ "$ra" != "$wa" ] && [ -n "$enh" ]; then
-        # known (2026-11-22): in 386 Enhanced mode the drag is sometimes
-        # not taken at all (3 runs in 7 under load: the window stays where
-        # it was, the movie plays on); UNVERIFIED why
-        echo "known, not checked with -E: the movie's window dragged while playing: $wa on w16, $ra on 3.1 ($w/c4b-dropped.png)"
-    elif [ "$ra" != "$wa" ]; then
+    if [ "$ra" != "$wa" ]; then
         fail "the movie's window dragged while playing: $wa on w16, $ra on 3.1 ($w/c4b-dropped.png)"
     else
         ws=$(magick "$refdir/c1-closed.png" "$refdir/c3-reopened.png" -compose difference -composite \
@@ -350,13 +337,7 @@ if [ -f "$refdir/c4b-dropped.png" ] && [ -f "$w/c4b-dropped.png" ]; then
         magick "$w/c4b-dropped.png" -crop "$crop" +repage "$out/drag-w16.png"
         n=$(px "$out/drag-ref.png" "$out/drag-w16.png" "$out/drag-diff.png")
         echo "the dragged movie's picture ($crop): $n pixels differ from 3.1's"
-        if [ "$n" = 0 ]; then :
-        elif [ -n "$enh" ]; then
-            # known: w16's SB16.DRV offers no devices in 386 Enhanced mode,
-            # so the controller's speaker button (its top edge is in this
-            # picture) is gray on w16, live on 3.1 with SNDBLST2.DRV
-            echo "known, not checked with -E: the dragged movie's picture: $n pixels differ ($out/drag-diff.png)"
-        else fail "the dragged movie's picture: $n pixels differ from 3.1's ($out/drag-diff.png)"; fi
+        [ "$n" = 0 ] || fail "the dragged movie's picture: $n pixels differ from 3.1's ($out/drag-diff.png)"
     fi
 elif [ -f "$refdir/c4b-dropped.png" ]; then
     fail "the drag while the movie plays did not get to its drop on w16 ($w/input.log, $w/work/c/OUT.TXT)"
