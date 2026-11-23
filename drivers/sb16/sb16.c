@@ -137,10 +137,22 @@ void dma_stop(WORD ch)
 }
 
 /* the bytes still to go in the channel's current pass */
+static BYTE enh;                        /* 386 Enhanced mode (enable) */
+
+/* (386 Enhanced mode: the ports are VDMAD's, each access a trap, and
+   VDMAD gives the two bytes of one reading: read once) */
 WORD dma_left(WORD ch)
 {
     WORD f = sb_cli(), lo, hi, hi2, n;
-    if (ch < 4) {
+    if (enh) {
+        WORD port = ch < 4 ? (ch << 1) + 1 : 0xC2 + ((ch & 3) << 2);
+        outp(ch < 4 ? 0x0C : 0xD8, 0);
+        lo = inp(port);
+        hi = inp(port);
+        n = ((hi << 8) | lo) + 1;
+        if (ch >= 4)
+            n <<= 1;
+    } else if (ch < 4) {
         WORD port = (ch << 1) + 1;
         outp(0x0C, 0);
         (void)inp(port);
@@ -314,7 +326,7 @@ static int dmaalloc(void)
    the enable and while a wave device is open, given back (2) after, as
    Windows 3.1's SNDBLST2.DRV takes Windows 3.1's VSBD.386's. Without the
    VxD in Enhanced mode no devices: the card is not ours to touch */
-static BYTE enh, vsbd, takes;
+static BYTE vsbd, takes;
 static void enable_card(void);
 
 int sb_take(void)

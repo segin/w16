@@ -153,6 +153,7 @@ struct vdma {
     vu8 ff[2];                          /* the flip-flops */
     vu8 tc[2];                          /* terminal counts not yet read (status) */
     vu8 cmd[2], temp[2];
+    vu16 latch[2];                      /* the register read with the flip-flop at 0 */
     struct vch c[8];
 };
 static vu32 cb_off;
@@ -433,10 +434,16 @@ static vu32 port_in(vu32 vm, vu32 port)
     }
     if (k) i = (port - 0xC0) >> 1; else i = port;
     if (i < 8) {                        /* address, count */
+        /* the low byte reads the controller, the high byte the same
+         * value's (a read is two trapped INs: once is enough, and the two
+         * bytes agree) */
         c = k * 4 + (i >> 1);
-        readback(vm, c, &adr, &cnt);
-        v = (i & 1) ? cnt : adr;
-        v = d->ff[k] ? v >> 8 : v & 0xFF;
+        if (!d->ff[k]) {
+            readback(vm, c, &adr, &cnt);
+            d->latch[k] = (vu16)((i & 1) ? cnt : adr);
+            v = d->latch[k] & 0xFF;
+        } else
+            v = d->latch[k] >> 8;
         d->ff[k] ^= 1;
         return v & 0xFF;
     }
