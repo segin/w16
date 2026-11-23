@@ -59,9 +59,12 @@ should be picked up, and how to measure it.
 
 - Stage 3: metric-compatible free fonts in the install tree with
   [FontSubstitutes] (the CC0 w16 Sans/Serif/Mono).
-- Stage 4: hinting (the bytecode interpreter; another agent is adding
-  an autohinter beside ttfx.c, enabled per font through ttfx's API:
-  `TTFILE.hint` in `gdi/ttfont.c` is where GDI will turn it on). The
+- Stage 4: hinting by the fonts' own instructions (the bytecode
+  interpreter). The autohinter (`gdi/ttf/ttfhint.c`) is on in GDI
+  (SYSTEM.INI [w16] TrueTypeHinting, default 5: vertical and dropout);
+  it moves no advance width. GDI opens and initialises the font for each
+  batch of glyphs, so the autohinter's blue zones are worked out again
+  each time: keep them per TTFILE if that shows up on a 286. The
   character widths 3.1 gets from hinting (Arial's W is 79 at 79 ppem,
   not 75) need it; until then w16 uses hdmx where the font has the size
   and the linear width elsewhere.
