@@ -327,6 +327,18 @@ int shell_service(u32 svc, struct svcregs *r)
         return 1;
     case 0x0004:
         return shell_message(r);
+    case 0x0005: {                      /* SHELL_GetVMInfo: EBX the VM, EAX its flags */
+        /* the DDK: the PIF's settings as SGVMI_ flags (names only; the
+         * values not given). SGVMI_Windowed is 04h (Windows 3.1:
+         * 40021004h for a windowed box, 40021000h for the same PIF full
+         * screen; VMTASK.386, tests/vmtaskrun.sh, ARCHITECTURE.md 15.12);
+         * here the VM's window state now. UNVERIFIED and left 0: the
+         * other flags (reserved keys, polling, locks, close on exit),
+         * and whether 3.1's bit follows Alt+Enter */
+        struct shvm *s = sh_of(vm_of(r->ebx));
+        r->eax = s && (s->flags & SHELL_WINDOWED) ? 0x04 : 0;
+        return 1;
+    }
     }
     return 0;
 }

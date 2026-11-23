@@ -24,13 +24,14 @@ struct vxdapi {
 };
 
 static void api_default(struct cregs *r);
+static void api_vtd(struct cregs *r);
 static void api_vdd(struct cregs *r);
 static void api_shell(struct cregs *r);
 
 static const struct vxdapi apis[] = {
     /* function 0 returns (VX3, Windows 3.1): Reboot has no function 0
      * (carry set), SHELL's BX is 1000h */
-    { 0x0005, "VTD",      api_default, 0x030A, 0, 0 },
+    { 0x0005, "VTD",      api_vtd,     0x030A, 0, 0 },
     { 0x000A, "VDD",      api_vdd,     0x030A, 0, 0 },
     { 0x000E, "VCD",      api_default, 0x030A, 0, 0 },
     { 0x0017, "SHELL",    api_shell,   0x030A, 0x1000, 0 },
@@ -46,6 +47,30 @@ static void api_default(struct cregs *r)
     trace("VxD API %s (%x): ax=%x bx=%x cx=%x dx=%x si=%x di=%x ds=%x es=%x -> not implemented\n",
           apis[cur_api].name, apis[cur_api].id, AX(r), BX(r), CX(r), DX(r), SI(r), DI(r), r->ds, r->es);
     r->eflags |= EFL_CF;
+}
+
+/* VTD: 0101h the milliseconds since Windows started, 0102h the current
+ * VM's own (Schulman ch. 10: what TOOLHELP's TimerCount asks in 386
+ * Enhanced mode, EAX the result; here Get_System_Time and
+ * Get_VM_Exec_Time's values). Before, they failed with carry and a trace
+ * line, and TimerCount fell back to MMSYSTEM's timeGetTime: each call a
+ * trap and a line, and the VM Task Manager's idle count (VMTASK.EXE
+ * without VMTASK.386, ARCHITECTURE.md 15.12) got nothing finer than its
+ * tick. UNVERIFIED: the rest of the VTD's API */
+static void api_vtd(struct cregs *r)
+{
+    u32 t = vmm_system_time();
+    switch (AX(r)) {
+    case 0x0101:
+        r->eax = t;
+        r->eflags &= ~EFL_CF;
+        return;
+    case 0x0102:
+        r->eax = cur_vm->exec_ms + (t - cur_vm->run_since);
+        r->eflags &= ~EFL_CF;
+        return;
+    }
+    api_default(r);
 }
 
 /* VDD (vdd.c): what it does not answer is traced and fails */
