@@ -1,7 +1,8 @@
 # no room for a swap file: no TEMP and no hard disk, so the swap directory
 # is A:\ (WIN.COM, ARCHITECTURE.md 9.5); WINOLDAP warns, WSWAP cannot
-# switch (block 172h 08h) and the program's task ends
-# opts: notemp
+# switch (block 172h 08h) and the program's task ends; SW2.COM, an MS-DOS
+# 5 task switcher client, logs the notifications it is sent
+# opts: notemp sw2
 sleep 32
 key Right Right Right Right
 sleep 1

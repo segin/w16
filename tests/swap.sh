@@ -17,6 +17,10 @@
 #     is smaller and hooks other ones);
 #   - the swap files made in the swap directory (names, from DOSBox-X's
 #     file log, in order) and that none is left at the end;
+#   - C:\SW2.LOG when the scenario loads SW2.COM (opts sw2 or sw2=F;
+#     tests/dos/sw2.asm, an MS-DOS 5 task switcher client: the
+#     notifications it was sent, its instance data byte as DOS programs
+#     saw it, the BIOS keyboard flags);
 #   - the screenshots, pixel by pixel; on text screens the MS-DOS Prompt's
 #     banner box (rows 1-5) is left out, since w16's says "w16" where 3.1's
 #     says "Windows"; up to 40 pixels may differ (a cursor or caret).
@@ -57,8 +61,8 @@ while getopts o:wOxWk:K opt; do
 done
 shift $((OPTIND - 1))
 [ -f "$ref/WINDOWS/WIN.COM" ] || { echo "no reference install at $ref" >&2; exit 2; }
-for f in "$dos/WSWAP.EXE" "$dos/DSWAP.EXE" "$dos/WO2.EXE" "$dos/WC1.COM"; do
-    [ -f "$f" ] || { echo "missing $f (make dos woprobes wcprobes)" >&2; exit 2; }
+for f in "$dos/WSWAP.EXE" "$dos/DSWAP.EXE" "$dos/WO2.EXE" "$dos/WC1.COM" "$dos/SW2.COM"; do
+    [ -f "$f" ] || { echo "missing $f (make dos woprobes wcprobes swprobes)" >&2; exit 2; }
 done
 if [ -n "$out" ]; then
     [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
@@ -85,16 +89,23 @@ run_one() {   # run_one DIR SIDE OPTIONS SCRIPT
         set -- "$@" -f "$dos/WSWAP.EXE=WINDOWS/SYSTEM/WSWAP.EXE" \
             -f "$dos/DSWAP.EXE=WINDOWS/SYSTEM/DSWAP.EXE" $w16only
     fi
-    pre='SET TEMP=C:\WINDOWS\TEMP' tmax=300
+    pre='SET TEMP=C:\WINDOWS\TEMP' tmax=300 sw2=
     for o in $opts; do
         case $o in
         files=WC1) set -- "$@" -f "$dos/WC1.COM=WC1.COM" ;;
         wait) set -- "$@" -f "$work/files/WCWAIT.TXT=WCWAIT.TXT" ;;
         pif) set -- "$@" -f "$work/files/PROBE.PIF=PROBE.PIF" ;;
         notemp) pre= ;;
+        sw2) sw2='C:\SW2' ;;
+        sw2=*) sw2="C:\\SW2 ${o#sw2=}" ;;
         t=*) tmax=${o#t=} ;;
         esac
     done
+    if [ -n "$sw2" ]; then      # SW2 before WIN, its log written after
+        pre=${pre:+$pre;}$sw2
+        set -- "$@" -f "$dos/SW2.COM=SW2.COM" -w 'WIN /S
+C:\SW2 D'
+    fi
     [ -z "$pre" ] || set -- "$@" -c "$pre"
     # shellcheck disable=SC2086
     "$root/tests/worun.sh" "$@" -t "$tmax" $common $krnl > /dev/null 2>&1 || true
@@ -133,7 +144,9 @@ for n in $names; do
         if [ -f "$work/$n/$s/c/WC.LOG" ]; then tr -d '\r' < "$work/$n/$s/c/WC.LOG" |
             grep -v '^psp=\|^envseg=\|^vec ' | sed 's/parentenv=[0-9A-F]*//'; fi > "$work/$n/$s.wc"
         swapfiles "$work/$n/$s" > "$work/$n/$s.files"
+        if [ -f "$work/$n/$s/c/SW2.LOG" ]; then tr -d '\r' < "$work/$n/$s/c/SW2.LOG"; fi > "$work/$n/$s.sw2"
     done
+    diff -u "$work/$n/ms.sw2" "$work/$n/w16.sw2" > "$work/$n/sw2.diff" || bad="$bad SW2.LOG"
     diff -u "$work/$n/ms.wc" "$work/$n/w16.wc" > "$work/$n/wc.diff" || bad="$bad WC.LOG"
     diff -u "$work/$n/ms.files" "$work/$n/w16.files" > "$work/$n/files.diff" || bad="$bad files"
     mkdir -p "$work/$n/diff"
@@ -162,7 +175,7 @@ for n in $names; do
         echo "PASS $n"
     else
         echo "FAIL $n:$bad"
-        for f in blocks wc files; do
+        for f in blocks wc files sw2; do
             [ ! -s "$work/$n/$f.diff" ] || sed 's/^/    /' "$work/$n/$f.diff" | head -30
         done
         failures=$((failures + 1))
