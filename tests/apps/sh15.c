@@ -1,6 +1,6 @@
 /*
  * sh15.c - SH15: SHELL.DLL with damaged files, failing writes and odd
- * arguments (the SHELL audit, docs/notes/shelldll-audit-triage.md). SHELL
+ * arguments (the SHELL audit, ARCHITECTURE.md 13.9). SHELL
  * is loaded with LoadLibrary and freed after each section, so that every
  * section starts a new SHELL that reads REG.DAT again; nothing imports it.
  * tests/shellprobe.sh SH15 provides the files (tools/mkshaudit.py) in
