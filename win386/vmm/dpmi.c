@@ -1392,12 +1392,14 @@ static u32 hstk_base(struct cregs *intr)
     return hstk_low;
 }
 
-/* run p (a frame on the host stack built from hstk_base) to its return */
+/* run p (a frame on the host stack built from hstk_base, or a nested
+ * handler's on the interrupted code's own stack) to its return */
 static void hstk_run(struct cregs *p)
 {
     u32 saved_low = hstk_low;
     hstk_depth++;
-    hstk_low = p->esp & hstk_mask();
+    if ((p->ss & 0xFFFF) == hstk_sel)
+        hstk_low = p->esp & hstk_mask();
     exec_v86(p);
     hstk_depth--;
     hstk_low = saved_low;
@@ -1409,14 +1411,35 @@ static void hstk_run(struct cregs *p)
  * breakpoint), then the client's own CS:IP where it was interrupted (or,
  * for an interrupt in V86 mode, where it last left protected mode); DS
  * and ES are the client's DS; interrupts off. Synchronous: returns when
- * the handler has returned. intr: the interrupted state. */
+ * the handler has returned. intr: the interrupted state.
+ *
+ * Only the outermost handler gets the host stack. An interrupt that comes
+ * in protected mode while a handler runs (hstk_depth > 0) off the host
+ * stack gets its frame on the interrupted code's own stack, at its SS:SP:
+ * VPICD's Begin_Use_Locked_PM_Stack switches stacks on its first call
+ * only and counts the others (Virtual Device Adaptation Guide), and VX4's
+ * nested tick under Windows 3.1's WIN386 (kinds 3 and 4, tests/dos/vx4.asm)
+ * shows it: a handler that has moved to a stack of its own and enabled
+ * interrupts gets the next tick's frame on that stack, and its words on the
+ * host stack stay. Before (2026-11-22), the frame went below hstk_low,
+ * the lowest SP of a trap there; CLI and STI do not note it
+ * (cli_sti_fast), so the frame overwrote what the handler had pushed
+ * before it switched: w16's TIMER.DRV's interrupt handler, on MMSYSTEM's
+ * stack for a QuickTime callback, came back to garbage (a #GP in TIMER:1
+ * at 0723, docs/notes/quicktime-handover.md). */
 static void run_hw_handler(int vec, struct cregs *intr, u32 ccs, u32 cip, u32 cds, u32 cflags)
 {
     struct cregs p;
 
     memset(&p, 0, sizeof(p));
-    p.esp = hstk_base(intr);
-    p.ss = hstk_sel;
+    hstk_make();
+    if (hstk_depth && intr && !(intr->eflags & EFL_VM) && (intr->ss & 0xFFFF) != hstk_sel) {
+        p.esp = intr->esp & hstk_mask();
+        p.ss = intr->ss & 0xFFFF;
+    } else {
+        p.esp = hstk_base(intr);
+        p.ss = hstk_sel;
+    }
     p.ds = p.es = cds;
     pm_push(&p, ccs);
     pm_push(&p, cip);
