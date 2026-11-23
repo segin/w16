@@ -487,6 +487,21 @@ struct execctx {
     u16 sp0;                            /* its frame's SP on the reflection stack (0: elsewhere) */
 };
 static struct execctx *cur_exec;
+
+/* is SS:SP on the VM's reflection stack: its segment, and within its
+ * size below its top? The segment is the WIN386 loader's data segment,
+ * which other V86 code runs on too (ARCHITECTURE.md 12.14: a hardware
+ * interrupt reflected to V86 code that ran there at SP 05xxh, far below
+ * the reflection stack, took the stack's SP down to it, and the next
+ * reflection inside ended Windows with "the V86 reflection stack
+ * overflows": QuickTime's movie in w16's tree, with sound, stopped at 2-10
+ * s in most runs) */
+static int on_refstk(u32 ss, u32 sp)
+{
+    u32 size = cur_vm == &sysvm ? W386_REFSTK_SIZE : DOSVM_REFSTK_SIZE;
+    sp &= 0xFFFF;
+    return (u16)ss == cur_vm->refstk_seg && sp <= cur_vm->refstk_top && sp + size >= cur_vm->refstk_top;
+}
 #define REFSTK_GAP 256                  /* trap(): below a call that left the reflection stack */
 int exec_trace;
 int vm_trace;                           /* [w16] vmmtrace=2: the DOS VMs' trace */
@@ -504,7 +519,7 @@ void exec_v86(struct cregs *v)
     if (!k_setjmp((u32 *)c.jb)) {
         cur_exec = (struct execctx *)&c;
         c.vm = cur_vm;
-        c.sp0 = (u16)v->ss == cur_vm->refstk_seg ? (u16)v->esp : 0;
+        c.sp0 = on_refstk(v->ss, v->esp) ? (u16)v->esp : 0;
         if (c.sp0 && c.sp0 < cur_vm->refsp)
             cur_vm->refsp = c.sp0;
         kesp0 = ((u32)&c - 512) & ~15u;
@@ -526,7 +541,8 @@ void exec_v86(struct cregs *v)
 static void refstk_check(void)
 {
     if (cur_vm->refsp < cur_vm->refstk_top - (cur_vm == &sysvm ? W386_REFSTK_SIZE : DOSVM_REFSTK_SIZE) + 256)
-        panic("the V86 reflection stack overflows (VM %d, sp %x, %d nested calls)", cur_vm->id, cur_vm->refsp, exec_depth());
+        panic("the V86 reflection stack overflows (VM %d, sp %x, top %x, %d nested calls)",
+              cur_vm->id, cur_vm->refsp, cur_vm->refstk_top, exec_depth());
 }
 
 /* INT vec in V86 mode with registers *v (SS:SP 0: the reflection stack) */
@@ -1082,8 +1098,16 @@ void __cdecl trap(struct tframe *f)
      * code's stack now and then: V86 code resumed at a garbage CS:IP, an
      * invalid opcode reflected to the BIOS for ever (seen in about 1 in 7
      * boots under load, while fonts loaded). */
-    if ((r->eflags & EFL_VM) && (u16)r->ss == cur_vm->refstk_seg && (u16)r->esp < cur_vm->refsp)
+    if ((r->eflags & EFL_VM) && on_refstk(r->ss, r->esp) && (u16)r->esp < cur_vm->refsp)
         cur_vm->refsp = (u16)r->esp;
+    else if ((r->eflags & EFL_VM) && (u16)r->ss == cur_vm->refstk_seg && cur_vm == &sysvm
+             && (u16)r->esp + W386_REFSTK_SIZE < cur_vm->refstk_top) {
+        /* (below the reflection stack: above it is the loader's own) */
+        static int told;                /* (once: who that code is) */
+        if (!told++)
+            trace("VMM: V86 code at %x:%x on the loader's segment at sp %x, vector %x, %d nested\n",
+                  r->cs, r->eip, r->esp, vec, exec_depth());
+    }
     /* the same when the code has left the reflection stack: MS-DOS 4.00
      * saves its caller's registers on the caller's stack, switches to its
      * own and enables interrupts. A hardware interrupt taken there whose
