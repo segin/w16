@@ -7,6 +7,8 @@
  * register 0: the host's clock in DOSBox, the same for every VM; a VM's
  * timer ticks are virtual):
  *   loop   a busy loop (the processor's speed for ring-3 code)
+ *   loop1  the busy loop with a 1 ms periodic timeSetEvent running; tev1
+ *          its callbacks (1000 a second when none is lost)
  *   tick   GetTickCount's advance in those seconds (ms: virtual timer
  *          ticks lost or delayed show as less than 1000 a second)
  *   tgt    MMSYSTEM's timeGetTime's advance (ms)
@@ -224,6 +226,21 @@ int __cdecl tmain(void)
         start();
         for (;;) { n++; if (!(n & 1023) && done()) break; }
         report("loop", n);
+    }
+    if (want("loop1") && tse && tke) {
+        /* the busy loop again with a 1 ms periodic event running: what
+         * a millisecond timer costs the program (and how many came) */
+        UINT id;
+        tev_n = 0;
+        if (tbp) tbp(1);
+        id = tse(1, 1, tev_cb, (DWORD)(void FAR *)&tev_n, 1 /* TIME_PERIODIC */);
+        n = 0;
+        start();
+        for (;;) { n++; if (!(n & 1023) && done()) break; }
+        if (id) tke(id);
+        if (tep) tep(1);
+        report("loop1", n);
+        report("tev1", tev_n);
     }
     if (want("tick")) {
         DWORD a;

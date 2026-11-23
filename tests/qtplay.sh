@@ -55,6 +55,9 @@
 #                    picture (the speaker button: SB16.DRV has no devices
 #                    in Enhanced mode)
 #     -R REFDIR      the stock 3.1 run made before (its shots); no new one
+# QTPLAY_W16OPTS in the environment: more tests/dropin.sh options for the
+# w16 side only, e.g. "-p 386 -i w16:vmmtrace=1" (DOSBox-X; with
+# DROPIN_CONF="[serial] serial1=file file:PATH" and -R, the VMM's trace)
 # Checks (exit 1 if one fails):
 #   - both runs reach the Movie Player (w16 runs with [w16] hangwatch=120,
 #     or $QTPLAY_HANGWATCH: a hang ends Windows with a report in
@@ -194,7 +197,7 @@ wscript=$out/qtplay-WINDOWS.txt
 hw=${QTPLAY_HANGWATCH:-120}
 # shellcheck disable=SC2086
 "$root/tests/inputrun.sh" -s -b 40 -t 900 "$wscript" "$out/w16" \
-    -i w16:hangwatch=$hw "$@" > "$out/w16.txt" 2>&1 || true
+    -i w16:hangwatch=$hw "$@" ${QTPLAY_W16OPTS:-} > "$out/w16.txt" 2>&1 || true
 wait
 refdir=$(cd "$refdir" && pwd)
 # how close w16 came to the hangwatch limit (KERNEL prints it as Windows

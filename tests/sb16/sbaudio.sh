@@ -26,6 +26,9 @@
 # ending in e is the same in 386 Enhanced mode (WIN /3) with w16's
 # VSBD.386 (win386/vxd/vsbd.c, device=vsbd.386): mse and qtmse under
 # Microsoft's WIN386, w16e and qtw16e under w16's.
+# SBAUDIO_OPTS in the environment: more tests/dropin.sh options for every
+# side (e.g. "-i w16:vmmtrace=1"); SBAUDIO_CONF: more dosbox.conf lines
+# (e.g. "[serial]" and "serial1=file file:PATH": w16's VMM trace).
 # Exit status 0 when every check passes.
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
@@ -86,7 +89,8 @@ mpubase=330
 mididevice=synth
 midiconfig=$mat/sine.sf2
 [mixer]
-rate=44100" "$root/tests/dropin.sh" "$@" > "$d.txt" 2>&1 || true
+rate=44100
+${SBAUDIO_CONF:-}" "$root/tests/dropin.sh" "$@" ${SBAUDIO_OPTS:-} > "$d.txt" 2>&1 || true
     tr -d '\r' < "$d/run/c/SBP.LOG" > "$d.log" 2>/dev/null || : > "$d.log"
 }
 for s in $sides; do run $s & done
