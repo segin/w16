@@ -139,7 +139,10 @@ static void draw_at(short x, short y)
     int r, c, p, sy, sh, bx, c0, c1, r0, r1;
     BYTE __far *l;
     BYTE v;
-    BYTE (*sv)[32][5] = save[nd];
+    BYTE (*sv)[32][5];
+    if (y >= 480 || y <= -32 || x >= 640 || x <= -40)
+        return;
+    sv = save[nd];
     bx = x >= 0 ? x >> 3 : -((-x + 7) >> 3);
     sh = x - bx * 8;
     if (!(mvalid & (1 << sh)))
@@ -351,11 +354,14 @@ void cursor_unexclude(void)
 void cursor_init(void)
 {
     busy = 1;
+    enabled = 1;
     nd = 0;
     qn = 0;
     drop_queue();
     redraw();
     busy = 0;
+    if (mq_n || age_n)
+        serve();
 }
 
 void cursor_off(void)
@@ -377,6 +383,8 @@ void cursor_trail(int on, int size)
     trail_on = (BYTE)(on != 0);
     trail_size = (BYTE)size;
     busy = 0;
+    if (mq_n || age_n)
+        serve();
 }
 
 /* ticks per image of a still trail's run-down (vga.c, at Enable) */
@@ -433,6 +441,8 @@ void __cdecl __far cur_set(LPCURSORSHAPE cs)
     if (!cs) {
         have_shape = 0;
         busy = 0;
+        if (mq_n || age_n)
+            serve();
         return;
     }
     mvalid = 0;
@@ -452,6 +462,8 @@ void __cdecl __far cur_set(LPCURSORSHAPE cs)
     have_shape = 1;
     redraw();
     busy = 0;
+    if (mq_n || age_n)
+        serve();
 }
 
 /* WORD Inquire(lpCursorInfo): the mickey-to-pixel ratios (DDK
@@ -500,15 +512,18 @@ WORD EXPORT SaveScreenBitmap(LPRECT rc, WORD cmd)
     if (!enabled)
         return 0;
     if (cmd == 0) {
-        RECT r = *rc;
-        if (saved)
+        RECT r;
+        if (!rc || saved)
             return 0;
-        if (!clip_rect(&r, NULL, NULL) || r.left < 0 || r.top < 0)
+        r = *rc;
+        if (r.left < 0 || r.top < 0)
             return 0;
         if (r.right > 640)
             r.right = 640;
         if (r.bottom > 480)
             r.bottom = 480;
+        if (r.left >= r.right || r.top >= r.bottom)
+            return 0;
         x0 = r.left >> 3;
         x1 = (r.right - 1) >> 3;
         nb = x1 - x0 + 1;
@@ -528,18 +543,50 @@ WORD EXPORT SaveScreenBitmap(LPRECT rc, WORD cmd)
         return 1;
     }
     if (cmd == 1) {
+        BYTE lmask, rmask;
+        int i0, i1, mid, p;
         if (!saved)
             return 0;
         x0 = saverc.left >> 3;
         x1 = (saverc.right - 1) >> 3;
         nb = x1 - x0 + 1;
+        lmask = (BYTE)(0xFF >> (saverc.left & 7));
+        rmask = (BYTE)(0xFF << (7 - ((saverc.right - 1) & 7)));
+        i0 = lmask == 0xFF ? 0 : 1;
+        i1 = rmask == 0xFF ? nb : nb - 1;
+        mid = i1 - i0;
         scr_begin(saverc.left, saverc.top, saverc.right, saverc.bottom);
-        outw(0x3CE, 0x0105);
-        outw(0x3C4, 0x0F02);
-        off = SAVE_BASE;
-        for (y = saverc.top; y < saverc.bottom; y++, off += nb)
-            latch_copy(off, (WORD)y * 80 + x0, nb);
-        outw(0x3CE, 0x0005);
+        if (mid > 0) {
+            outw(0x3CE, 0x0105);
+            outw(0x3C4, 0x0F02);
+            off = SAVE_BASE;
+            for (y = saverc.top; y < saverc.bottom; y++, off += nb)
+                latch_copy(off + i0, (WORD)y * 80 + x0 + i0, (WORD)mid);
+            outw(0x3CE, 0x0005);
+        }
+        if (nb == 1 ? (BYTE)(lmask & rmask) != 0xFF : (lmask != 0xFF || rmask != 0xFF)) {
+            BYTE __far *v = (BYTE __far *)MK_FP(vga_sel, 0);
+            BYTE m1 = (BYTE)(lmask & rmask);
+            for (p = 0; p < 4; p++) {
+                scr_plane(p);
+                off = SAVE_BASE;
+                for (y = saverc.top; y < saverc.bottom; y++, off += nb) {
+                    if (nb == 1) {
+                        WORD dst = (WORD)y * 80 + x0;
+                        v[dst] = (BYTE)((v[dst] & ~m1) | (v[off] & m1));
+                    } else {
+                        if (lmask != 0xFF) {
+                            WORD dst = (WORD)y * 80 + x0;
+                            v[dst] = (BYTE)((v[dst] & ~lmask) | (v[off] & lmask));
+                        }
+                        if (rmask != 0xFF) {
+                            WORD dst = (WORD)y * 80 + x1;
+                            v[dst] = (BYTE)((v[dst] & ~rmask) | (v[off + nb - 1] & rmask));
+                        }
+                    }
+                }
+            }
+        }
         scr_end();
         saved = 0;
         return 1;

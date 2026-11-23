@@ -73,79 +73,76 @@ static WORD char_width(FONTCTX *c, BYTE ch)
     return *(WORD __far *)char_entry(c, ch);
 }
 
-/* the advance of each character (into adv), with the DRAWMODE's
-   character extra and justification (DDK, ExtTextOut's algorithm; the
-   running error in BreakErr is updated, the caller restores it when
-   drawing); the total width returned */
-static int advances(FONTCTX *c, LPCSTR s, int n, LPSHORT widths, LPDRAWMODE dm, short *adv)
+/* the advance of one character, updating *berr for justification */
+static int char_advance(FONTCTX *c, BYTE ch, int gw, LPSHORT widths, WORD i, LPDRAWMODE dm,
+                        short *berr)
 {
-    int i, w, total = 0;
-    for (i = 0; i < n; i++) {
-        BYTE ch = (BYTE)s[i];
-        w = widths ? widths[i] : (int)char_width(c, ch) + c->bold;
-        if (!widths && dm) {
-            if (dm->TBreakExtra && ch == (BYTE)(c->first + c->brk)) {
-                w += dm->BreakExtra;
-                dm->BreakErr -= dm->BreakRem;
-                if (dm->BreakErr <= 0) {
-                    w++;
-                    dm->BreakErr += dm->BreakCount;
-                }
+    int w;
+    if (widths)
+        return widths[i];
+    w = gw + c->bold;
+    if (dm) {
+        if (dm->TBreakExtra && ch == (BYTE)(c->first + c->brk)) {
+            w += dm->BreakExtra;
+            *berr -= dm->BreakRem;
+            if (*berr <= 0) {
+                w++;
+                *berr += dm->BreakCount;
             }
-            w += dm->CharExtra;
         }
-        if (adv)
-            adv[i] = (short)w;
-        total += w;
+        w += dm->CharExtra;
     }
-    return total;
+    return w;
 }
-
-static short advbuf[512];
 
 /* the glyphs' bits of row r (0 = the text's top) into tbuf, which holds
    pixels [bx0, bx0 + 8 * nbuf) */
-static void build_row(FONTCTX *c, LPCSTR s, int n, int x, int r, int bx0, int nbuf)
+static void build_row(FONTCTX *c, LPCSTR s, int n, int x, int r, int bx0, int nbuf,
+                      LPSHORT widths, LPDRAWMODE dm)
 {
-    int i, k, cols, px, rel, idx, sh, w;
+    int i, k, cols, rel, idx, sh, w;
+    long px = x, bx1 = (long)bx0 + (long)nbuf * 8;
+    short berr = dm ? dm->BreakErr : 0;
     BYTE __far *e;
     DWORD g;
     BYTE gb;
     for (i = 0; i < nbuf; i++)
         tbuf[i] = 0;
-    px = x;
     for (i = 0; i < n; i++) {
-        e = char_entry(c, (BYTE)s[i]);
+        BYTE ch = (BYTE)s[i];
+        e = char_entry(c, ch);
         w = *(WORD __far *)e;
-        g = c->base + *(DWORD __far *)(e + 2);
-        cols = (w + 7) >> 3;
-        for (k = 0; k < cols; k++) {
-            gb = *glyph_byte(c, g + (DWORD)k * c->height + r);
-            if (k == cols - 1 && (w & 7))
-                gb &= (BYTE)(0xFF << (8 - (w & 7)));
-            if (!gb)
-                continue;
-            rel = px + 8 * k - bx0;
-            idx = rel >= 0 ? rel >> 3 : -((-rel + 7) >> 3);
-            sh = rel - idx * 8;
-            if (idx >= 0 && idx < nbuf)
-                tbuf[idx] |= (BYTE)(gb >> sh);
-            if (sh && idx + 1 >= 0 && idx + 1 < nbuf)
-                tbuf[idx + 1] |= (BYTE)(gb << (8 - sh));
-            if (c->bold) {
-                /* again, one pixel right */
-                int sh2 = sh + 1, idx2 = idx;
-                if (sh2 == 8) {
-                    sh2 = 0;
-                    idx2++;
+        if (px + w + c->bold > bx0 && px < bx1) {
+            g = c->base + *(DWORD __far *)(e + 2);
+            cols = (w + 7) >> 3;
+            for (k = 0; k < cols; k++) {
+                gb = *glyph_byte(c, g + (DWORD)k * c->height + r);
+                if (k == cols - 1 && (w & 7))
+                    gb &= (BYTE)(0xFF << (8 - (w & 7)));
+                if (!gb)
+                    continue;
+                rel = (int)(px + 8 * k - bx0);
+                idx = rel >= 0 ? rel >> 3 : -((-rel + 7) >> 3);
+                sh = rel - idx * 8;
+                if (idx >= 0 && idx < nbuf)
+                    tbuf[idx] |= (BYTE)(gb >> sh);
+                if (sh && idx + 1 >= 0 && idx + 1 < nbuf)
+                    tbuf[idx + 1] |= (BYTE)(gb << (8 - sh));
+                if (c->bold) {
+                    /* again, one pixel right */
+                    int sh2 = sh + 1, idx2 = idx;
+                    if (sh2 == 8) {
+                        sh2 = 0;
+                        idx2++;
+                    }
+                    if (idx2 >= 0 && idx2 < nbuf)
+                        tbuf[idx2] |= (BYTE)(gb >> sh2);
+                    if (sh2 && idx2 + 1 >= 0 && idx2 + 1 < nbuf)
+                        tbuf[idx2 + 1] |= (BYTE)(gb << (8 - sh2));
                 }
-                if (idx2 >= 0 && idx2 < nbuf)
-                    tbuf[idx2] |= (BYTE)(gb >> sh2);
-                if (sh2 && idx2 + 1 >= 0 && idx2 + 1 < nbuf)
-                    tbuf[idx2 + 1] |= (BYTE)(gb << (8 - sh2));
             }
         }
-        px += advbuf[i];
+        px += char_advance(c, ch, w, widths, (WORD)i, dm, &berr);
     }
 }
 
@@ -179,23 +176,29 @@ static DWORD text_out(LPVOID lpDev, short x, short y, LPRECT clip, LPCSTR s, sho
 {
     SURF D;
     FONTCTX c;
-    RECT cr, box;
-    int width, fg, bg, r, k;
-    short berr;
+    RECT cr, box, op_rc;
+    int fg, bg, r, k, has_op = 0, has_text = 0;
     if (!f)
         return 0x80000000L;
     if (n < 0) {
         /* the extent: as the box below (GDI's underline and strike-out
            take their length from it) */
+        WORD cnt = (WORD)(-(long)n), i;
+        short berr = dm ? dm->BreakErr : 0;
+        long total = 0;
         font_ctx(&c, f, xf);
-        if (-n > 512)
-            n = -512;
-        width = advances(&c, s, -n, widths, dm, advbuf);
+        for (i = 0; i < cnt; i++) {
+            BYTE ch = (BYTE)s[i];
+            int gw = (int)char_width(&c, ch);
+            total += char_advance(&c, ch, gw, widths, i, dm, &berr);
+        }
+        if (dm)
+            dm->BreakErr = berr;
         if (widths)
-            width = width - advbuf[-n - 1] + (int)char_width(&c, (BYTE)s[-n - 1]);
+            total = total - widths[cnt - 1] + (int)char_width(&c, (BYTE)s[cnt - 1]);
         else
-            width += c.bold;
-        return MAKELONG(width, c.height);
+            total += c.bold;
+        return MAKELONG((WORD)total, c.height);
     }
     if (!surf_get(&D, lpDev))
         return 0x80000000L;
@@ -215,61 +218,81 @@ static DWORD text_out(LPVOID lpDev, short x, short y, LPRECT clip, LPCSTR s, sho
     if ((opts & ETO_CLIPPED) && opaque)
         clip_rect(&cr, opaque, NULL);
     if ((opts & ETO_OPAQUE) && opaque) {
-        RECT o = *opaque;
-        if (clip_rect(&o, &cr, &D)) {
-            if (D.screen)
-                scr_begin(o.left, o.top, o.right, o.bottom);
-            fill_solid(&D, o.left, o.top, o.right, o.bottom, 0xF0, bg, bg != 0);
-            if (D.screen)
-                scr_end();
+        op_rc = *opaque;
+        has_op = clip_rect(&op_rc, &cr, &D);
+    }
+    if (n > 0) {
+        short berr = dm->BreakErr;
+        long cur = x, min_x = x, max_x = x;
+        int i;
+        font_ctx(&c, f, xf);
+        /* the text's box, which the background fills (OPAQUE) and the glyphs
+           are cut to: the extent, or with the caller's widths the bounding
+           box of each character's own width (VG6: its bold second strike
+           falls outside and is cut), supporting negative lpCharWidths */
+        for (i = 0; i < n; i++) {
+            BYTE ch = (BYTE)s[i];
+            int gw = (int)char_width(&c, ch);
+            long right_i = cur + gw + (widths ? 0 : c.bold);
+            if (cur < min_x)
+                min_x = cur;
+            if (right_i > max_x)
+                max_x = right_i;
+            cur += char_advance(&c, ch, gw, widths, (WORD)i, dm, &berr);
+            if (!widths) {
+                if (cur < min_x)
+                    min_x = cur;
+                if (cur + c.bold > max_x)
+                    max_x = cur + c.bold;
+            }
+        }
+        if (min_x < cr.left)
+            min_x = cr.left;
+        if (max_x > cr.right)
+            max_x = cr.right;
+        if (min_x < max_x) {
+            box.left = (short)min_x;
+            box.right = (short)max_x;
+            box.top = y;
+            box.bottom = y + c.height;
+            has_text = clip_rect(&box, &cr, &D);
         }
     }
-    if (n == 0)
-        return 1;
-    if (n > 512)
-        n = 512;
-    font_ctx(&c, f, xf);
-    berr = dm->BreakErr;
-    width = advances(&c, s, n, widths, dm, advbuf);
-    /* the text's box, which the background fills (OPAQUE) and the glyphs
-       are cut to: the extent, or with the caller's widths the last
-       character's own width after the others' widths (VG6: its bold
-       second strike falls outside and is cut) */
-    if (widths)
-        width = width - advbuf[n - 1] + (int)char_width(&c, (BYTE)s[n - 1]);
-    else
-        width += c.bold;
-    dm->BreakErr = berr;
-    box.left = x;
-    box.top = y;
-    box.right = x + width;
-    box.bottom = y + c.height;
-    if (!clip_rect(&box, &cr, &D))
-        return 0;
-    if (D.screen)
-        scr_begin(box.left, box.top, box.right, box.bottom);
-    if (dm->bkMode == OPAQUE) {
-        RECT o;
-        o.left = x;
-        o.top = y;
-        o.right = x + width;
-        o.bottom = y + c.height;
-        if (clip_rect(&o, &cr, &D))
-            fill_solid(&D, o.left, o.top, o.right, o.bottom, 0xF0, bg, bg != 0);
+    if (!has_op && !has_text)
+        return n == 0 ? 1 : 0;
+    if (D.screen) {
+        RECT u = has_op ? op_rc : box;
+        if (has_op && has_text) {
+            if (box.left < u.left)
+                u.left = box.left;
+            if (box.top < u.top)
+                u.top = box.top;
+            if (box.right > u.right)
+                u.right = box.right;
+            if (box.bottom > u.bottom)
+                u.bottom = box.bottom;
+        }
+        scr_begin(u.left, u.top, u.right, u.bottom);
     }
-    for (k = box.left; k < box.right; k += (TROWB - 1) * 8) {
-        int x1 = k + (TROWB - 1) * 8, bx0 = k & ~7, nbuf;
-        if (x1 > box.right)
-            x1 = box.right;
-        nbuf = ((x1 - 1) >> 3) - (bx0 >> 3) + 1;
-        for (r = box.top; r < box.bottom; r++) {
-            build_row(&c, s, n, x, r - y, bx0, nbuf);
-            put_row(&D, r, k, x1, bx0, fg);
+    if (has_op)
+        fill_solid(&D, op_rc.left, op_rc.top, op_rc.right, op_rc.bottom, 0xF0, bg, bg != 0);
+    if (has_text) {
+        if (dm->bkMode == OPAQUE)
+            fill_solid(&D, box.left, box.top, box.right, box.bottom, 0xF0, bg, bg != 0);
+        for (k = box.left; k < box.right; k += (TROWB - 1) * 8) {
+            int x1 = k + (TROWB - 1) * 8, bx0 = k & ~7, nbuf;
+            if (x1 > box.right)
+                x1 = box.right;
+            nbuf = ((x1 - 1) >> 3) - (bx0 >> 3) + 1;
+            for (r = box.top; r < box.bottom; r++) {
+                build_row(&c, s, n, x, r - y, bx0, nbuf, widths, dm);
+                put_row(&D, r, k, x1, bx0, fg);
+            }
         }
     }
     if (D.screen)
         scr_end();
-    return 0;                           /* VGREC: 3.1's driver returns 0 when it draws */
+    return n == 0 ? 1 : 0;              /* VGREC: 3.1's driver returns 0 when it draws */
 }
 
 /* DWORD ExtTextOut(lpDestDev, wDestXOrg, wDestYOrg, lpClipRect, lpString,

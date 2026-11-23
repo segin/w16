@@ -139,17 +139,30 @@ void dma_stop(WORD ch)
 /* the bytes still to go in the channel's current pass */
 WORD dma_left(WORD ch)
 {
-    WORD f = sb_cli(), lo, hi, n;
+    WORD f = sb_cli(), lo, hi, hi2, n;
     if (ch < 4) {
+        WORD port = (ch << 1) + 1;
         outp(0x0C, 0);
-        lo = inp((ch << 1) + 1);
-        hi = inp((ch << 1) + 1);
+        (void)inp(port);
+        hi = inp(port);
+        do {
+            hi2 = hi;
+            outp(0x0C, 0);
+            lo = inp(port);
+            hi = inp(port);
+        } while (hi != hi2);
         n = ((hi << 8) | lo) + 1;
     } else {
-        WORD c = ch & 3;
+        WORD port = 0xC2 + ((ch & 3) << 2);
         outp(0xD8, 0);
-        lo = inp(0xC2 + (c << 2));
-        hi = inp(0xC2 + (c << 2));
+        (void)inp(port);
+        hi = inp(port);
+        do {
+            hi2 = hi;
+            outp(0xD8, 0);
+            lo = inp(port);
+            hi = inp(port);
+        } while (hi != hi2);
         n = (((hi << 8) | lo) + 1) << 1;
     }
     sb_sti(f);
@@ -396,11 +409,11 @@ LRESULT ENTRY SB_DRIVERPROC(DWORD id, HDRVR h, UINT msg, LPARAM l1, LPARAM l2)
         enable();
         return 0;                       /* SNDBLST2's answer */
     case DRV_DISABLE:
+    case DRV_FREE:
         disable();
         return 1;
     case DRV_OPEN:
     case DRV_CLOSE:
-    case DRV_FREE:
         return 1;
     case DRV_QUERYCONFIGURE:
         return 1;

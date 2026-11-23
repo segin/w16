@@ -158,6 +158,18 @@ ini_name        db "\MOUSE.INI", 0
 
 segment _TEXT
 
+; popfi: the flags pushed before a cli back, interrupts enabled again
+; explicitly when they were (in 386 Enhanced mode POPF does not change IF)
+%macro popfi 0
+        push bp
+        mov bp, sp
+        test byte [bp + 3], 2
+        pop bp
+        jz %%n
+        sti
+%%n:    popf
+%endmacro
+
 ; ---- LibEntry: DS = DGROUP, DI = hInstance. Looks for the device. ----
 global libentry
 libentry:
@@ -338,6 +350,9 @@ setup:
         mov byte [pending wrt DGROUP], 0
         mov byte [newpkt wrt DGROUP], 0
         mov byte [nirq wrt DGROUP], 0
+        mov byte [busyheld wrt DGROUP], 0
+        mov word [carry_x wrt DGROUP], 0
+        mov word [carry_y wrt DGROUP], 0
         sti
         mov ax, 0C205h                  ; initialise: 3-byte packets
         mov bh, PKT_SIZE
@@ -410,7 +425,7 @@ unstick:
 .done:  mov al, 0Ah                     ; OCW3: back to the request register
         out 0A0h, al
         out 20h, al
-        popf
+        popfi
         ret
 
 ; off: disable reporting, give IRQ 12 back. DS = DGROUP. C200h BH 0 and
@@ -849,6 +864,7 @@ isr74:
         push es
         mov ax, DGROUP
         mov ds, ax
+        cld
         mov byte [newpkt wrt DGROUP], 0
         in al, 64h
         and al, K_OBF | K_AUX
@@ -862,6 +878,7 @@ isr74:
         jmp .end
 .chain: pushf
         call far [old74 wrt DGROUP]     ; the BIOS's IRQ 12 handling
+        cli
         mov ax, DGROUP
         mov ds, ax
 .end:   call endirq
@@ -1062,6 +1079,8 @@ endirq:
         pop ds
         cli
         mov byte [busy wrt DGROUP], 0
+        cmp byte [pending wrt DGROUP], 0
+        jne .report
 .ret:   ret
 
 ; scale: BX, CX (a packet's X and Y, the screen's signs) scaled as
@@ -1107,14 +1126,16 @@ scale:
         mov al, dh
         xor ah, ah
         mov di, ax                      ; X, Y * factor / 16
-        mov si, 16
         mov ax, bx
         imul di
-        idiv si
+        push cx
+        mov cl, 4
+        call divshift
         mov bx, ax
-        mov ax, cx
+        pop ax                          ; Y
         imul di
-        idiv si
+        mov cl, 4
+        call divshift
         mov cx, ax
 .sens:  mov al, [sens_x wrt DGROUP]
         mov si, bx
@@ -1124,6 +1145,34 @@ scale:
         mov si, cx
         call sens
         mov cx, si
+        ret
+
+; divshift: signed 32-bit DX:AX divided by 2^CL (truncating toward 0),
+; saturated to signed 16-bit AX. Preserves BX, CX, SI, DI.
+divshift:
+        push cx
+        xor ch, ch
+        test dx, dx
+        jns .sh
+        push bx
+        mov bx, 1
+        shl bx, cl
+        dec bx
+        add ax, bx
+        adc dx, 0
+        pop bx
+.sh:    sar dx, 1
+        rcr ax, 1
+        loop .sh
+        mov cx, dx
+        cwd
+        cmp dx, cx
+        je .ok
+        mov ax, 7FFFh
+        test cx, cx
+        jns .ok
+        mov ax, 8000h
+.ok:    pop cx
         ret
 
 ; sens: SI scaled by sensitivity AL. 10 is 1:1 and 0 stops motion; in
@@ -1145,14 +1194,16 @@ sens:
         cmp al, 10
         ja .hi
         sub ax, 2
-        mov di, 8
+        mov di, 3                       ; / 8
         jmp .mul
 .hi:    sub ax, 6
-        mov di, 4
-.mul:   push dx
+        mov di, 2                       ; / 4
+.mul:   push cx
+        push dx
         push si
         imul si
-        idiv di
+        mov cx, di
+        call divshift
         pop dx                          ; the step before
         test dx, dx
         js .neg
@@ -1165,4 +1216,5 @@ sens:
         mov ax, -1
 .done:  mov si, ax
         pop dx
+        pop cx
 .ret:   ret

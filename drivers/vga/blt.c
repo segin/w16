@@ -205,34 +205,47 @@ WORD EXPORT BitBlt(LPVOID lpDst, short dx, short dy, LPVOID lpSrc, short sx, sho
         return 1;
     /* cut to the destination surface (and the source's), moving the
        source with the destination */
-    r.left = dx;
-    r.top = dy;
-    r.right = dx + w;
-    r.bottom = dy + h;
-    if (hasS) {
-        if (sx < 0) {
-            r.left -= sx;
-            sx = 0;
-        }
-        if (sy < 0) {
-            r.top -= sy;
-            sy = 0;
-        }
-    }
     {
-        int ox = r.left, oy = r.top;
-        if (!clip_rect(&r, NULL, &D))
-            return 1;
+        long dl = dx, dt = dy, dr = (long)dx + w, db = (long)dy + h;
+        long sl = sx, st = sy;
         if (hasS) {
-            sx += r.left - ox;
-            sy += r.top - oy;
-            if (r.right - r.left > S.width - sx)
-                r.right = r.left + S.width - sx;
-            if (r.bottom - r.top > S.height - sy)
-                r.bottom = r.top + S.height - sy;
-            if (r.right <= r.left || r.bottom <= r.top)
-                return 1;
+            if (sl < 0) {
+                dl -= sl;
+                sl = 0;
+            }
+            if (st < 0) {
+                dt -= st;
+                st = 0;
+            }
         }
+        if (dl < 0) {
+            sl -= dl;
+            dl = 0;
+        }
+        if (dt < 0) {
+            st -= dt;
+            dt = 0;
+        }
+        if (dr > D.width)
+            dr = D.width;
+        if (db > D.height)
+            db = D.height;
+        if (hasS) {
+            if (sl >= S.width || st >= S.height)
+                return 1;
+            if (dr - dl > S.width - sl)
+                dr = dl + (S.width - sl);
+            if (db - dt > S.height - st)
+                db = dt + (S.height - st);
+        }
+        if (dl >= dr || dt >= db)
+            return 1;
+        r.left = (short)dl;
+        r.top = (short)dt;
+        r.right = (short)dr;
+        r.bottom = (short)db;
+        sx = (short)sl;
+        sy = (short)st;
     }
     scr = D.screen || (hasS && S.screen);
     if (scr) {
@@ -272,25 +285,31 @@ WORD EXPORT FastBorder(LPRECT rc, short hw, short vh, DWORD rop3, LPVOID lpDev,
     int i;
     if (!surf_get(&D, lpDev) || !rc)
         return 0;
-    parts[0].left = rc->left; parts[0].right = rc->right;
-    parts[0].top = rc->top; parts[0].bottom = rc->top + vh;
-    parts[1].left = rc->left; parts[1].right = rc->right;
-    parts[1].top = rc->bottom - vh; parts[1].bottom = rc->bottom;
-    parts[2].left = rc->left; parts[2].right = rc->left + hw;
-    parts[2].top = rc->top + vh; parts[2].bottom = rc->bottom - vh;
-    parts[3].left = rc->right - hw; parts[3].right = rc->right;
-    parts[3].top = rc->top + vh; parts[3].bottom = rc->bottom - vh;
     all = *rc;
     if (!clip_rect(&all, clip, &D))
         return 0xFFFF;
+    parts[0].left = rc->left; parts[0].right = rc->right;
+    parts[0].top = rc->top; parts[0].bottom = rc->top + vh;
+    if (parts[0].bottom > rc->bottom)
+        parts[0].bottom = rc->bottom;
+    parts[1].left = rc->left; parts[1].right = rc->right;
+    parts[1].top = rc->bottom - vh; parts[1].bottom = rc->bottom;
+    parts[2].left = rc->left; parts[2].right = rc->left + hw;
+    if (parts[2].right > rc->right)
+        parts[2].right = rc->right;
+    parts[2].top = rc->top + vh; parts[2].bottom = rc->bottom - vh;
+    parts[3].left = rc->right - hw; parts[3].right = rc->right;
+    parts[3].top = rc->top + vh; parts[3].bottom = rc->bottom - vh;
     if (D.screen)
         scr_begin(all.left, all.top, all.right, all.bottom);
     pattern_planes(brush, dm, D.planes == 1, pat, NULL, NULL);
     for (i = 0; i < 4; i++) {
         RECT r = parts[i];
-        if (parts[1].top < parts[0].bottom && i == 1)
+        if (i == 1 && r.top < parts[0].bottom)
             r.top = parts[0].bottom;        /* thinner than two edges */
-        if (clip_rect(&r, clip, &D))
+        if (i == 3 && r.left < parts[2].right)
+            r.left = parts[2].right;
+        if (clip_rect(&r, &all, &D))
             blt(&D, r.left, r.top, NULL, 0, 0, r.right - r.left, r.bottom - r.top, rop,
                 uses_pat(rop) ? pat : NULL, dm);
     }
@@ -320,15 +339,16 @@ void row_op(SURF *D, int y, int x0, int x1, BYTE rop, BYTE pat[4][8], int smask)
             scr_plane(p);
         if (nb > ROWB && smask >= 0) {
             /* longer than the buffer: in pieces */
-            int a = x0, b;
+            long a = x0, b;
             while (a < x1) {
                 b = ((a >> 3) + ROWB - 1) << 3;
                 if (b > x1)
                     b = x1;
                 {
-                    int nb2 = ((b - 1) >> 3) - (a >> 3) + 1;
-                    rop_run(rop, surf_line(D, y, p) + (a >> 3), srow[0], pat[p][y & 7], nb2,
-                            (BYTE)(0xFF >> (a & 7)), (BYTE)(0xFF << (7 - ((b - 1) & 7))));
+                    int nb2 = (int)(((b - 1) >> 3) - (a >> 3) + 1);
+                    rop_run(rop, surf_line(D, y, p) + (int)(a >> 3), srow[0], pat[p][y & 7],
+                            (WORD)nb2, (BYTE)(0xFF >> (a & 7)),
+                            (BYTE)(0xFF << (7 - ((b - 1) & 7))));
                 }
                 a = b;
             }
