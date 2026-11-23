@@ -392,23 +392,67 @@ static void sti(void);
    WaitEvent with them disabled (observed: with them left so, USER's
    timer procedure, called from IRQ 0 through SYSTEM.DRV, ran 12 times in
    15 seconds instead of every 100 ms, and no WM_TIMER arrived). */
-/* Nothing to run: DOS's idle call. Windows 3.1's KRNL286 makes it in
-   real mode as often as w16's does (MS5, tests/dos/ms5.asm: about
-   455,000 INT 28h in 30 idle seconds each) and never INT 2Fh AX=1689h
-   (the kernel idle call to the 386 Enhanced mode VMM), which w16 made
-   on every pass as well; with it, DOSBox's mouse stopped for good after
-   the first motion in up to half the boots with motion from the start
-   (boot-test input, bootnolock.txt; drivers/mouse/README.md). */
-u16 idle_1689;          /* [w16] idle1689=1 (a test option): the call
-                           back on every pass, as a stress accelerator */
+/* Nothing to run: the idle calls, each pass. Windows 3.1 (VX17,
+   tests/kidlerun.sh, ARCHITECTURE.md 12.15; KRNL386 and KRNL286, 386
+   Enhanced and Standard mode alike): an INT 28h (DOS idle) and then an
+   INT 2Fh AX=1689h (the kernel idle call, Pietrek ch. 6; BX=0 while no
+   mouse button is down), both made in protected mode, where a program's
+   handlers see them; none through DPMI 0300h. What becomes of them is
+   the DOS extender's: WIN386 reflects every INT 28h to V86 mode and takes
+   1689h itself (with another VM to run, the System VM gives up its time
+   slice until its next interrupt; otherwise the VMM's idle callbacks
+   run), Microsoft's DOSX sends one INT 28h in ten to real mode and no
+   1689h (MS5, tests/dos/ms5.asm). Before, w16 made INT 28h through 0300h
+   and no 1689h: under WIN386 a waiting Windows kept its time slices
+   while a DOS box was busy. (w16 once made 1689h through 0300h as well,
+   in real mode: under Microsoft's DOSX the mouse then stopped for good
+   after the first motion in up to half the boots with motion from the
+   start; boot-test input, bootnolock.txt; drivers/mouse/README.md.) The
+   idle loop runs with interrupts enabled: USER's GetMessage calls
+   WaitEvent with them disabled (observed: with them left so, USER's
+   timer procedure, called from IRQ 0 through SYSTEM.DRV, ran 12 times in
+   15 seconds instead of every 100 ms, and no WM_TIMER arrived). */
+u16 idle_1689;          /* [w16] idle1689=1 (a test option): 1689h through
+                           real mode too on every pass, as a stress
+                           accelerator (tests/mousestress.sh -a) */
+
+static void int28(void);
+#pragma aux int28 = "push ds" "push es" "int 28h" "pop es" "pop ds" \
+    modify [ax bx cx dx si di];
+static void int2f_1689(u16 bx);
+#pragma aux int2f_1689 = "push ds" "push es" "mov ax, 1689h" "int 2Fh" \
+    "pop es" "pop ds" parm [bx] modify [ax bx cx dx si di];
+
+/* USER's IsUserIdle (USER.333; US1 saw Windows 3.1's KERNEL call it
+   while no task ran; Pietrek ch. 6: its result decides 1689h's BX, 0
+   when USER is idle); 1 (idle) while there is no USER */
+typedef u16 (__far __pascal *useridle_fn)(void);
+static useridle_fn user_idle;
+
+static u16 is_user_idle(void)
+{
+    if (!user_idle) {
+        module FAR *u = module_find("USER");
+        u16 sel, off;
+        int is_const;
+        if (!u || !module_entry(u, 333, &sel, &off, &is_const) || is_const)
+            return 1;
+        user_idle = (useridle_fn)(((u32)sel << 16) | off);
+    }
+    return user_idle();
+}
+
 static void idle(void)
 {
+    u16 bx;
     sti();
 #ifdef KRNL386
     k386_sane = 1;              /* KERNEL runs: Reboot's sanity byte */
 #endif
     wd_progress();                      /* [w16] hangwatch (winboot.c) */
-    rm_int(0x28, 0, 0, 0, 0);           /* DOS idle */
+    bx = is_user_idle() ? 0 : 1;
+    int28();                            /* DOS idle */
+    int2f_1689(bx);                     /* kernel idle */
     if (idle_1689)
         rm_int(0x2F, 0x1689, 1, 0, 0);
 }
