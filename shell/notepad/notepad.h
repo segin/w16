@@ -109,10 +109,12 @@ extern char g_file[DOS_PATH];           /* the file, as opened; "" untitled */
 void set_title(void);
 void sync_scroll(void);
 HWND make_edit(BOOL wrap);
+LPSTR edit_text(WORD *len);             /* a copy of the text; mem_free it */
 int msg_box(HWND owner, int ids, const char FAR *arg, UINT flags);
 
 /* ---- file.c ---- */
 BOOL file_query_save(void);             /* FALSE: the user cancelled */
+BOOL file_query_end(void);              /* WM_QUERYENDSESSION */
 void file_new(void);
 void file_open(void);
 BOOL file_save(BOOL as);

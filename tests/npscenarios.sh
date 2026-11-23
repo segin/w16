@@ -15,6 +15,10 @@
 #   ; help          a logging stand-in WINHELP.EXE (tests/apps/thelp.c);
 #                   the WinHelp requests must be the same
 #   ; log           compare SNAP's log (dump, info, text) as well
+#   ; expand F DEST a file of the reference Setup disks expanded into the
+#                   scratch install (e.g. TTY.DR_ WINDOWS/SYSTEM/TTY.DRV)
+#   ; ini S:K=V     set a WIN.INI key (tests/scripts/iniset.py), e.g. a
+#                   printer: windows:device=Generic / Text Only,TTY,C:\NP.PRN
 # NP_W16FILES="HOST=C-PATH ..." puts more of w16's files on the w16 side,
 # e.g. $PWD/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE (w16's Notepad on
 # w16's edit control; the screenshots then differ by USER's art too)
@@ -36,7 +40,6 @@ newbase=$(mktemp); gen=$(mktemp -d); trap 'rm -rf "$newbase" "$gen"' EXIT
 mkdir -p "$gen/ini"
 tr -d '\r' < "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" |
     sed 's/^CursorBlinkRate=.*/CursorBlinkRate=60000/; s/$/\r/' > "$gen/ini/WIN.INI"
-wininfiles="$gen/ini/WIN.INI=WINDOWS/WIN.INI"
 mkdir -p "$out"
 for n in $names; do
     s=$sd/$n.txt
@@ -52,6 +55,22 @@ open(sys.argv[3], 'wb').write((line * (n // len(line) + 1))[:n])" "$size" "$len"
     get=$(sed -n 's/^; get //p' "$s" | tr '\n' ' ')
     if grep -q '^; time' "$s"; then x=1 pre="TIME 09:05:00"; fi
     grep -q '^; help' "$s" && help="$root/build/dos/THELP.EXE=WINDOWS/WINHELP.EXE"
+    wininfiles="$gen/ini/WIN.INI=WINDOWS/WIN.INI"
+    if grep -q '^; \(ini\|expand\) ' "$s"; then
+        mkdir -p "$gen/$n"
+        cp "$gen/ini/WIN.INI" "$gen/$n/WIN.INI"
+        wininfiles="$gen/$n/WIN.INI=WINDOWS/WIN.INI"
+        sed -n 's/^; ini //p' "$s" | while IFS= read -r kv; do
+            python3 -I "$root/tests/scripts/iniset.py" "$gen/$n/WIN.INI" "$kv"
+        done
+        while read -r f to; do
+            [ -n "$f" ] || continue
+            python3 -I "$root/tools/szdd.py" "$root/.tools/ref/win31/src/$f" "$gen/$n/$(basename "$to")"
+            files="$files $gen/$n/$(basename "$to")=$to"
+        done <<EOF
+$(sed -n 's/^; expand //p' "$s")
+EOF
+    fi
     for who in orig w16; do
         d=$out/$n/$who
         rm -rf "$d"; mkdir -p "$d"

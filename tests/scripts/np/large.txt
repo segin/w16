@@ -1,0 +1,58 @@
+; NP11: a large file (Notepad audit C1, C2; ARCHITECTURE.md 15.1): 51190
+; bytes of 64-character lines, "zq" typed at its end, Save As (the text
+; read past 32767 characters); Word Wrap (3.1's refuses with "too much
+; text", w16's wraps: either keeps the text; its OK clicked);
+; Ctrl+Home, Find "zq" (the match past 32767), "Q" typed over it, Save
+; As; Word Wrap again. Only the saved files are compared: the two
+; Notepads differ on purpose in whether they wrap. With NP_W16FILES the
+; last file differs: w16's USER takes EM_SETSEL past 32767 as negative
+; (ARCHITECTURE 10.3).
+; gen 51190 64 BIG.TXT
+; get BIGOUT.TXT BIGWRAP.TXT
+run NOTEPAD.EXE C:\BIG.TXT
+wait 4000
+menu e
+char a
+wait 300
+key 23
+type zq
+wait 300
+menu f
+char a
+wait 1500
+type C:\BIGOUT.TXT
+key 0D
+wait 2500
+menu e
+char w
+wait 3000
+clickid 2
+wait 800
+kdown 11
+kdown 24
+kup 24
+kup 11
+wait 500
+menu s
+char f
+wait 1000
+type zq
+key 0D
+wait 2000
+key 1B
+wait 800
+type Q
+wait 300
+menu f
+char a
+wait 1500
+type C:\BIGWRAP.TXT
+key 0D
+wait 2500
+menu e
+char w
+wait 3000
+clickid 2
+wait 800
+close
+wait 1500

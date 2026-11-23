@@ -1,0 +1,261 @@
+; NP12: Page Setup margins against the printer's page (Generic / Text Only,
+; 8.5 x 11 inches; Notepad audit H2, M1): on 3.1
+; left + right or top + bottom of 8.5 or 11 or more give "The Margin values
+; are not correct" (8.4 and 10.9 do not), the focus back in Left
+; expand TTY.DR_ WINDOWS/SYSTEM/TTY.DRV
+; expand UNIDRV.DL_ WINDOWS/SYSTEM/UNIDRV.DLL
+; ini windows:device=Generic / Text Only,TTY,C:\NP.PRN
+; ini windows:Spooler=no
+; ini devices:Generic / Text Only=TTY,C:\NP.PRN
+; ini PrinterPorts:Generic / Text Only=TTY,C:\NP.PRN,15,45
+; ini ports:C:\NP.PRN=
+; log
+run NOTEPAD.EXE
+wait 3000
+menu f
+char t
+wait 1000
+alt l
+type 4
+alt r
+type 4
+alt t
+type 1
+alt b
+type 1
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type 4.2
+alt r
+type 4.2
+alt t
+type 1
+alt b
+type 1
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type 4.25
+alt r
+type 4.25
+alt t
+type 1
+alt b
+type 1
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type 4.3
+alt r
+type 4.3
+alt t
+type 1
+alt b
+type 1
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type 3.75
+alt r
+type 4.75
+alt t
+type 1
+alt b
+type 1
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type .75
+alt r
+type .75
+alt t
+type 5
+alt b
+type 5
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type .75
+alt r
+type .75
+alt t
+type 5.4
+alt b
+type 5.4
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type .75
+alt r
+type .75
+alt t
+type 5.5
+alt b
+type 5.5
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type .75
+alt r
+type .75
+alt t
+type 5.6
+alt b
+type 5.6
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type .75
+alt r
+type .75
+alt t
+type 10.9
+alt b
+type 0
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type 8.4
+alt r
+type 0
+alt t
+type 1
+alt b
+type 1
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type 8.5
+alt r
+type 0
+alt t
+type 1
+alt b
+type 1
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600
+menu f
+char t
+wait 1000
+alt l
+type 20
+alt r
+type 20
+alt t
+type 20
+alt b
+type 20
+key 0D
+wait 1000
+dump
+key 0D
+wait 600
+focus
+key 1B
+wait 600

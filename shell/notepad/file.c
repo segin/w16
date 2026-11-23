@@ -44,16 +44,6 @@ static WORD text_length(void)
     return (WORD)SendMessage(g_edit, WM_GETTEXTLENGTH, 0, 0);
 }
 
-static LPSTR get_text(WORD *len)
-{
-    WORD n = text_length();
-    LPSTR p = mem_alloc((DWORD)n + 1);
-    if (p)
-        GetWindowText(g_edit, p, n + 1);
-    *len = n;
-    return p;
-}
-
 static void reset_edit(void)
 {
     SendMessage(g_edit, EM_SETSEL, 0, 0);
@@ -70,14 +60,17 @@ static void set_untitled(void)
 
 /* ---- asking ---- */
 
-BOOL file_query_save(void)
+static BOOL in_save_as;                 /* the Save As dialog is up */
+
+/* `more`: MB_SYSTEMMODAL when Windows is ending (file_query_end) */
+static BOOL query_save(UINT more)
 {
     char untitled[32];
     if (!SendMessage(g_edit, EM_GETMODIFY, 0, 0))
         return TRUE;
     LoadString(g_hinst, IDS_UNTITLED, untitled, sizeof untitled);
     switch (msg_box(g_main, IDS_CHANGED, g_file[0] ? g_file : untitled,
-                    MB_YESNOCANCEL | MB_ICONEXCLAMATION)) {
+                    MB_YESNOCANCEL | MB_ICONEXCLAMATION | more)) {
     case IDYES:
         return file_save(FALSE);
     case IDNO:
@@ -85,6 +78,24 @@ BOOL file_query_save(void)
     default:
         return FALSE;
     }
+}
+
+BOOL file_query_save(void)
+{
+    return query_save(0);
+}
+
+/* WM_QUERYENDSESSION (observed on 3.1, tests/npqes.sh; audit M5): with
+   the Save As dialog up, IDS_QUERYEND (OK, no icon) and Windows does not
+   end; otherwise, Open, Find and Page Setup up or not, the changed-text
+   question as for closing. Both boxes system-modal. */
+BOOL file_query_end(void)
+{
+    if (in_save_as) {
+        msg_box(g_main, IDS_QUERYEND, NULL, MB_OK | MB_SYSTEMMODAL);
+        return FALSE;
+    }
+    return query_save(MB_SYSTEMMODAL);
 }
 
 void file_new(void)
@@ -328,7 +339,9 @@ static BOOL file_dialog(char *file, BOOL save)
     ofn.lpstrTitle = title;
     ofn.lpstrDefExt = "txt";            /* UNVERIFIED */
     ofn.Flags = OFN_HIDEREADONLY | (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+    in_save_as = save;
     ok = save ? GetSaveFileName(&ofn) : GetOpenFileName(&ofn);
+    in_save_as = FALSE;
     return ok;
 }
 
@@ -345,9 +358,12 @@ void file_open(void)
 void file_drop(HANDLE hdrop)
 {
     char file[DOS_PATH];
-    DragQueryFile(hdrop, 0, file, sizeof file);
+    file[0] = 0;
+    /* a drop with no file name (not from File Manager): nothing (audit L2) */
+    if (!DragQueryFile(hdrop, 0, file, sizeof file))
+        file[0] = 0;
     DragFinish(hdrop);
-    if (file_query_save())
+    if (file[0] && file_query_save())
         file_load(file, FALSE);
 }
 
@@ -358,7 +374,7 @@ static BOOL write_file(const char *name)
     OFSTRUCT of;
     HFILE f;
     WORD len;
-    LPSTR text = get_text(&len);
+    LPSTR text = edit_text(&len);
     BOOL ok;
     if (!text) {
         msg_box(g_main, IDS_NOMEMORY, NULL, MB_OK | MB_ICONEXCLAMATION);
