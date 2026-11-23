@@ -4350,3 +4350,20 @@ taking the card (here it takes it, as a box), the event Windows 3.1's
 SHELL sends its WINOA386 for SHELL_Message (w16's WINOA386 has its own:
 under Microsoft's WINOA386 the box gets no card and no message), the
 box's icon behind the message ("(Inactive SBD)" under 3.1).
+
+**QuickTime in 386 Enhanced mode** (boot-test part `quicktime@enh`, the
+tree alone, its SYSTEM.INI loading VSBD.386; Windows 3.1's side with
+SNDBLST2.DRV and its VSBD.386): the movie's sound plays (sbaudio.sh's
+qtw16e and qtmse sides: its sound track comes out), but on w16 the movie
+drops frames to keep up with its sound: its picture garbled, its end
+after about 6 s against 3.1's 12 (with Microsoft's TIMER.DRV and VTDAPI
+on w16's WIN386 too, so not the timer driver), and the close sequence's
+screens differ. Without a sound device w16 shows every frame but takes
+22-26 s (21.5): w16's 386 Enhanced mode runs QuickTime at about half
+3.1's speed, and with a sound clock to follow that shows as dropped
+frames. Each read of the DMA count is now one trapped reading (VDMAD
+gives both bytes of one, SB16.DRV reads once in Enhanced mode: before,
+the movie took 2-4 s). Not done: finding where w16's Enhanced mode loses
+the time. Plain DOSBox: the Enhanced-mode sound tests run in DOSBox-X
+only (the sound capture needs it); SB16.DRV's devices in Enhanced mode
+were not tried in plain DOSBox.
