@@ -27,7 +27,7 @@
 #     -g       show the specimen as Windows draws it with its own TrueType
 #              rasteriser (TTVIEW /G, 3.1 and later; implies -2): screen.png
 #              is Windows' rendering, not compared; runs TTVIEW3.EXE, the
-#              same marked 3.10 (3.1 adds no TrueType font for a 2.x program)
+#              same marked 3.10 (a 3.x program, as probe FN4 is)
 #     -s       also run each without /T and take screenshots of TTVIEW's
 #              window (DIR/SYSTEM/shot*.png, view-*.png)
 # Needs the reference installs (.tools/ref/win31, .tools/ref/w386, MS-DOS
@@ -48,7 +48,7 @@ done
 shift $((OPTIND - 1))
 [ $# -gt 0 ] || set -- w386 std enh w16
 exe=$root/build/dos/TTVIEW.EXE
-# /G: the 3.10-marked copy (3.1 adds no TrueType font for a 2.x program)
+# /G: the 3.10-marked copy
 [ -n "${exe3:-}" ] && exe=$root/build/dos/TTVIEW3.EXE
 mkdir -p "$out"
 "$root/build/host/ttvhost" $page2 "$font" "$out/host.pg"
@@ -87,6 +87,9 @@ for sys in "$@"; do
             w16) set -- -T "$root/build/w16" -c 'WIN /S /B' ;;
             286) set -- -r -p 286 -c 'WIN /S /B' ;;
             esac
+            # -g: a copy in the system directory, where a .FOT made the
+            # portable way finds it (TTVIEW /G)
+            [ -n "${exe3:-}" ] && [ $sys != w16 ] && set -- "$@" -f "$font=WINDOWS/SYSTEM/TTFONT.TTF"
             [ $sys = 286 ] && export DROPIN_CYCLES="${TTV_CYCLES:-fixed 2000}"
             slow=$([ $sys = 286 ] && echo 1 || echo)
             rm -rf "$work/in"

@@ -60,6 +60,7 @@ static int g_test, g_reps = 1, g_glyphs, g_failed;
 static int g_unhinted, g_page2, g_gdi, g_fot;   /* /U, /2, /G; FOT added */
 static DWORD g_ms, g_msu;                       /* hinted, unhinted */
 static HMENU g_view;
+static char g_fotpath[160];                     /* /G: the .FOT added */
 
 static void check_menu(void)
 {
@@ -108,32 +109,69 @@ static void close_font(void)
         DeleteObject(g_bm);
     g_bm = 0;
     if (g_fot)
-        RemoveFontResource(FOT);
+        RemoveFontResource(g_fotpath);
     g_fot = 0;
 }
 
 /* /G: the font added to Windows (3.1 and later), through a .FOT made for
-   it: 1, else 0 and why in g_fotwhy. (GDI's exported names are upper
-   case, as the NE format keeps them) */
+   it: 1, else 0 and why in g_fotwhy. First as FN4 does it, which 3.1 adds
+   (tests/apps/fn4.c on the TrueType font branch): the .TTF in the system
+   directory (tests/ttview.sh -g puts a copy there), the .FOT made with its
+   bare name and that directory as the current path; then with the .TTF's
+   full path. (GDI's and KERNEL's exported names are upper case, as the NE
+   format keeps them; both functions are found at run time so that TTVIEW
+   still loads on 2.x) */
+/* append t to s (no lstrcat before 3.0); s */
+static char *scat(char *s, const char *t)
+{
+    char *e = s;
+    while (*e)
+        e++;
+    while ((*e++ = *t++) != 0)
+        ;
+    return s;
+}
+
 typedef BOOL (FAR PASCAL *CSFR)(UINT, LPCSTR, LPCSTR, LPCSTR);
+typedef UINT (FAR PASCAL *GSD)(LPSTR, UINT);
 static const char *g_fotwhy = "";
 static int add_font(void)
 {
     FARPROC p = GetProcAddress(GetModuleHandle("GDI"), "CREATESCALABLEFONTRESOURCE");
+    FARPROC gsd = GetProcAddress(GetModuleHandle("KERNEL"), "GETSYSTEMDIRECTORY");
     OFSTRUCT of;
+    char sys[144];
+    const char *name = g_path, *s;
+    int n;
     if (!p) {
         g_fotwhy = "no CreateScalableFontResource";
         return 0;
     }
-    OpenFile(FOT, &of, OF_DELETE);
-    if (!((CSFR)p)(0, FOT, g_path, NULL)) {
+    for (s = g_path; *s; s++)
+        if (*s == '\\' || *s == ':')
+            name = s + 1;
+    n = gsd ? (int)((GSD)gsd)(sys, sizeof sys - 16) : 0;
+    if (n > 0 && n < (int)sizeof sys - 16) {
+        g_fotpath[0] = 0;
+        scat(scat(g_fotpath, sys), "\\TTVIEW.FOT");
+        OpenFile(g_fotpath, &of, OF_DELETE);
+        if (((CSFR)p)(0, g_fotpath, name, sys) && AddFontResource(g_fotpath) > 0) {
+            g_fotwhy = "Windows' TextOut (the .FOT made the portable way)";
+            return 1;
+        }
+    }
+    g_fotpath[0] = 0;
+    scat(g_fotpath, FOT);
+    OpenFile(g_fotpath, &of, OF_DELETE);
+    if (!((CSFR)p)(0, g_fotpath, g_path, NULL)) {
         g_fotwhy = "CreateScalableFontResource failed";
         return 0;
     }
-    if (AddFontResource(FOT) <= 0) {
+    if (AddFontResource(g_fotpath) <= 0) {
         g_fotwhy = "AddFontResource failed";
         return 0;
     }
+    g_fotwhy = "Windows' TextOut (the .FOT made with the full path)";
     return 1;
 }
 
@@ -297,7 +335,7 @@ static void write_log(void)
     lg(" ms, unhinted ");
     lgnum(g_msu);
     lg(" ms\r\nshown ");
-    lg(g_gdi ? (g_fot ? "Windows' TextOut" : g_fotwhy)
+    lg(g_gdi ? g_fotwhy
              : g_unhinted ? "unhinted" : "hinted");
     lg("\r\n");
     h = _lcreat("C:\\TTVIEW.LOG", 0);
