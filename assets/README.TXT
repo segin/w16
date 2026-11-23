@@ -42,6 +42,16 @@ is newer. Neither mode needs anything of Microsoft's.
   TASKMAN.EXE             the Task List (Ctrl+Esc, or a double-click
                           on the desktop): switch to, close, cascade or
                           tile the programs' windows, arrange icons
+  VMTASK.EXE              the VM Task Manager (w16's own; Windows 3.1
+                          has nothing like it, in Accessories): in 386
+                          Enhanced mode, how the processor's time is
+                          shared between w16 and each DOS program's
+                          virtual machine, and between the programs
+                          within w16, with w16's idle time and a
+                          history graph (Options: the update interval,
+                          Always on Top). It needs SYSTEM\VMTASK.386
+                          for the virtual machines; without it, and in
+                          Standard mode, it shows the programs alone
   SYSTEM\KRNL286.EXE      KERNEL for an 80286
   SYSTEM\KRNL386.EXE      KERNEL for a 386 or later (Standard and 386
                           Enhanced mode)
@@ -138,6 +148,11 @@ is newer. Neither mode needs anything of Microsoft's.
   SYSTEM\MMTASK.TSK       the multimedia library's helper task
   SYSTEM\VSBD.386        the Sound Blaster between Windows and DOS
                           programs in 386 Enhanced mode
+  SYSTEM\VMTASK.386       the VM Task Manager's device: counts each
+                          virtual machine's time and w16's idle time
+                          for VMTASK.EXE, and changes nothing else
+                          ([386Enh] device=vmtask.386; it also works
+                          under Windows 3.1's own WIN386)
   SYSTEM\SB16.DRV         a Sound Blaster 16 driver: wave output and
                           input (8 and 16 bits, mono and stereo, 5000
                           to 44100 Hz), MIDI out and in through the

@@ -38,6 +38,12 @@ with Windows 3.1 (not `LargeMemory=0`: the tests' machines have 16 MB, where
 both values give the same; the boot-test case `bigmem` runs with more); another value is set per test with `tests/dropin.sh
 -i w16:KEY=VALUE` or the `DROPIN_INI` environment variable (TESTING.md).
 
+The VM Task Manager's device (VMTASK.386, ARCHITECTURE.md 15.12) is
+switched by its own line instead: the install tree's SYSTEM.INI has
+`device=vmtask.386` in `[386Enh]`; without the line nothing of it is
+loaded, as in stock 3.1. Loaded, it changes nothing a program sees
+(it only counts; VMTASK.EXE without it shows the Windows tasks alone).
+
 ## Debugging aids
 
 | Key | Default | Read by | What it does |

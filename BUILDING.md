@@ -33,7 +33,7 @@ make -j"$(nproc)"          # everything below
 
 | Output | What |
 |---|---|
-| `build/dos/` | every w16 module and program: `WIN.COM`, `DOSX.EXE`, `KRNL286.EXE`, `KRNL386.EXE`, `USER.EXE`, `GDI.EXE`, `SHELL.DLL`, `WINOLDAP.MOD`, `WINOA386.MOD`, `WIN87EM.DLL`, `VGA.DRV`, `MOUSE.DRV`, `PROGMAN.EXE`, `WINFILE.EXE`, `NOTEPAD.EXE`, `WRITE.EXE`, `REGEDIT.EXE`, `PIFEDIT.EXE`, `WINHELP.EXE`, `SNAP.EXE`, …, plus the test probes |
+| `build/dos/` | every w16 module and program: `WIN.COM`, `DOSX.EXE`, `KRNL286.EXE`, `KRNL386.EXE`, `USER.EXE`, `GDI.EXE`, `SHELL.DLL`, `WINOLDAP.MOD`, `WINOA386.MOD`, `WIN87EM.DLL`, `VGA.DRV`, `MOUSE.DRV`, `PROGMAN.EXE`, `WINFILE.EXE`, `NOTEPAD.EXE`, `WRITE.EXE`, `REGEDIT.EXE`, `PIFEDIT.EXE`, `WINHELP.EXE`, `VMTASK.EXE`, the external VxDs `VSBD.386` and `VMTASK.386`, `SNAP.EXE`, …, plus the test probes |
 | `build/fonts/` | w16's fonts: `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON`, `SSERIFE.FON`, `COURE.FON`, `SERIFE.FON`, `SMALLE.FON`, `SYMBOLE.FON`, `DOSAPP.FON`, `EGA80WOA.FON`, `EGA40WOA.FON`, `CGA80WOA.FON`, `CGA40WOA.FON` (sources in `fonts/`; the second set's are written by `tools/fontgen.py`) |
 | `build/w16/` | the **install tree**: a Windows 3.1-style directory holding only w16's files, each where Windows keeps its own (see below) |
 | `build/win386/` | `WIN386.EXE` and its separate VxDs (`make win386` builds only these) |
@@ -92,13 +92,13 @@ assemble a complete all-w16 drive for DOSBox with `tests/dropin.sh`.
 | `dosx/` | the Standard-mode DOS extender (`DOSX.EXE`) |
 | `swap/` | the Standard-mode task swappers (`WSWAP.EXE`, `DSWAP.EXE`) |
 | `kernel/` | KERNEL (`KRNL286.EXE` and `KRNL386.EXE`; `boot/` the real-mode start) |
-| `win386/` | `WIN386.EXE` (386 Enhanced mode): `ldr/` the real-mode loader, `vmm/` the VMM and its built-in devices, `vxd/` the separate VxDs (VPICD, VKD, VMD, REBOOT) |
+| `win386/` | `WIN386.EXE` (386 Enhanced mode): `ldr/` the real-mode loader, `vmm/` the VMM and its built-in devices, `vxd/` the separate VxDs (VPICD, VKD, VMD, REBOOT, VSD, VMPOLL, VDMAD inside WIN386.EXE; VSBD.386 and VMTASK.386, external) |
 | `user/`, `gdi/` | USER and GDI |
 | `win87em/` | `WIN87EM.DLL`, the floating-point emulator |
 | `winoldap/` | `WINOLDAP.MOD` (DOS programs in Standard mode) |
 | `winoa386/` | `WINOA386.MOD` (DOS programs in 386 Enhanced mode) |
 | `drivers/` | device drivers: `system/`, `keyboard/`, `mouse/`, `comm/`, `sound/`, `timer/` (`TIMER.DRV`), `vga/` (`VGA.DRV`), `grabber/` (`VGACOLOR.2GR`, `vga3gr/` `VGA.3GR`), `sb16/` (`SB16.DRV`) |
-| `shell/` | the system DLLs and the applets, one directory each: `shelldll/` (`SHELL.DLL`), `commdlg/`, `ddeml/`, `lzexpand/`, `mmsystem/`, `toolhelp/`, `ver/`; `progman/`, `winfile/`, `taskman/`, `control/` and `cpl/` (`MAIN.CPL`, `CPWIN386.CPL`), `notepad/`, `write/`, `cardfile/`, `calc/`, `clock/`, `regedit/`, `pifedit/` (`PIFEDIT.EXE`), `winhelp/` (`WINHELP.EXE`), `scrnsave/` (the screen saver library and `SSSTARS.SCR`) |
+| `shell/` | the system DLLs and the applets, one directory each: `shelldll/` (`SHELL.DLL`), `commdlg/`, `ddeml/`, `lzexpand/`, `mmsystem/`, `toolhelp/`, `ver/`; `progman/`, `winfile/`, `taskman/`, `control/` and `cpl/` (`MAIN.CPL`, `CPWIN386.CPL`), `notepad/`, `write/`, `cardfile/`, `calc/`, `clock/`, `regedit/`, `pifedit/` (`PIFEDIT.EXE`), `winhelp/` (`WINHELP.EXE`), `vmtask/` (`VMTASK.EXE`, the VM Task Manager, a w16 extension), `scrnsave/` (the screen saver library and `SSSTARS.SCR`) |
 | `ole/` | `OLECLI.DLL` and `OLESVR.DLL` |
 | `fonts/` | w16's raster fonts, as text the build turns into `.FON` files |
 | `assets/` | the install tree's own files: `SYSTEM.INI`, `WIN.INI`, `CONTROL.INI`, `README.TXT`, Program Manager's groups (`progman/`), the boot screen (`boot/`) |

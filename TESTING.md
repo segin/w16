@@ -322,6 +322,18 @@ Microsoft's or w16's WIN386, the tree), `std`, `std286`, `stdk`,
 `stdk286`, `treestd`, `tree286` (Standard mode); `KIDLE_MS5=1` loads
 MS5.COM first, which counts what reaches real mode; `KIDLE_PIF` sets the
 box's PIF (e.g. `background=0`) (ARCHITECTURE.md 12.15).
+The VM Task Manager (ARCHITECTURE.md 15.12): `tests/vmtaskrun.sh OUTDIR
+CONF` runs VMT1 (`make vxprobes`) as WIN.INI run= with VMTASK.386
+loaded; it calls the device's API with no DOS box and after starting a
+busy, a polling and a full-screen polling box, prints each VM's share
+and checks them (the run times add up to the system time, the busy box
+gets at least half, the polling ones at most a tenth, the windowed
+flag) and exits 1 on a failed check; CONF `ms` (Microsoft's WIN386 and
+KRNL386), `w16` (Microsoft's KRNL386 under w16's WIN386) or `tree`;
+`VMTASK_DOSBOX=x` runs DOSBox-X. `tests/vmtaskshot.sh OUTDIR CONF [x]`
+takes VMTASK.EXE's screen with 0, 1 and 2 boxes (OUTDIR/vmt0.png to
+vmt2.png; CONF `tree`, `ms`, or `std` and `novxd` for one shot without
+the device; `x` for DOSBox-X).
 `tests/qtplay.sh` takes `QTPLAY_W16OPTS` and
 `tests/sb16/sbaudio.sh` `SBAUDIO_OPTS`/`SBAUDIO_CONF` (more dropin.sh
 options, a COM1 for the VMM's trace) for the w16 side. XMS and EMS in a DOS box:
