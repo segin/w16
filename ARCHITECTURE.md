@@ -303,7 +303,7 @@ w16 needs its own raster and vector font set, drawn from scratch. Face names, fi
 | 8514 (120 dpi) | `8514SYS.FON`, `8514FIX.FON`, `8514OEM.FON`, `SSERIFF.FON`, `SERIFF.FON`, `COURF.FON`, `SYMBOLF.FON`, `SMALLF.FON` | as above | Deferred |
 | EGA/CGA | `EGASYS.FON`, `EGAFIX.FON`, `EGAOEM.FON`, `CGASYS.FON`, `CGAFIX.FON`, `CGAOEM.FON`, the `*B.FON`/`*A.FON` sets | as above | Deferred |
 
-The TrueType core fonts (Arial, Times New Roman, Courier New, Symbol, Wingdings) are not `.FON` files. They are covered later by metric-compatible, freely licensed TrueType fonts (e.g. Liberation) installed under the same face names.
+The TrueType core fonts (Arial, Times New Roman, Courier New, Symbol, Wingdings) are not `.FON` files. w16 has its own metric-compatible TrueType faces for the first three (6.9.3); Symbol and Wingdings are not done.
 
 #### 6.9.1 w16's VGA fonts (done: `VGASYS.FON`, `VGAFIX.FON`, `VGAOEM.FON`, `SSERIFE.FON`)
 
