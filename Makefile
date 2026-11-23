@@ -1086,12 +1086,15 @@ $(W386)/VMPOLL.386: $(W386VMPOLL) win386/vxd/vmpoll.lnk
 W386VSD := $(W386)/vxd/vsdddb.o $(W386)/vxd/vsd.o $(W386)/vxd/vxdrt.o
 $(W386)/VSD.386: $(W386VSD) win386/vxd/vsd.lnk
 	$(WLINK) @win386/vxd/vsd.lnk name $@ option map=$(W386)/vsd.map file { $(W386VSD) }
-W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VSD=$(W386)/VSD.386 VMPOLL=$(W386)/VMPOLL.386
-$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VSD.386 $(W386)/VMPOLL.386 tools/mkw3.py
+W386VDMAD := $(W386)/vxd/vdmadddb.o $(W386)/vxd/vdmad.o $(W386)/vxd/vxdrt.o
+$(W386)/VDMAD.386: $(W386VDMAD) win386/vxd/vdmad.lnk
+	$(WLINK) @win386/vxd/vdmad.lnk name $@ option map=$(W386)/vdmad.map file { $(W386VDMAD) }
+W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VSD=$(W386)/VSD.386 VMPOLL=$(W386)/VMPOLL.386 VDMAD=$(W386)/VDMAD.386
+$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VSD.386 $(W386)/VMPOLL.386 $(W386)/VDMAD.386 tools/mkw3.py
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/SBD.COM
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -1138,6 +1141,30 @@ $(DOS)/VXQ.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
 	@mkdir -p $(@D) $(B)/tests
 	$(NASM) -f obj -DBADLINK -o $(B)/tests/vxq.o tests/vxd/vxp.asm
 	$(WLINK) @tests/vxd/vxp.lnk name $@ file $(B)/tests/vxq.o
+# VXM.386, VXMR.386: the Virtual DMA Device's probe VxD (tests/vxd/vxm.c,
+# on w16's VxD runtime; VXMR reserves buffer space)
+$(B)/tests/vxm.o: tests/vxd/vxm.c $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	wcc386 -q -zq -bt=nt -mf -zl -s -ecc -3s -ox -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(B)/tests/vxmr.o: tests/vxd/vxm.c $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	wcc386 -q -zq -bt=nt -mf -zl -s -ecc -3s -ox -dRESERVE -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(B)/tests/vxmddb.o: tests/vxd/vxmddb.asm $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	$(NASM) -f obj -I$(W386INC)/ -o $@ $<
+$(DOS)/VXM.386: $(B)/tests/vxmddb.o $(B)/tests/vxm.o $(W386)/vxd/vxdrt.o tests/vxd/vxm.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/vxd/vxm.lnk name $@ file { $(B)/tests/vxmddb.o $(B)/tests/vxm.o $(W386)/vxd/vxdrt.o }
+	python3 tools/leautodata.py $@
+$(DOS)/VXMR.386: $(B)/tests/vxmddb.o $(B)/tests/vxmr.o $(W386)/vxd/vxdrt.o tests/vxd/vxm.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/vxd/vxm.lnk name $@ file { $(B)/tests/vxmddb.o $(B)/tests/vxmr.o $(W386)/vxd/vxdrt.o }
+	python3 tools/leautodata.py $@
+# SBD.COM: Sound Blaster DMA playback in a DOS box (tests/dos/sbd.asm,
+# tests/vdmadprobe.sh)
+$(DOS)/SBD.COM: tests/dos/sbd.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
 # MEMLOAD.EXE: XMS and EMS workloads for DOS boxes (tests/dos/memload.c,
 # OpenWatcom 16-bit DOS, large model; tests/memloadrun.sh)
 $(B)/tests/memload.o: tests/dos/memload.c

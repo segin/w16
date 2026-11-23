@@ -1,0 +1,5 @@
+# VDMAD.386: w16's VDMAD module (win386/vxd), an LE VxD, device 0004h
+format windows vxd
+option quiet
+option nodefaultlibs
+export VDMAD_DDB.1

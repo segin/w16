@@ -96,6 +96,12 @@ static struct virq *owner[NIRQ];
 extern char vpicd_hw_end[];
 static vu32 hw_head;
 static vu32 def_owner[16];              /* VPICD_Force_Default_Owner (0: the System VM) */
+/* An IRQ nobody has virtualised that was masked when Windows started is
+ * the first VM's to unmask it, until that VM ends: its interrupts go
+ * there, and the 8259 follows that VM's mask. Windows 3.1: a DOS program
+ * in a box that hooks and unmasks the Sound Blaster's IRQ 5 gets the
+ * card's interrupts (tests/vdmadprobe.sh, SBD.COM) */
+static vu32 local_owner[16];
 static vu32 sys_vm;
 
 /* the hardware side */
@@ -182,6 +188,7 @@ static void phys_update(void)
         if (phys_isr & (1u << irq)) on = 1;
         else if (v && v->phys_mode == 1) on = 1;
         else if (v && v->phys_mode == 2) on = 0;
+        else if (!v && local_owner[irq]) on = (VP(local_owner[irq])->imr >> irq) & 1;
         else on = ((vm_ready ? vp->imr : dos_masks) >> irq) & 1;
         if (on) m |= 1u << irq;
     }
@@ -433,7 +440,7 @@ static void hw_int(vu32 irq)
     }
     if (v) call_vid(v->d.hw_int_proc, v, CUR(), 0, 0);
     else {                                  /* to the System VM, or its default owner */
-        vu32 to = def_owner[irq] ? def_owner[irq] : sys_vm;
+        vu32 to = def_owner[irq] ? def_owner[irq] : local_owner[irq] ? local_owner[irq] : sys_vm;
         VP(to)->def_req |= 1u << irq;
         if (CUR() != to) vpicd_link.wake(to);
     }
@@ -523,7 +530,17 @@ static void pic_data(vu32 vm, int c, vu32 v)
     }
     old = vp->imr;                          /* OCW1 */
     vp->imr = (vp->imr & ~(0xFFu << shift)) | ((v & 0xFF) << shift);
-    if (vm == sys_vm) phys_update();
+    {   /* a local IRQ unmasked: this VM's (above) */
+        int mine = 0;
+        for (irq = shift; irq < shift + 8; irq++) {
+            vu32 b = 1u << irq;
+            if ((old & b) && !(vp->imr & b) && !owner[irq] && !def_owner[irq] && irq != 2
+                && (dos_masks & b) && !local_owner[irq] && vm_ready)
+                local_owner[irq] = vm;
+            if (local_owner[irq] == vm && ((old ^ vp->imr) & b)) mine = 1;
+        }
+        if (vm == sys_vm || mine) phys_update();
+    }
     for (irq = shift; irq < shift + 8; irq++)
         if (((old ^ vp->imr) >> irq) & 1 && owner[irq])
             call_vid(owner[irq]->d.mask_change_proc, owner[irq], vm, (vp->imr >> irq) & 1, 0);
@@ -749,8 +766,17 @@ void __cdecl vpicd_control(struct vregs *r)
                 vp->irets[i].tmo = 0;
             }
         vp->n_irets = 0;
-        for (i = 0; i < NIRQ; i++)
+        for (i = 0; i < NIRQ; i++) {
             if (def_owner[i] == r->ebx) def_owner[i] = 0;
+            if (local_owner[i] == r->ebx) {
+                /* its IRQ is nobody's again: masked as at the start,
+                 * a request of its own forgotten */
+                local_owner[i] = 0;
+                vp->def_req &= ~(1u << i);
+                if (phys_isr & (1u << i)) { phys_isr &= ~(1u << i); }
+                phys_update();
+            }
+        }
         break;
     }
     case SYS_CRITICAL_EXIT:
