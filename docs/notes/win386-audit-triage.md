@@ -347,21 +347,32 @@ tree and scrnsave desktop, which both passed when run again.
   win386dosprobe ok (e129a19). 0204h stays unanswered (carry): 3.1's
   KRNL386 was not seen to call it.
 
+## Fourth round: MS-DOS 4.00
+
+- **w16's WIN386 on the MS-DOS 4.00 image** (`INPUTRUN_HDD=1`): closed.
+  After master's VMPOLL, VSD and V86MMGR the fault stayed at 0117:A789,
+  but now with ES 00A7h, so the ES 0 seen before was not its cause. The
+  trace showed it after the one close of BOOTLOG.TXT during which a
+  hardware interrupt came: MS-DOS 4.00 saves its caller's registers on
+  the caller's stack (here the VMM's reflection stack), switches to its
+  own stack and enables interrupts (its source, `$Close` through the
+  dispatcher). The interrupt's protected-mode handler reflected INT 2Fh
+  4003h/4004h, and the VMM built that frame where the nested DOS call's
+  frame had started (`refsp`), over DOS's saved registers: refsp was
+  lowered only when the interrupted code was on the reflection stack
+  itself. The call came back with garbage registers and KRNL386 faulted.
+  DOSBox's own DOS runs no V86 code for INT 21h, so it never showed
+  there. Now `exec_v86` records the frame's SP and a trap from V86 code
+  that has left the reflection stack puts the next frame 256 bytes below
+  it (`trap()`, `REFSTK_GAP`). Windows 3.1 now starts on MS-DOS 4.00 under
+  w16's WIN386 (no #GP, no 4C01h).
+- **M8 under w16**: VX11's io section on MS-DOS 4.00 under w16's WIN386
+  gives 3.1's lines exactly (440Dh 60h and 61h without carry, 61h reads
+  the data, the close's registers). New boot-test case `win386hdd`: WIN /3
+  on the MS-DOS 4.00 image with VX11 as the shell under both WIN386s;
+  Windows must start, VX11 finish, 61h read data, and the observations
+  match 3.1's.
+
 ## Left open
 
-- **w16's WIN386 on the MS-DOS 4.00 image** (`INPUTRUN_HDD=1`): KRNL386
-  still faults at 0117:A789 (ES 0) right after closing BOOTLOG.TXT, and
-  the boot ends; master before this audit failed there too (in another
-  place). Found so far: the System VM's DOS calls (function, BX, CX; VXSS
-  logs BX, CX, DX now) are the same as under Windows 3.1's WIN386 on the
-  same image up to the fault; the close's AL comes from MS-DOS 4.00's
-  own close (its source, HANDLE.ASM `$Close`), not from the host. KRNL386
-  calls its BOOTLOG write (INT 21h 4000h from 0117:1D2F) with ES 0 right
-  after a lseek (4202h) it made with ES 00A7h; on DOSBox's own DOS it never
-  calls with ES 0. Nothing in w16's return path zeroed ES then (traced).
-  Delivering #NP for a not-present DS/ES instead of zeroing it did not
-  change the fault (tried, reverted). Next: trace every trap from
-  protected mode between those two calls (interrupts come inside DOS calls
-  on MS-DOS 4.00, not on DOSBox's DOS) and compare KRNL386's stack there.
-  Because of this, M8's fix has been run under 3.1 only, and there is no
-  boot-test case for WIN /3 on MS-DOS 4.00 with w16's WIN386.
+Nothing.
