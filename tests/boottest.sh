@@ -8,7 +8,7 @@
 # Manager as the shell, the screen taken after SECS seconds):
 #   kernel     w16's KRNL286                       must be 0 pixels off
 #   dosx       w16's KRNL286 on w16's DOSX         must be 0
-#   dosxaudit  the DOSX audit's probes (docs/notes/dosx-audit-triage.md):
+#   dosxaudit  the DOSX audit's probes (ARCHITECTURE.md 9.6):
 #              DX9 (tests/dos/dx9.asm, in the KERNEL slot, tests/dosxtest.sh)
 #              under Microsoft's DOSX and w16's: the OBS lines and any
 #              "Standard Mode:" message the same (runs 01, 02, 08-16, 23,

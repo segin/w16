@@ -1,6 +1,6 @@
 /*
  * dx10.c - DX10.EXE: INT 21h AH=00h (terminate program) from a Windows
- * program (the DOSX audit's H11, docs/notes/dosx-audit-triage.md). Run
+ * program (the DOSX audit's H11, ARCHITECTURE.md 9.6). Run
  * as the shell (tests/refrun.sh DX10.EXE; the boot-test case dosxaudit),
  * it starts itself again with the command tail "C". That copy writes
  * C:\DX10C.LOG, ends with INT 21h AH=00h, and if the call returns, says

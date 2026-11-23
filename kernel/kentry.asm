@@ -118,7 +118,7 @@ cdr_none:
         je .exit
         ; AH=00h (terminate, exit code 0): as 4C00h. Windows 3.1 hangs on
         ; it from a Windows program under both its KERNELs (the DOSX audit's
-        ; DX10, docs/notes/dosx-audit-triage.md); DOS would end whatever
+        ; DX10, ARCHITECTURE.md 9.6); DOS would end whatever
         ; program it takes for the caller. w16 ends the task.
         or ah, ah
         jnz .not00

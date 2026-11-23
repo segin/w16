@@ -215,8 +215,8 @@ is_softint:
 ; present while the client had it there). Microsoft's DOSX gives 0 in the
 ; register that held a selector INT 31h 0001h freed (DX9 01, 02); after
 ; 0502h, 0009h, 000Ch or INT 21h 49h it ends Windows ("Fault in MS-DOS
-; Extender": DX9 03-06), where w16's goes on with 0 (the user's ruling:
-; docs/notes/dosx-audit-triage.md).
+; Extender": DX9 03-06), where w16's goes on with 0 (the user's ruling
+; in the DOSX audit, ARCHITECTURE.md 9.6).
 dses_fix:
         mov ax, [bp+F_DS]
         call seg_ok
@@ -835,7 +835,7 @@ fault_report:
 ; client structure or stack it cannot reach, its host stacks used up):
 ; the message and a register line of zeros, exit code 0FFh. Where Windows
 ; 3.1's DOSX would end with a fault of its own, w16's ends the client
-; cleanly (the user's ruling: docs/notes/dosx-audit-triage.md).
+; cleanly (the user's ruling in the DOSX audit, ARCHITECTURE.md 9.6).
 client_fault0:
         mov ax, G_HD0
         mov ds, ax

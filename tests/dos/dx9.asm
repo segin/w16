@@ -1,5 +1,5 @@
-; dx9.asm - DX9.COM: the DOSX audit's probe (docs/notes/dosx-audit-
-; triage.md). One behaviour per run, chosen by the command tail (WIN /S
+; dx9.asm - DX9.COM: the DOSX audit's probe (ARCHITECTURE.md 9.6; its
+; triage is in git history). One behaviour per run, chosen by the command tail (WIN /S
 ; XX: the first hex number in KERNEL's tail), as DX5: several of them end
 ; the extender, so each gets a DOSBox run of its own; what DOSX prints
 ; and WIN's errorlevel are in the run's output (tests/dosxtest.sh -a XX
