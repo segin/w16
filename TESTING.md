@@ -333,7 +333,15 @@ KRNL386), `w16` (Microsoft's KRNL386 under w16's WIN386) or `tree`;
 `VMTASK_DOSBOX=x` runs DOSBox-X. `tests/vmtaskshot.sh OUTDIR CONF [x]`
 takes VMTASK.EXE's screen with 0, 1 and 2 boxes (OUTDIR/vmt0.png to
 vmt2.png; CONF `tree`, `ms`, or `std` and `novxd` for one shot without
-the device; `x` for DOSBox-X).
+the device; `x` for DOSBox-X). With `VMTASK_END=N VMTASK_METHOD=0|1`
+`vmtaskrun.sh` also ends the N-th box through the API (Close_VM or
+Nuke_VM; 1 by default) and checks that the System VM cannot be ended.
+`tests/vmtaskend.sh OUTDIR tree|ms [x]` drives VMTASK.EXE with keys:
+End VM on a busy box (3.1's Terminate warning), End Task on VMTH.EXE
+(a program that ignores WM_CLOSE: the offer to end it by force),
+Shift+F10's shortcut menu, the IDs columns; VMT1 logs the tasks' and
+VMs' IDs for comparison and checks at the end that VMTH and the box are
+gone (shots e0-e8 in OUTDIR).
 `tests/qtplay.sh` takes `QTPLAY_W16OPTS` and
 `tests/sb16/sbaudio.sh` `SBAUDIO_OPTS`/`SBAUDIO_CONF` (more dropin.sh
 options, a COM1 for the VMM's trace) for the w16 side. XMS and EMS in a DOS box:

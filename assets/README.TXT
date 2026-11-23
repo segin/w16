@@ -49,7 +49,11 @@ is newer. Neither mode needs anything of Microsoft's.
                           virtual machine, and between the programs
                           within w16, with w16's idle time and a
                           history graph (Options: the update interval,
-                          Always on Top). It needs SYSTEM\VMTASK.386
+                          Always on Top, the IDs), each one's memory.
+                          Task (and a right click on a row): Switch To,
+                          End Task, End VM (as a DOS window's Settings,
+                          Terminate), Details, Virtual Devices...,
+                          Drivers.... It needs SYSTEM\VMTASK.386
                           for the virtual machines; without it, and in
                           Standard mode, it shows the programs alone
   SYSTEM\KRNL286.EXE      KERNEL for an 80286
