@@ -1162,9 +1162,16 @@ $(DOS)/VX17.EXE: $(B)/tests/start.o $(B)/tests/vx17.o $(B)/tests/vx17s.o tests/a
 # tests/vmtaskrun.sh)
 $(DOS)/VMT1.EXE: $(B)/tests/start.o $(B)/tests/vmt1.o $(B)/tests/vx3s.o $(B)/shell/write/i4.o tests/apps/app.lnk
 	@mkdir -p $(@D)
-	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	$(WLINK) @tests/apps/app.lnk library toolhelp.lib name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vmt1.map file { $(B)/tests/start.o $(B)/tests/vmt1.o $(B)/tests/vx3s.o $(B)/shell/write/i4.o }
 vxprobes: $(DOS)/VMT1.EXE
+# VMTH.EXE: a program that will not close (tests/apps/vmth.c; End Task)
+$(DOS)/VMTH.EXE: $(B)/tests/start.o $(B)/tests/vmth.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vmth.map file { $(B)/tests/start.o $(B)/tests/vmth.o }
+vxprobes: $(DOS)/VMTH.EXE
+dos: $(DOS)/VMTH.EXE
 dos: $(DOS)/VMT1.EXE
 # VXP.386: the probe VxD (tests/vxd/vxp.asm)
 $(DOS)/VXP.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk

@@ -13,10 +13,26 @@
 #define IDM_TASKS       111
 #define IDM_GRAPH       112
 #define IDM_REFRESH     113
+#define IDM_IDS         114
+#define IDM_SWITCH      140
+#define IDM_ENDTASK     141
+#define IDM_ENDVM       142
+#define IDM_END         143
+#define IDM_DETAILS     144
+#define IDM_COPY        145
+#define IDM_CONTEXT     146
+#define IDM_VXDS        147
+#define IDM_DRIVERS     148
 #define IDM_EXIT        120
 #define IDM_ABOUT       130
 
 #define IDC_LIST        200
+#define IDD_TERMINATE   300
+#define IDC_STOPICON    301
+#define IDD_VXDS        310
+#define IDD_DRIVERS     311
+#define IDC_ITEMS       312
+#define IDC_REFRESH     313
 
 #ifndef RC_INVOKED
 /* VMTASK.386 (device 5716h): function 1's snapshot */
@@ -29,6 +45,14 @@ struct vmt_head {
 struct vmt_vm {
     DWORD handle, id, status, run_ms, exec_ms, ts_flags, fg_prio, bg_prio;
     DWORD cpu_pct, shell_flags, created, runs;
+    DWORD pages, pages_out, ems_max, xms_max;   /* (records of 64 bytes) */
+};
+/* function 4: the loaded devices */
+struct vmt_dev {
+    char name[8];
+    WORD id;
+    BYTE major, minor;
+    DWORD init_order, services, flags;
 };
 #pragma pack()
 /* CB_VM_Status bits (as Windows 3.1's control blocks showed them,

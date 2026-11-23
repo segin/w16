@@ -36,6 +36,16 @@
  *      those it was idle, CX:BX Get_System_Time (VMTASK.EXE asks at each
  *      Windows task switch, through TOOLHELP's NFY_TASKIN/NFY_TASKOUT, so
  *      that a task's time excludes idling and other VMs' slices).
+ *   4  the loaded devices: ES:DI a buffer, CX its size; a word (the
+ *      count) and 24 bytes each (name, ID, version, init order, service
+ *      count, flags), the VMM first. See devices.
+ *   (function 1's records are 64 bytes since 1.00's capability bit 5:
+ *      the memory, _GetVMPgCount and V86MMGR_Get_EMS_XMS_Limits; a client
+ *      steps by the header's record size)
+ *   3  end a VM: DX:BX its handle; CX 0 Close_VM (SI the time-out in ms,
+ *      0: 5 s, after which the VMM ends it by force), 1 Nuke_VM. Never
+ *      the System VM: AX 1, carry set; AX 2 for a handle that is not a VM
+ *      (Validate_VM_Handle). See end_vm.
  * The header and record layouts are VMTASK's own (shell/vmtask/vmtask.h
  * has the same).
  *
@@ -82,6 +92,14 @@ void __cdecl vmm_get_vm_exec_time(struct vregs *r);
 vu32 __cdecl vmm_alloc_cb_area(vu32 size, vu32 flags);
 void __cdecl shell_get_vm_info(struct vregs *r);
 void __cdecl vtd_get_real_time(struct vregs *r);
+void __cdecl vmm_validate_vm(struct vregs *r);
+void __cdecl vmm_nuke_vm(struct vregs *r);
+void __cdecl vmm_close_vm(struct vregs *r);
+void __cdecl vmm_get_version(struct vregs *r);
+void __cdecl v86mm_get_limits(struct vregs *r);
+vu32 __cdecl vmm_vm_pgcount(vu32 vm, vu32 *outside);
+extern struct vxd_ddb VMTASK_DDB;
+#pragma aux VMTASK_DDB "*"
 extern char vmtask_ts[], vmtask_idle[];
 #pragma aux vmtask_ts "*"
 #pragma aux vmtask_idle "*"
@@ -91,7 +109,8 @@ extern char vmtask_ts[], vmtask_idle[];
 #define RT_PER_MS   1193
 #define IDLE_GAP    (2 * RT_PER_MS)     /* callbacks closer than 2 ms are one idle run */
 #define MAX_VMS     64                  /* a snapshot's records at most */
-#define CAPS        0x000F
+#define CAPS        0x007F             /* bit 4: function 3, end a VM; 5 memory; 6 function 4 */
+#define MAX_DEVS    96                  /* function 4's records at most */
 
 #pragma pack(1)
 struct vmt_head {
@@ -114,6 +133,17 @@ struct vmt_vm {
     vu32 shell_flags;                   /* SHELL_GetVMInfo (FFFFFFFFh: none) */
     vu32 created;                       /* Get_System_Time at Create_VM (0: at start) */
     vu32 runs;                          /* how often it was switched to */
+    vu32 pages, pages_out;              /* _GetVMPgCount: EAX, EDX (4 KB pages) */
+    vu32 ems_max, xms_max;              /* V86MMGR_Get_EMS_XMS_Limits: EDX, EDI (KB) */
+};
+/* function 4's records */
+struct vmt_dev {
+    char name[8];
+    vu16 id;                            /* DDB_Req_Device_Number */
+    vu8 major, minor;
+    vu32 init_order;
+    vu32 services;                      /* DDB_Service_Table_Size */
+    vu32 flags;                         /* 1 V86 API, 2 PM API, 4 a service table, 80h the VMM (no DDB here) */
 };
 #pragma pack()
 
@@ -261,6 +291,12 @@ static void record(struct vmt_vm *o, vu32 vm, const struct rt *t, vu32 curvm)
     o->fg_prio = s.ecx & 0xFFFF;
     o->bg_prio = s.edx & 0xFFFF;
     o->cpu_pct = s.esi;
+    o->pages = vmm_vm_pgcount(vm, &o->pages_out);
+    clr(&s);
+    s.ebx = vm;
+    v86mm_get_limits(&s);
+    o->ems_max = s.edx;
+    o->xms_max = s.edi;
     o->shell_flags = 0xFFFFFFFFu;
     if (vm != sys_vm) {
         clr(&s);
@@ -323,6 +359,90 @@ static void snapshot(struct client_regs *c)
     if (w < n) c->eflags |= VF_CF; else c->eflags &= ~VF_CF;
 }
 
+/* function 4: the loaded devices into ES:DI (CX bytes): a word, the
+ * count, then a struct vmt_dev each: the VMM first (it has no DDB a
+ * device can find: Get_VMM_Version's version, init order 0), then this
+ * device and each after it by DDB_Next, which leads through the devices
+ * in their init order (Windows 3.1 sets it so: VXB.386, ARCHITECTURE.md
+ * 24.6); VMTASK's init order 0 puts every other device after it. AX the
+ * count, CX the bytes; carry if not all fitted */
+static void devices(struct client_regs *c)
+{
+    struct vregs s;
+    struct vxd_ddb *d;
+    struct vmt_dev *o;
+    vu8 *base;
+    vu32 size = c->ecx & 0xFFFF, n = 0, w = 0, i;
+    clr(&s);
+    s.eax = (0x38 << 8) | 0x00;
+    vmm_map_flat(&s);
+    if (s.eax == 0xFFFFFFFFu || size < 2) { c->eflags |= VF_CF; return; }
+    base = (vu8 *)s.eax;
+    o = (struct vmt_dev *)(base + 2);
+    /* the VMM */
+    if (2 + sizeof(*o) <= size) {
+        clr(&s);
+        vmm_get_version(&s);
+        for (i = 0; i < 8; i++) o->name[i] = "VMM     "[i];
+        o->id = 1;
+        o->major = (vu8)((s.eax >> 8) & 0xFF);
+        o->minor = (vu8)(s.eax & 0xFF);
+        o->init_order = 0;
+        o->services = 0;
+        o->flags = 0x80;
+        o++;
+        w++;
+    }
+    n++;
+    for (d = &VMTASK_DDB; d && n < MAX_DEVS; d = (struct vxd_ddb *)d->next) {
+        n++;
+        if (2 + (w + 1) * sizeof(*o) > size) continue;
+        for (i = 0; i < 8; i++) o->name[i] = d->name[i];
+        o->id = d->device_id;
+        o->major = d->major;
+        o->minor = d->minor;
+        o->init_order = d->init_order;
+        o->services = d->svc_count;
+        o->flags = (d->v86_api ? 1 : 0) | (d->pm_api ? 2 : 0) | (d->svc_table ? 4 : 0);
+        o++;
+        w++;
+    }
+    *(vu16 *)base = (vu16)w;
+    c->eax = (c->eax & 0xFFFF0000u) | n;
+    c->ecx = (c->ecx & 0xFFFF0000u) | (2 + w * sizeof(*o));
+    if (w < n) c->eflags |= VF_CF; else c->eflags &= ~VF_CF;
+}
+
+/* function 3: end the VM DX:BX. CX 0: Close_VM (SI the milliseconds it
+ * may take before the VMM ends it by force; 0: 5000), 1: Nuke_VM. Never
+ * the System VM. Back AX 0, carry clear; AX 1 the System VM, 2 not a VM
+ * (carry set) */
+static void end_vm(struct client_regs *c)
+{
+    struct vregs s;
+    vu32 vm = ((c->edx & 0xFFFF) << 16) | (c->ebx & 0xFFFF);
+    vu32 err = 0;
+    clr(&s);
+    s.ebx = vm;
+    vmm_validate_vm(&s);
+    if (!vm || (s.eflags & VF_CF)) err = 2;
+    else if (vm == sys_vm) err = 1;
+    if (err) {
+        c->eax = (c->eax & 0xFFFF0000u) | err;
+        c->eflags |= VF_CF;
+        return;
+    }
+    clr(&s);
+    s.ebx = vm;
+    if ((c->ecx & 0xFFFF) == 1) vmm_nuke_vm(&s);
+    else {
+        s.eax = (c->esi & 0xFFFF) ? (c->esi & 0xFFFF) : 5000;
+        vmm_close_vm(&s);
+    }
+    c->eax &= 0xFFFF0000u;
+    c->eflags &= ~VF_CF;
+}
+
 /* the API: EBX the VM, EBP the client's registers */
 void __cdecl vmtask_api_proc(struct vregs *r)
 {
@@ -348,6 +468,12 @@ void __cdecl vmtask_api_proc(struct vregs *r)
         c->ebx = (c->ebx & 0xFFFF0000u) | (t & 0xFFFF);
         c->ecx = (c->ecx & 0xFFFF0000u) | (t >> 16);
         c->eflags &= ~VF_CF;
+        return;
+    case 3:
+        end_vm(c);
+        return;
+    case 4:
+        devices(c);
         return;
     }
     c->eflags |= VF_CF;

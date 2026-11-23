@@ -39,8 +39,16 @@
  * Without VMTASK.386 (or in Standard mode) a line says why no VMs are
  * shown, and the Windows tasks are shown alone.
  *
+ * The Task menu, three buttons, Del and a shortcut menu (a right click,
+ * or Shift+F10) act on the selected row: Switch To; End Task (WM_CLOSE,
+ * then TOOLHELP's TerminateApp if it has not ended 5 s later, each step
+ * confirmed, twice for a task w16 needs); End VM (Windows 3.1's
+ * Terminate warning, then VMTASK.386's function 3 with Nuke_VM, as SHELL
+ * does for Terminate; never the System VM); Details and Copy Details
+ * (the IDs and what the device says). Show IDs adds the IDs as columns.
  * Settings (WIN.INI [VMTask]): Interval (ms: 500, 1000, 2000, 5000),
- * OnTop, Tasks, Graph, and the window's place (Left, Top, Width, Height).
+ * OnTop, Tasks, Graph, IDs, and the window's place (Left, Top, Width,
+ * Height).
  * Black box (ARCHITECTURE.md 3): the SDK's USER, KERNEL and TOOLHELP,
  * VMTASK's own interface.
  */
@@ -50,6 +58,9 @@
 #include "vmtask.h"
 
 extern BOOL FAR PASCAL IsWinOldApTask(HTASK);           /* KERNEL.158 */
+extern void FAR PASCAL SwitchToThisWindow(HWND, BOOL);  /* USER.172 */
+static BOOL mem_done;                   /* (memory per task: walk_memory) */
+static DWORD task_kb(WORD task);
 /* SHELL.22 (SDK: ShellAbout); not declared in OpenWatcom's shellapi.h */
 int FAR PASCAL ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 
@@ -61,18 +72,40 @@ int FAR PASCAL ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 enum { R_MSG, R_VM, R_TASK };
 struct row {
     BYTE kind, indent;
+    BYTE sys;                           /* the Windows row (the System VM) */
     char name[48];
     int pct;                            /* tenths of a per cent; -1: none */
     DWORD ms;                           /* the time in all; 0xFFFFFFFF: none */
     char status[16];
     char prio[12];
     DWORD key;
+    /* the IDs: a VM's handle and CB_VMID (0: not known), its box window;
+       a task's handle, module and instance */
+    DWORD vmh, vmid;
+    WORD hwnd, task, hmod, hinst;
+    /* a VM's CB_VM_Status, share and SHELL_GetVMInfo flags (Details) */
+    DWORD vmstat, share, shflags, fg, bg;
+    /* memory: KB (0xFFFFFFFF: not known); a VM's pages outside its first
+       MB and its EMS and XMS limits (Details) */
+    DWORD mem_kb, out_kb, ems_max, xms_max;
 };
 
 static HINSTANCE hinst;
 static HWND hwnd, hlist;
 static int cw, ch, hdr_h, stat_h, graph_h;
-static int interval = 1000, ontop, showtasks = 1, showgraph = 1;
+static int interval = 1000, ontop, showtasks = 1, showgraph = 1, showids = 1;
+static HWND hbtn[3];                    /* Switch To, End Task, End VM */
+static int btn_h;
+static FARPROC old_list, list_thunk;
+/* a task asked to close (End Task): asked again after END_WAIT ms */
+#define END_WAIT 5000
+static WORD end_task_h;
+static char end_name[48];
+/* the columns' x (pixels): name, CPU's right edge, time's right edge,
+   status, priority, the end without the IDs; ID's right edge, handle,
+   module, window, the end with them */
+enum { X_NAME, X_CPU, X_TIME, X_STAT, X_PRIO, X_MEM, X_END1, X_ID, X_HAND, X_MOD, X_WIN, X_END2 };
+static int colx[X_END2 + 1];
 static int have_vxd, enhanced;
 static struct row rows[MAXROWS];
 static int nrows, nlisted = -1;
@@ -170,6 +203,13 @@ static struct row *add_row(int kind, int indent, LPCSTR name, DWORD key)
     r->ms = 0xFFFFFFFFul;
     r->status[0] = r->prio[0] = 0;
     r->key = key;
+    r->sys = 0;
+    r->vmh = r->vmid = 0;
+    r->hwnd = r->task = r->hmod = r->hinst = 0;
+    r->vmstat = r->share = r->fg = r->bg = 0;
+    r->shflags = 0xFFFFFFFFul;
+    r->mem_kb = 0xFFFFFFFFul;
+    r->out_kb = r->ems_max = r->xms_max = 0;
     return r;
 }
 
@@ -297,12 +337,71 @@ static void task_rows(DWORD dwall, DWORD scale_num, DWORD scale_den)
         lstrcpyn(name, te.szModule, sizeof(name));
         r = add_row(R_TASK, 1, name, (WORD)te.hTask);
         if (!r) break;
+        r->task = (WORD)te.hTask;
+        r->hmod = (WORD)te.hModule;
+        r->hinst = (WORD)te.hInst;
+        if (mem_done) r->mem_kb = task_kb(r->task);
         if (scale_den && scale_num < scale_den) d = d * scale_num / scale_den;
         r->pct = have_prev ? pct10(d, dwall) : -1;
         r->ms = total;
         lstrcpy(r->status, (WORD)te.hTask == (WORD)GetCurrentTask() ? "Running" : "Ready");
         if (!te.wcEvents && (WORD)te.hTask != (WORD)GetCurrentTask()) lstrcpy(r->status, "Waiting");
     }
+}
+
+/* ---- memory per task: TOOLHELP's global heap walk, summed by owner ---- */
+#define MEM_EVERY 5000                  /* ms between walks (a walk visits every block) */
+#define NTMEM 64
+static struct { WORD task, pdb, hmod; DWORD bytes; } tmem[NTMEM];
+static int ntmem;
+static DWORD win_bytes, mem_when;
+
+/* a task's PDB: the TDB's word at 60h (Schulman, Undocumented Windows,
+   the Task Database), read with the task handle as a selector */
+static WORD task_pdb(WORD task)
+{
+    WORD FAR *p = (WORD FAR *)MAKELP(task, 0x60);
+    if (!task || !IsTask((HTASK)task)) return 0;
+    return *p;
+}
+
+/* each task's blocks: those its PDB owns, and its module's segments
+   (counted for every task of the module: approximate for programs run
+   twice); the Windows row's: every block in use */
+static void walk_memory(void)
+{
+    TASKENTRY te;
+    GLOBALENTRY ge;
+    BOOL any;
+    int i;
+    ntmem = 0;
+    te.dwSize = sizeof(te);
+    for (any = TaskFirst(&te); any && ntmem < NTMEM; any = TaskNext(&te)) {
+        tmem[ntmem].task = (WORD)te.hTask;
+        tmem[ntmem].pdb = task_pdb((WORD)te.hTask);
+        tmem[ntmem].hmod = (WORD)te.hModule;
+        tmem[ntmem].bytes = 0;
+        ntmem++;
+    }
+    win_bytes = 0;
+    ge.dwSize = sizeof(ge);
+    for (any = GlobalFirst(&ge, GLOBAL_ALL); any; any = GlobalNext(&ge, GLOBAL_ALL)) {
+        WORD o = (WORD)ge.hOwner;
+        if (ge.wType == GT_FREE) continue;
+        win_bytes += ge.dwBlockSize;
+        for (i = 0; i < ntmem; i++)
+            if (o && ((o | 1) == (tmem[i].pdb | 1) || (o | 1) == (tmem[i].hmod | 1)))
+                tmem[i].bytes += ge.dwBlockSize;
+    }
+    mem_done = TRUE;
+}
+
+static DWORD task_kb(WORD task)
+{
+    int i;
+    for (i = 0; i < ntmem; i++)
+        if (tmem[i].task == task) return (tmem[i].bytes + 1023) / 1024;
+    return 0xFFFFFFFFul;
 }
 
 /* the task counts' growth since the last sample; dead tasks' slots freed */
@@ -337,6 +436,10 @@ static void sample(void)
     flush_self();
     tsum = task_deltas();
     wall = wall_ms();
+    if (!mem_done || wall - mem_when >= MEM_EVERY) {
+        walk_memory();
+        mem_when = wall;
+    }
     dwall = wall - prev_wall;
     nrows = 0;
     if (have_vxd) {
@@ -347,6 +450,8 @@ static void sample(void)
         r[5] = OFFSETOF((void FAR *)&snap);
         r[6] = SELECTOROF((void FAR *)&snap);
         ok = vmt_api(r) || snap.h.rec_count;
+        /* (a device whose records differ is not this program's) */
+        if (snap.h.rec_size != sizeof(struct vmt_vm)) ok = 0;
     }
     if (ok) {
         DWORD sysrun = 0, dsysrun = 0;
@@ -375,6 +480,7 @@ static void sample(void)
                 busy_win = (long)(d - didle) > 0 ? d - didle : 0;
                 w = add_row(R_VM, 0, "Windows", v->handle);
                 if (!w) break;
+                w->sys = 1;
                 w->pct = have_prev ? pct10(busy_win, dsys) : -1;
                 w->ms = (long)(sysrun - snap.h.idle_ms) > 0 ? sysrun - snap.h.idle_ms : 0;
             } else {
@@ -388,7 +494,23 @@ static void sample(void)
                 if (!w) break;
                 w->pct = have_prev && found ? pct10(d, dsys) : -1;
                 w->ms = v->run_ms;
+                if (b >= 0) w->hwnd = (WORD)boxes[b].hwnd;
             }
+            w->vmh = v->handle;
+            w->vmid = v->id;
+            w->vmstat = v->status;
+            w->share = v->cpu_pct;
+            w->shflags = v->shell_flags;
+            w->fg = v->fg_prio;
+            w->bg = v->bg_prio;
+            /* a DOS VM: _GetVMPgCount's pages; the Windows row: the
+               global heap in use (the System VM's count holds Windows'
+               free memory and the VMM's too) */
+            if (order[o] != 0) w->mem_kb = v->pages * 4;
+            else if (mem_done) w->mem_kb = (win_bytes + 1023) / 1024;
+            w->out_kb = v->pages_out * 4;
+            w->ems_max = v->ems_max;
+            w->xms_max = v->xms_max;
             vm_status(w->status, v, focus);
             wsprintf(w->prio, "%lu/%lu", v->fg_prio, v->bg_prio);
             if (order[o] == 0)
@@ -414,7 +536,9 @@ static void sample(void)
             add_row(R_MSG, 0, "VMTASK.386 is not loaded: virtual", 0);
             add_row(R_MSG, 0, "machines are not shown.", 0);
         }
-        w = add_row(R_VM, 0, "Windows", 0);
+        w = add_row(R_VM, 0, "Windows", 1);
+        if (w) w->sys = 1;
+        if (w && mem_done) w->mem_kb = (win_bytes + 1023) / 1024;
         if (w && have_prev) {
             w->pct = pct10(dwall > dh ? dwall - dh : 0, dwall);
             lstrcpy(w->status, "Running");
@@ -454,6 +578,11 @@ static void fill_list(void)
     int i, top, sel;
     DWORD key = 0;
     if (nrows == nlisted) {
+        /* the selection stays on its task or VM when rows move */
+        sel = (int)SendMessage(hlist, LB_GETCURSEL, 0, 0);
+        if (sel >= 0 && sel < nrows && shown[sel].key != rows[sel].key)
+            for (i = 0; i < nrows; i++)
+                if (rows[i].key == shown[sel].key) { SendMessage(hlist, LB_SETCURSEL, i, 0); break; }
         /* only the rows that changed (w16's GDI is slow enough that
            redrawing them all each second showed as busy time) */
         for (i = 0; i < nrows; i++)
@@ -465,10 +594,10 @@ static void fill_list(void)
             }
         return;
     }
-    for (i = 0; i < nrows; i++) shown[i] = rows[i];
     top = (int)SendMessage(hlist, LB_GETTOPINDEX, 0, 0);
     sel = (int)SendMessage(hlist, LB_GETCURSEL, 0, 0);
-    if (sel >= 0 && sel < nlisted) key = rows[sel].key;
+    if (sel >= 0 && sel < nlisted) key = shown[sel].key;
+    for (i = 0; i < nrows; i++) shown[i] = rows[i];
     SendMessage(hlist, WM_SETREDRAW, FALSE, 0);
     SendMessage(hlist, LB_RESETCONTENT, 0, 0);
     for (i = 0; i < nrows; i++)
@@ -478,6 +607,11 @@ static void fill_list(void)
     if (key)
         for (i = 0; i < nrows; i++)
             if (rows[i].key == key) { SendMessage(hlist, LB_SETCURSEL, i, 0); break; }
+    /* a row is always selected (the menu, the buttons and Del act on it):
+       the first that is not a message */
+    if ((int)SendMessage(hlist, LB_GETCURSEL, 0, 0) < 0)
+        for (i = 0; i < nrows; i++)
+            if (rows[i].kind != R_MSG) { SendMessage(hlist, LB_SETCURSEL, i, 0); break; }
     SendMessage(hlist, WM_SETREDRAW, TRUE, 0);
     InvalidateRect(hlist, NULL, TRUE);
 }
@@ -493,12 +627,15 @@ static BOOL graph_rect(RECT *g)
 
 static char shown_stat[sizeof(statline)];
 
+static void set_buttons(void);
+
 static void refresh(void)
 {
     RECT rc, g;
     int added = nhist, i;
     sample();
     fill_list();
+    set_buttons();
     /* the graph: what is there moves left a step, and only the new step
        is drawn (redrawing all of it each second, with w16's GDI, showed
        as a tenth of the processor) */
@@ -518,9 +655,7 @@ static void refresh(void)
     }
 }
 
-/* column edges, in average character widths */
-static const int colx[] = { 1, 24, 31, 41, 55, 64 };
-#define COL(i) (colx[i] * cw)
+#define COL(i) (colx[i])
 
 static void text_at(HDC dc, int x, int y, LPCSTR s, int right)
 {
@@ -555,22 +690,44 @@ static void draw_item(DRAWITEMSTRUCT FAR *d)
     if (r->kind == R_MSG) {
         text_at(dc, rc.left + cw, y, r->name, 0);
     } else {
-        int x = rc.left + COL(0) + r->indent * 2 * cw;
-        HRGN clip = CreateRectRgn(rc.left, rc.top, rc.left + COL(1) - 6 * cw, rc.bottom);
+        int x = rc.left + COL(X_NAME) + r->indent * 2 * cw;
+        HRGN clip = CreateRectRgn(rc.left, rc.top, rc.left + COL(X_CPU) - 5 * cw, rc.bottom);
         SelectClipRgn(dc, clip);
         text_at(dc, x, y, r->name, 0);
         SelectClipRgn(dc, NULL);
         DeleteObject(clip);
         if (r->pct >= 0) {
             wsprintf(s, "%d%%", (r->pct + 5) / 10);
-            text_at(dc, rc.left + COL(1), y, s, 1);
+            text_at(dc, rc.left + COL(X_CPU), y, s, 1);
         }
         if (r->ms != 0xFFFFFFFFul) {
             fmt_time(s, r->ms);
-            text_at(dc, rc.left + COL(2) + 7 * cw, y, s, 1);
+            text_at(dc, rc.left + COL(X_TIME), y, s, 1);
         }
-        text_at(dc, rc.left + COL(3), y, r->status, 0);
-        text_at(dc, rc.left + COL(4), y, r->prio, 0);
+        text_at(dc, rc.left + COL(X_STAT), y, r->status, 0);
+        text_at(dc, rc.left + COL(X_PRIO), y, r->prio, 0);
+        if (r->mem_kb != 0xFFFFFFFFul) {
+            wsprintf(s, "%lu K", r->mem_kb);
+            text_at(dc, rc.left + COL(X_MEM), y, s, 1);
+        }
+        if (showids) {
+            if (r->vmid) {
+                wsprintf(s, "%lu", r->vmid);
+                text_at(dc, rc.left + COL(X_ID), y, s, 1);
+            }
+            s[0] = 0;
+            if (r->vmh) wsprintf(s, "%08lX", r->vmh);
+            else if (r->task) wsprintf(s, "%04X", r->task);
+            text_at(dc, rc.left + COL(X_HAND), y, s, 0);
+            if (r->hmod) {
+                wsprintf(s, "%04X", r->hmod);
+                text_at(dc, rc.left + COL(X_MOD), y, s, 0);
+            }
+            if (r->hwnd) {
+                wsprintf(s, "%04X", r->hwnd);
+                text_at(dc, rc.left + COL(X_WIN), y, s, 0);
+            }
+        }
     }
     if (d->itemState & ODS_FOCUS) DrawFocusRect(dc, &d->rcItem);
 }
@@ -592,11 +749,18 @@ static void paint(HWND h)
     r = rc;
     r.bottom = hdr_h;
     FillRect(dc, &r, face);
-    text_at(dc, COL(0), 2, "Name", 0);
-    text_at(dc, COL(1), 2, "CPU", 1);
-    text_at(dc, COL(2) + 7 * cw, 2, "Time", 1);
-    text_at(dc, COL(3), 2, "Status", 0);
-    text_at(dc, COL(4), 2, "Priority", 0);
+    text_at(dc, COL(X_NAME), 2, "Name", 0);
+    text_at(dc, COL(X_CPU), 2, "CPU", 1);
+    text_at(dc, COL(X_TIME), 2, "Time", 1);
+    text_at(dc, COL(X_STAT), 2, "Status", 0);
+    text_at(dc, COL(X_PRIO), 2, "Priority", 0);
+    text_at(dc, COL(X_MEM), 2, "Memory", 1);
+    if (showids) {
+        text_at(dc, COL(X_ID), 2, "ID", 1);
+        text_at(dc, COL(X_HAND), 2, "Handle", 0);
+        text_at(dc, COL(X_MOD), 2, "Module", 0);
+        text_at(dc, COL(X_WIN), 2, "Window", 0);
+    }
     /* the graph and the status line */
     r = rc;
     r.top = rc.bottom - stat_h - graph_h;
@@ -656,9 +820,23 @@ static void paint(HWND h)
 static void layout(void)
 {
     RECT rc;
+    int i, bw = 0, x, y;
     GetClientRect(hwnd, &rc);
     graph_h = showgraph ? 3 * ch + 8 : 0;
-    MoveWindow(hlist, 0, hdr_h, rc.right, rc.bottom - hdr_h - stat_h - graph_h, TRUE);
+    MoveWindow(hlist, 0, hdr_h, rc.right, rc.bottom - hdr_h - stat_h - graph_h - btn_h, TRUE);
+    /* the buttons in a row under the list, as wide as the widest label */
+    for (i = 0; i < 3; i++) {
+        char t[24];
+        HDC dc = GetDC(hbtn[i]);
+        int w = GetWindowText(hbtn[i], t, sizeof(t));
+        w = LOWORD(GetTextExtent(dc, t, w));
+        ReleaseDC(hbtn[i], dc);
+        if (w > bw) bw = w;
+    }
+    bw += 4 * cw;
+    y = rc.bottom - stat_h - graph_h - btn_h + 4;
+    for (i = 0, x = cw; i < 3; i++, x += bw + cw)
+        MoveWindow(hbtn[i], x, y, bw, btn_h - 8, TRUE);
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
@@ -672,6 +850,7 @@ static void set_checks(void)
     CheckMenuItem(m, IDM_ONTOP, ontop ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(m, IDM_TASKS, showtasks ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(m, IDM_GRAPH, showgraph ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(m, IDM_IDS, showids ? MF_CHECKED : MF_UNCHECKED);
 }
 
 static void put_int(LPCSTR key, int v)
@@ -710,15 +889,506 @@ static void set_ontop(int on)
     set_checks();
 }
 
+/* ---- Virtual Devices... and Drivers... ---- */
+
+static void fill_vxds(HWND lb)
+{
+    static BYTE buf[2 + 96 * sizeof(struct vmt_dev)];
+    WORD r[7];
+    char t[96];
+    int i, n;
+    SendMessage(lb, LB_RESETCONTENT, 0, 0);
+    if (!enhanced) {
+        SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)"Standard mode: there are no virtual devices.");
+        return;
+    }
+    if (!have_vxd) {
+        SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)"VMTASK.386 is not loaded: the devices cannot be listed.");
+        return;
+    }
+    r[0] = 4;
+    r[1] = 0;
+    r[2] = sizeof(buf);
+    r[3] = r[4] = 0;
+    r[5] = OFFSETOF((void FAR *)buf);
+    r[6] = SELECTOROF((void FAR *)buf);
+    vmt_api(r);
+    n = *(WORD *)buf;
+    for (i = 0; i < n; i++) {
+        struct vmt_dev *d = (struct vmt_dev *)(buf + 2) + i;
+        char name[9];
+        int k;
+        for (k = 0; k < 8 && d->name[k] && d->name[k] != ' '; k++) name[k] = d->name[k];
+        name[k] = 0;
+        wsprintf(t, "%s\t%04X\t%u.%02u\t%08lX\t%lu\t%s%s", (LPSTR)name, d->id, d->major, d->minor,
+                 d->init_order, d->services, (LPSTR)(d->flags & 1 ? "V86 " : ""), (LPSTR)(d->flags & 2 ? "PM" : ""));
+        SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)t);
+    }
+}
+
+static void fill_drivers(HWND lb)
+{
+    HDRVR d = 0;
+    DRIVERINFOSTRUCT di;
+    MODULEENTRY me;
+    BOOL any;
+    char t[200], mod[16], boot[128];
+    int k;
+    SendMessage(lb, LB_RESETCONTENT, 0, 0);
+    SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)"Installable drivers:");
+    k = 0;
+    while ((d = GetNextDriver(d, GND_FORWARD)) != 0 && k++ < 64) {
+        di.length = sizeof(di);
+        if (!GetDriverInfo(d, &di)) continue;
+        mod[0] = 0;
+        me.dwSize = sizeof(me);
+        if (ModuleFindHandle(&me, (HMODULE)di.hModule)) lstrcpyn(mod, me.szModule, sizeof(mod));
+        wsprintf(t, "  %s\t%s\t%04X\t%04X", (LPSTR)di.szAliasName, (LPSTR)mod, (WORD)d, (WORD)di.hModule);
+        SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)t);
+    }
+    if (!k) SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)"  (none)");
+    SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)"Drivers loaded as modules (.DRV, [boot] drivers=):");
+    GetPrivateProfileString("boot", "drivers", "", boot, sizeof(boot), "SYSTEM.INI");
+    AnsiUpper(boot);
+    me.dwSize = sizeof(me);
+    for (any = ModuleFirst(&me); any; any = ModuleNext(&me)) {
+        int n = lstrlen(me.szExePath), drv;
+        char m2[12];
+        drv = n > 4 && !lstrcmpi(me.szExePath + n - 4, ".DRV");
+        lstrcpyn(m2, me.szModule, sizeof(m2));
+        AnsiUpper(m2);
+        if (!drv && boot[0]) {
+            /* a module whose name [boot] drivers= names */
+            char *p = boot;
+            int ml = lstrlen(m2);
+            while (*p) {
+                char *q = p;
+                int j;
+                while (*q && *q != ' ' && *q != ',' && *q != '.') q++;
+                for (j = 0; j < ml && p + j < q && p[j] == m2[j]; j++)
+                    ;
+                if (j == ml && p + j == q) { drv = 1; break; }
+                while (*q && *q != ' ' && *q != ',') q++;
+                while (*q == ' ' || *q == ',') q++;
+                p = q;
+            }
+        }
+        if (!drv) continue;
+        wsprintf(t, "  %s\t%s\t%u\t%04X", (LPSTR)me.szModule, (LPSTR)me.szExePath, me.wcUsage, (WORD)me.hModule);
+        SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)t);
+    }
+}
+
+BOOL CALLBACK __export ListDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
+{
+    static int vxds;
+    switch (msg) {
+    case WM_INITDIALOG: {
+        /* tab stops in dialog units */
+        static int t_vxd[] = { 44, 70, 96, 140, 168 }, t_drv[] = { 64, 174, 204 };
+        HWND lb = GetDlgItem(d, IDC_ITEMS);
+        vxds = (int)lp;
+        if (vxds) SendMessage(lb, LB_SETTABSTOPS, 5, (LPARAM)(int FAR *)t_vxd);
+        else SendMessage(lb, LB_SETTABSTOPS, 3, (LPARAM)(int FAR *)t_drv);
+        if (vxds) fill_vxds(lb); else fill_drivers(lb);
+        return TRUE;
+    }
+    case WM_COMMAND:
+        if (wp == IDC_REFRESH) {
+            HWND lb = GetDlgItem(d, IDC_ITEMS);
+            if (vxds) fill_vxds(lb); else fill_drivers(lb);
+        } else if (wp == IDOK || wp == IDCANCEL)
+            EndDialog(d, 0);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static void list_dialog(int vxds)
+{
+    FARPROC fp = MakeProcInstance((FARPROC)ListDlgProc, hinst);
+    DialogBoxParam(hinst, MAKEINTRESOURCE(vxds ? IDD_VXDS : IDD_DRIVERS), hwnd, (DLGPROC)fp, (LPARAM)vxds);
+    FreeProcInstance(fp);
+}
+
+/* ---- the actions on a row ---- */
+
+static struct row *sel_row(void)
+{
+    int i = (int)SendMessage(hlist, LB_GETCURSEL, 0, 0);
+    if (i < 0 || i >= nlisted) return NULL;
+    return shown[i].kind == R_MSG ? NULL : &shown[i];
+}
+
+/* the selected row, copied: the list changes under a message box (its
+   modal loop goes on refreshing), so an action works on a copy */
+static struct row act;
+static struct row *act_row(void)
+{
+    struct row *r = sel_row();
+    if (!r) return NULL;
+    act = *r;
+    return &act;
+}
+
+#define CAN_SWITCH 1
+#define CAN_ENDTASK 2
+#define CAN_ENDVM 4
+static int can(struct row *r)
+{
+    if (!r) return 0;
+    if (r->kind == R_TASK) return CAN_SWITCH | CAN_ENDTASK;
+    if (r->sys) return CAN_SWITCH;
+    return CAN_SWITCH | (have_vxd ? CAN_ENDVM : 0);
+}
+
+static void set_buttons(void)
+{
+    int c = can(sel_row());
+    HMENU m = GetMenu(hwnd);
+    EnableWindow(hbtn[0], (c & CAN_SWITCH) != 0);
+    EnableWindow(hbtn[1], (c & CAN_ENDTASK) != 0);
+    EnableWindow(hbtn[2], (c & CAN_ENDVM) != 0);
+    EnableMenuItem(m, IDM_SWITCH, c & CAN_SWITCH ? MF_ENABLED : MF_GRAYED);
+    EnableMenuItem(m, IDM_ENDTASK, c & CAN_ENDTASK ? MF_ENABLED : MF_GRAYED);
+    EnableMenuItem(m, IDM_ENDVM, c & CAN_ENDVM ? MF_ENABLED : MF_GRAYED);
+    EnableMenuItem(m, IDM_DETAILS, c ? MF_ENABLED : MF_GRAYED);
+    EnableMenuItem(m, IDM_COPY, c ? MF_ENABLED : MF_GRAYED);
+}
+
+/* the task's main window: its first visible, unowned top-level window */
+static HWND task_window(WORD task)
+{
+    HWND w;
+    for (w = GetWindow(GetDesktopWindow(), GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT))
+        if ((WORD)GetWindowTask(w) == task && !GetWindow(w, GW_OWNER) && IsWindowVisible(w))
+            return w;
+    return 0;
+}
+
+/* Switch To: as the Task List's (its last active popup, restored) */
+static void do_switch(struct row *r)
+{
+    HWND w = 0, p;
+    if (!r) return;
+    if (r->kind == R_TASK) w = task_window(r->task);
+    else if (!r->sys) w = (HWND)r->hwnd;
+    else {
+        /* the Windows row: the shell's window (Program Manager) */
+        w = FindWindow("Progman", NULL);
+    }
+    if (!w || !IsWindow(w)) { MessageBeep(0); return; }
+    p = GetLastActivePopup(w);
+    if (!IsWindow(p)) p = w;
+    if (GetWindowLong(p, GWL_STYLE) & WS_DISABLED) MessageBeep(0);
+    else SwitchToThisWindow(p, TRUE);
+}
+
+/* a task w16 needs: the shell, this program, a DOS box's WINOLDAP, the
+   multimedia system's task; 0: an ordinary one */
+static LPCSTR system_task(struct row *r)
+{
+    char mod[16];
+    HWND pm = FindWindow("Progman", NULL);
+    if (r->task == (WORD)GetCurrentTask()) return "the VM Task Manager itself";
+    if (pm && (WORD)GetWindowTask(pm) == r->task) return "the shell (Program Manager)";
+    if (IsWinOldApTask((HTASK)r->task)) return "a DOS program's window (End VM ends the DOS program)";
+    lstrcpyn(mod, r->name, sizeof(mod));
+    if (!lstrcmpi(mod, "MMTASK")) return "the multimedia system's task";
+    if (!task_window(r->task)) return "a task with no window: part of the system or a driver";
+    return 0;
+}
+
+static void force_end(WORD task, LPCSTR name)
+{
+    char t[200];
+    if (!IsTask((HTASK)task)) return;
+    wsprintf(t, "%s is not responding.\n\nEnd it anyway? Any unsaved information in it "
+             "will be lost.", (LPSTR)name);
+    if (MessageBox(hwnd, t, "End Task", MB_ICONSTOP | MB_OKCANCEL | MB_DEFBUTTON2) != IDOK) return;
+    if (IsTask((HTASK)task)) TerminateApp((HTASK)task, NO_UAE_BOX);
+    refresh();
+}
+
+/* End Task: confirmed (twice for a task w16 needs), then WM_CLOSE to its
+   windows; if it has not ended END_WAIT ms later, offered TerminateApp */
+static void end_task(struct row *r)
+{
+    char t[300];
+    LPCSTR why;
+    HWND w, next;
+    int n = 0;
+    WORD task;
+    if (!r || r->kind != R_TASK) return;
+    task = r->task;
+    wsprintf(t, "End %s?\n\nIt is asked to close; any unsaved information in it may be lost.",
+             (LPSTR)r->name);
+    if (MessageBox(hwnd, t, "End Task", MB_ICONQUESTION | MB_OKCANCEL) != IDOK) return;
+    why = system_task(r);
+    if (why) {
+        wsprintf(t, "%s is %s.\n\nEnding it may stop w16 or other programs from working. "
+                 "Are you sure you want to end it?", (LPSTR)r->name, why);
+        if (MessageBox(hwnd, t, "End Task", MB_ICONEXCLAMATION | MB_YESNO | MB_DEFBUTTON2) != IDYES)
+            return;
+    }
+    if (task == (WORD)GetCurrentTask()) {
+        PostMessage(hwnd, WM_CLOSE, 0, 0);
+        return;
+    }
+    lstrcpyn(end_name, r->name, sizeof(end_name));
+    for (w = GetWindow(GetDesktopWindow(), GW_CHILD); w; w = next) {
+        next = GetWindow(w, GW_HWNDNEXT);
+        if ((WORD)GetWindowTask(w) == task && !GetWindow(w, GW_OWNER)) {
+            PostMessage(w, WM_CLOSE, 0, 0);
+            n++;
+        }
+    }
+    if (!n) {
+        force_end(task, end_name);
+        return;
+    }
+    end_task_h = task;
+    SetTimer(hwnd, 2, END_WAIT, NULL);
+}
+
+/* the warning 3.1's DOS box Settings dialog shows for Terminate */
+BOOL CALLBACK __export TermDlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_INITDIALOG:
+        SetWindowText(d, (LPCSTR)lp);
+        SendDlgItemMessage(d, IDC_STOPICON, STM_SETICON, (WPARAM)LoadIcon(NULL, IDI_HAND), 0);
+        /* Cancel first, as 3.1's (Return cancels; Tab goes to OK); also
+           once the dialog is up (w16's USER put it back on OK) */
+        SetFocus(GetDlgItem(d, IDCANCEL));
+        PostMessage(d, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(d, IDCANCEL), 1L);
+        return FALSE;
+    case WM_COMMAND:
+        if (wp == IDOK || wp == IDCANCEL) EndDialog(d, wp);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/* End VM: 3.1's Terminate warning, then VMTASK.386's function 3 with
+   Nuke_VM, as SHELL ends a VM for Terminate; never the System VM */
+static void end_vm(struct row *r)
+{
+    FARPROC fp;
+    int ok;
+    WORD reg[7];
+    DWORD vm;
+    char t[64];
+    if (!r || r->kind != R_VM || r->sys || !have_vxd || !r->vmh) return;
+    vm = r->vmh;
+    lstrcpyn(t, r->name, sizeof(t));
+    fp = MakeProcInstance((FARPROC)TermDlgProc, hinst);
+    ok = DialogBoxParam(hinst, MAKEINTRESOURCE(IDD_TERMINATE), hwnd, (DLGPROC)fp, (LPARAM)(LPSTR)t);
+    FreeProcInstance(fp);
+    if (ok != IDOK) return;
+    reg[0] = 3;
+    reg[1] = LOWORD(vm);
+    reg[2] = 1;                         /* Nuke_VM */
+    reg[3] = HIWORD(vm);
+    reg[4] = reg[5] = reg[6] = 0;
+    if (!vmt_api(reg))
+        MessageBox(hwnd, reg[0] == 1 ? "The System VM cannot be ended." : "That virtual machine has already ended.",
+                   "End VM", MB_ICONEXCLAMATION | MB_OK);
+    refresh();
+}
+
+/* Details: the row's IDs and what the API tells of it */
+static void details(struct row *r, char *t)
+{
+    char *p = t;
+    *p = 0;
+    if (!r) return;
+    if (r->kind == R_TASK) {
+        p += wsprintf(p, "Task: %s\r\nTask handle (hTask): %04X\r\nModule handle: %04X\r\n"
+                      "Instance: %04X\r\n", (LPSTR)r->name, r->task, r->hmod, r->hinst);
+        if (task_window(r->task))
+            p += wsprintf(p, "Main window: %04X\r\n", (WORD)task_window(r->task));
+        p += wsprintf(p, "Status: %s\r\n", (LPSTR)r->status);
+        if (r->mem_kb != 0xFFFFFFFFul)
+            p += wsprintf(p, "Memory: %lu K (global blocks its PDB or module owns; approximate)\r\n", r->mem_kb);
+        return;
+    }
+    p += wsprintf(p, "%s\r\n", (LPSTR)(r->sys ? "Windows (the System VM)" : r->name));
+    if (r->vmh) {
+        p += wsprintf(p, "VM ID: %lu\r\nVM handle: %08lX\r\n", r->vmid, r->vmh);
+        p += wsprintf(p, "Status: %s (CB_VM_Status %04lX)\r\n", (LPSTR)r->status, r->vmstat);
+        p += wsprintf(p, "Priority: foreground %lu, background %lu\r\nShare of the processor at most: %lu%%\r\n",
+                      r->fg, r->bg, r->share);
+    }
+    if (!r->sys && r->shflags != 0xFFFFFFFFul)
+        p += wsprintf(p, "Display: %s (SHELL_GetVMInfo %08lX)\r\n",
+                      (LPSTR)(r->shflags & SGVMI_WINDOWED ? "window" : "full screen"), r->shflags);
+    if (r->hwnd) p += wsprintf(p, "Window: %04X\r\n", r->hwnd);
+    if (r->sys && r->mem_kb != 0xFFFFFFFFul)
+        p += wsprintf(p, "Memory: %lu K in Windows' global heap\r\n", r->mem_kb);
+    else if (r->mem_kb != 0xFFFFFFFFul)
+        p += wsprintf(p, "Memory: %lu K (_GetVMPgCount: %lu pages; not mapped in its first MB: %lu)\r\n"
+                      "EMS at most %lu K, XMS at most %lu K\r\n", r->mem_kb, r->mem_kb / 4, r->out_kb / 4,
+                      r->ems_max, r->xms_max);
+}
+
+static void show_details(struct row *r)
+{
+    char t[512];
+    details(r, t);
+    if (t[0]) MessageBox(hwnd, t, "Details", MB_ICONINFORMATION | MB_OK);
+}
+
+static void copy_details(struct row *r)
+{
+    char t[512];
+    HGLOBAL g;
+    LPSTR q;
+    details(r, t);
+    if (!t[0] || !OpenClipboard(hwnd)) return;
+    g = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, lstrlen(t) + 1);
+    if (g && (q = GlobalLock(g)) != NULL) {
+        lstrcpy(q, t);
+        GlobalUnlock(g);
+        EmptyClipboard();
+        SetClipboardData(CF_TEXT, g);
+    }
+    CloseClipboard();
+}
+
+/* the shortcut menu for the selected row, at screen point x, y */
+static void context_menu(int x, int y)
+{
+    struct row *r = sel_row();
+    int c = can(r);
+    HMENU m;
+    if (!c) return;
+    m = CreatePopupMenu();
+    AppendMenu(m, MF_STRING, IDM_SWITCH, "&Switch To");
+    if (c & CAN_ENDTASK) AppendMenu(m, MF_STRING, IDM_ENDTASK, "End &Task");
+    if (r->kind == R_VM && !r->sys)
+        AppendMenu(m, MF_STRING | (c & CAN_ENDVM ? 0 : MF_GRAYED), IDM_ENDVM, "End &VM");
+    AppendMenu(m, MF_SEPARATOR, 0, NULL);
+    AppendMenu(m, MF_STRING, IDM_DETAILS, r->kind == R_VM && !r->sys ? "&Settings and IDs..." : "&Details...");
+    AppendMenu(m, MF_STRING, IDM_COPY, "&Copy Details");
+    TrackPopupMenu(m, TPM_LEFTALIGN | TPM_RIGHTBUTTON, x, y, 0, hwnd, NULL);
+    DestroyMenu(m);
+}
+
+/* the list: a right click selects the row under it and opens the menu */
+LRESULT CALLBACK __export ListProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+{
+    if (msg == WM_RBUTTONDOWN) {
+        int i = (int)SendMessage(h, LB_GETTOPINDEX, 0, 0) + (int)HIWORD(lp) / ch;
+        if (i < nlisted) {
+            SendMessage(h, LB_SETCURSEL, i, 0);
+            set_buttons();
+        }
+        return 0;
+    }
+    /* Del ends the selected task or VM, Shift+F10 opens the menu (here,
+       not in the accelerator table: Shift+F10 comes as WM_SYSKEYDOWN, which
+       TranslateAccelerator passed by) */
+    if (msg == WM_KEYDOWN && wp == VK_DELETE) {
+        PostMessage(hwnd, WM_COMMAND, IDM_END, 0);
+        return 0;
+    }
+    if (msg == WM_KEYDOWN && wp == VK_RETURN) {
+        PostMessage(hwnd, WM_COMMAND, IDM_SWITCH, 0);
+        return 0;
+    }
+    if ((msg == WM_SYSKEYDOWN || msg == WM_KEYDOWN) && wp == VK_F10 && GetKeyState(VK_SHIFT) < 0) {
+        PostMessage(hwnd, WM_COMMAND, IDM_CONTEXT, 0);
+        return 0;
+    }
+    /* typing a name selects the next row that starts with what was typed
+       (a pause of a second starts afresh) */
+    if (msg == WM_CHAR && wp > ' ') {
+        static char typed[16];
+        static int ntyped;
+        static DWORD last;
+        int i, k, n = nlisted, cur = (int)SendMessage(h, LB_GETCURSEL, 0, 0);
+        if (GetTickCount() - last > 1000) ntyped = 0;
+        last = GetTickCount();
+        if (ntyped < sizeof(typed) - 1) typed[ntyped++] = (char)wp;
+        typed[ntyped] = 0;
+        for (k = ntyped == 1 ? 1 : 0; k <= n; k++) {
+            int j;
+            i = ((cur < 0 ? 0 : cur) + k) % (n ? n : 1);
+            if (shown[i].kind == R_MSG) continue;
+            for (j = 0; j < ntyped; j++) {
+                char a = shown[i].name[j], b = typed[j];
+                if (a >= 'a' && a <= 'z') a -= 32;
+                if (b >= 'a' && b <= 'z') b -= 32;
+                if (a != b) break;
+            }
+            if (j == ntyped) {
+                SendMessage(h, LB_SETCURSEL, i, 0);
+                set_buttons();
+                break;
+            }
+        }
+        return 0;
+    }
+    if (msg == WM_RBUTTONUP) {
+        POINT pt;
+        pt.x = LOWORD(lp);
+        pt.y = HIWORD(lp);
+        ClientToScreen(h, &pt);
+        context_menu(pt.x, pt.y);
+        return 0;
+    }
+    return CallWindowProc(old_list, h, msg, wp, lp);
+}
+
+static void menu_at_selection(void)
+{
+    RECT r;
+    POINT pt;
+    int i = (int)SendMessage(hlist, LB_GETCURSEL, 0, 0);
+    if (i < 0 || SendMessage(hlist, LB_GETITEMRECT, i, (LPARAM)(LPRECT)&r) == LB_ERR) return;
+    pt.x = r.left + COL(X_CPU) / 2;
+    pt.y = r.bottom;
+    ClientToScreen(hlist, &pt);
+    context_menu(pt.x, pt.y);
+}
+
+static void set_ids(int on)
+{
+    RECT rc;
+    showids = on;
+    put_int("IDs", showids);
+    set_checks();
+    /* wide enough for the columns (within the screen) */
+    GetWindowRect(hwnd, &rc);
+    if (!IsZoomed(hwnd) && !IsIconic(hwnd)) {
+        int want = colx[on ? X_END2 : X_END1] + GetSystemMetrics(SM_CXVSCROLL) + 2 * GetSystemMetrics(SM_CXFRAME) + 2;
+        if (want > GetSystemMetrics(SM_CXSCREEN)) want = GetSystemMetrics(SM_CXSCREEN);
+        if (on ? rc.right - rc.left < want : rc.right - rc.left > want)
+            SetWindowPos(hwnd, 0, 0, 0, want, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
+    }
+    InvalidateRect(hwnd, NULL, TRUE);
+    InvalidateRect(hlist, NULL, TRUE);
+}
+
 LRESULT CALLBACK __export WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_CREATE:
         hwnd = h;
         hlist = CreateWindow("LISTBOX", NULL,
-                             WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_BORDER | LBS_OWNERDRAWFIXED
+                             WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_BORDER | WS_TABSTOP | LBS_OWNERDRAWFIXED
                              | LBS_NOINTEGRALHEIGHT | LBS_NOTIFY,
                              0, 0, 0, 0, h, (HMENU)IDC_LIST, hinst, NULL);
+        old_list = (FARPROC)GetWindowLong(hlist, GWL_WNDPROC);
+        list_thunk = MakeProcInstance((FARPROC)ListProc, hinst);
+        SetWindowLong(hlist, GWL_WNDPROC, (LONG)list_thunk);
+        hbtn[0] = CreateWindow("BUTTON", "&Switch To", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                               0, 0, 0, 0, h, (HMENU)IDM_SWITCH, hinst, NULL);
+        hbtn[1] = CreateWindow("BUTTON", "End &Task", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                               0, 0, 0, 0, h, (HMENU)IDM_ENDTASK, hinst, NULL);
+        hbtn[2] = CreateWindow("BUTTON", "End &VM", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                               0, 0, 0, 0, h, (HMENU)IDM_ENDVM, hinst, NULL);
         return 0;
     case WM_SIZE:
         layout();
@@ -736,6 +1406,16 @@ LRESULT CALLBACK __export WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         paint(h);
         return 0;
     case WM_TIMER:
+        if (wp == 2) {
+            /* End Task's wait is over: still there, it is offered an end
+               by force */
+            WORD t = end_task_h;
+            KillTimer(h, 2);
+            end_task_h = 0;
+            refresh();
+            if (t && IsTask((HTASK)t)) force_end(t, end_name);
+            return 0;
+        }
         refresh();
         return 0;
     case WM_COMMAND:
@@ -758,6 +1438,28 @@ LRESULT CALLBACK __export WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             layout();
             break;
         case IDM_REFRESH: refresh(); break;
+        case IDM_IDS: set_ids(!showids); break;
+        case IDM_SWITCH: do_switch(act_row()); break;
+        case IDM_ENDTASK: end_task(act_row()); break;
+        case IDM_ENDVM: end_vm(act_row()); break;
+        case IDM_END: {
+            /* Del: the selected task or VM */
+            struct row *r = act_row();
+            int c = can(r);
+            if (c & CAN_ENDTASK) end_task(r);
+            else if (c & CAN_ENDVM) end_vm(r);
+            else MessageBeep(0);
+            break;
+        }
+        case IDM_DETAILS: show_details(act_row()); break;
+        case IDM_COPY: copy_details(act_row()); break;
+        case IDM_CONTEXT: menu_at_selection(); break;
+        case IDM_VXDS: list_dialog(1); break;
+        case IDM_DRIVERS: list_dialog(0); break;
+        case IDC_LIST:
+            if (HIWORD(lp) == LBN_SELCHANGE) set_buttons();
+            else if (HIWORD(lp) == LBN_DBLCLK) do_switch(act_row());
+            break;
         case IDM_EXIT: SendMessage(h, WM_CLOSE, 0, 0); break;
         case IDM_ABOUT:
             ShellAbout(h, "VM Task Manager",
@@ -767,7 +1469,7 @@ LRESULT CALLBACK __export WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     case WM_GETMINMAXINFO:
-        ((MINMAXINFO FAR *)lp)->ptMinTrackSize.x = COL(3);
+        ((MINMAXINFO FAR *)lp)->ptMinTrackSize.x = COL(X_STAT);
         ((MINMAXINFO FAR *)lp)->ptMinTrackSize.y = 10 * ch;
         return 0;
     case WM_SYSCOLORCHANGE:
@@ -779,6 +1481,8 @@ LRESULT CALLBACK __export WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_DESTROY:
         KillTimer(h, 1);
+        KillTimer(h, 2);
+        if (old_list) SetWindowLong(hlist, GWL_WNDPROC, (LONG)old_list);
         PostQuitMessage(0);
         return 0;
     }
@@ -805,6 +1509,7 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
     HDC dc;
     TEXTMETRIC tm;
     int x, y, w, hgt;
+    HACCEL acc;
     (void)cmd;
     hinst = hi;
     if (!hprev) {
@@ -826,13 +1531,36 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
     ch = tm.tmHeight;
     hdr_h = ch + 4;
     stat_h = ch + 6;
+    btn_h = ch + 16;
+    {
+        /* the columns, from the system font's widths of what they hold */
+#define EXT(t) ((int)LOWORD(GetTextExtent(dc, t, sizeof(t) - 1)))
+        dc = GetDC(NULL);
+        colx[X_NAME] = cw;
+        colx[X_CPU] = colx[X_NAME] + 17 * cw + EXT("100%");
+        colx[X_TIME] = colx[X_CPU] + cw + EXT("0:00:00");
+        colx[X_STAT] = colx[X_TIME] + 2 * cw;
+        colx[X_PRIO] = colx[X_STAT] + EXT("Background") + cw;
+        colx[X_MEM] = colx[X_PRIO] + EXT("Priority") + cw + EXT("Memory");
+        colx[X_END1] = colx[X_MEM] + cw;
+        colx[X_ID] = colx[X_END1] + EXT("99");
+        colx[X_HAND] = colx[X_ID] + cw;
+        colx[X_MOD] = colx[X_HAND] + EXT("80000000") + cw;
+        colx[X_WIN] = colx[X_MOD] + EXT("Module") + cw;
+        colx[X_END2] = colx[X_WIN] + EXT("Window") + cw;
+        ReleaseDC(NULL, dc);
+#undef EXT
+    }
     interval = GetProfileInt(APPNAME, "Interval", 1000);
     if (interval != 500 && interval != 2000 && interval != 5000) interval = 1000;
     ontop = GetProfileInt(APPNAME, "OnTop", 0) != 0;
     showtasks = GetProfileInt(APPNAME, "Tasks", 1) != 0;
     showgraph = GetProfileInt(APPNAME, "Graph", 1) != 0;
-    w = GetProfileInt(APPNAME, "Width", COL(5) + GetSystemMetrics(SM_CXVSCROLL) + 2 * GetSystemMetrics(SM_CXFRAME) + 2);
-    hgt = GetProfileInt(APPNAME, "Height", 22 * ch);
+    showids = GetProfileInt(APPNAME, "IDs", 1) != 0;
+    w = colx[showids ? X_END2 : X_END1] + GetSystemMetrics(SM_CXVSCROLL) + 2 * GetSystemMetrics(SM_CXFRAME) + 2;
+    if (w > GetSystemMetrics(SM_CXSCREEN)) w = GetSystemMetrics(SM_CXSCREEN);
+    w = GetProfileInt(APPNAME, "Width", w);
+    hgt = GetProfileInt(APPNAME, "Height", 25 * ch);
     x = GetProfileInt(APPNAME, "Left", CW_USEDEFAULT);
     y = GetProfileInt(APPNAME, "Top", 0);
     vmt_init();
@@ -854,7 +1582,9 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
     UpdateWindow(hwnd);
     if (ontop) set_ontop(1);
     SetTimer(hwnd, 1, interval, NULL);
+    acc = LoadAccelerators(hi, MAKEINTRESOURCE(IDM_MENU));
     while (GetMessage(&m, NULL, 0, 0)) {
+        if (acc && TranslateAccelerator(hwnd, acc, &m)) continue;
         TranslateMessage(&m);
         DispatchMessage(&m);
     }

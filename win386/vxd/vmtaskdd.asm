@@ -2,7 +2,7 @@
 ; DDB, entry points and dynamic links (ARCHITECTURE.md 15.12). An external
 ; VxD of w16's own, with no counterpart in Windows 3.1: "VMTASK", device
 ; 5716h (w16's choice, not one Microsoft assigned: see vmtask.c), 1.00,
-; Undefined_Init_Order, one procedure for the V86 and the PM API, no
+; init order 0, one procedure for the V86 and the PM API, no
 ; services. Every dynamic link is to a service the Windows 3.1 DDK
 ; documents, so it loads under Microsoft's WIN386 as under w16's.
 
@@ -19,7 +19,8 @@ VMTASK_DDB:
         db 1, 0
         dw 0
         db 'VMTASK  '
-        dd 80000000h            ; Undefined_Init_Order
+        dd 0                    ; init order 0: the first after the VMM, so that
+                                ; DDB_Next leads through every other device (function 4)
         dd vmtask_ctl
         dd vmtask_api           ; V86 API
         dd vmtask_api           ; PM API
@@ -46,3 +47,29 @@ VMTASK_DDB:
         VXDCALLC _vmm_alloc_cb_area, 1, 0A7h, 2
         VXDCALL _shell_get_vm_info, 17h, 05h
         VXDCALL _vtd_get_real_time, 5, 07h
+        VXDCALL _vmm_validate_vm, 1, 05h
+        VXDCALL _vmm_nuke_vm, 1, 2Eh
+        VXDCALL _vmm_close_vm, 1, 0ECh
+        VXDCALL _vmm_get_version, 1, 00h
+        VXDCALL _v86mm_get_limits, 6, 03h
+
+; vu32 vmm_vm_pgcount(vu32 vm, vu32 *outside): _GetVMPgCount(VM, 0), the
+; DDK's C-convention service (VMM 5Ch): EAX back, EDX into *outside
+global _vmm_vm_pgcount
+_vmm_vm_pgcount:
+        push ebx
+        push esi
+        push edi
+        push ebp
+        push dword 0
+        push dword [esp + 24]
+        int 20h
+        dd (1 << 16) | 5Ch
+        add esp, 8
+        mov ecx, [esp + 24]
+        mov [ecx], edx
+        pop ebp
+        pop edi
+        pop esi
+        pop ebx
+        ret

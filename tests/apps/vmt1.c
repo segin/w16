@@ -24,12 +24,20 @@
  *     bit 2 clear, the others (windowed) set;
  * and a note of how much the System VM's Get_VM_Exec_Time grew beside
  * VMTASK's count of its run time.
+ * With end=N (WIN.INI [vmt1]) it then ends the N-th box through
+ * function 3 (method=0 Close_VM, 1 Nuke_VM), after checking that ending
+ * the System VM is refused, and checks that the VM and its window are
+ * gone and the step after.
  * WIN.INI [vmt1]: progs=C:\W\B.PIF,C:\W\P.PIF  secs=6  settle=6  wait=8
+ * end=0 method=0; final=S gone=MODULE vms=N (final_checks); launch=PROGRAM
+ * (started after wait, before the first step; with late=1 after the
+ * boxes)
  * Output: VMT1.LOG (the current directory) at the end, TK.LOG as it goes.
  * Black box (ARCHITECTURE.md 3): only the published API, VMTASK's own
  * interface and the clock.
  */
 #include <windows.h>
+#include <toolhelp.h>
 
 extern void __cdecl log_write(const char FAR *buf, WORD len);
 extern WORD __cdecl init_regs[7];
@@ -37,6 +45,7 @@ extern WORD FAR PASCAL WaitEvent(HTASK);
 extern BOOL FAR PASCAL InitApp(HINSTANCE);
 extern void __cdecl __far vx_int2f(WORD FAR *regs);
 extern void __cdecl __far vx_call(void FAR *entry, WORD FAR *regs);
+extern BOOL FAR PASCAL IsWinOldApTask(HTASK);           /* KERNEL.158 */
 
 BYTE rtc_read(BYTE reg);
 #pragma aux rtc_read = "out 70h,al" "in al,71h" parm [al] value [al];
@@ -49,6 +58,13 @@ struct vmt_head {
 struct vmt_vm {
     DWORD handle, id, status, run_ms, exec_ms, ts_flags, fg_prio, bg_prio;
     DWORD cpu_pct, shell_flags, created, runs;
+    DWORD pages, pages_out, ems_max, xms_max;
+};
+struct vmt_dev {
+    char name[8];
+    WORD id;
+    BYTE major, minor;
+    DWORD init_order, services, flags;
 };
 #pragma pack()
 #define MAXV 16
@@ -206,6 +222,14 @@ static void step(int boxes, int secs)
                  b->ts_flags, b->fg_prio, b->bg_prio, b->cpu_pct, b->shell_flags,
                  a ? b->runs - a->runs : b->runs);
         out(line);
+        wsprintf(line, "VMT1  vm id=%lu handle=%08lX pages=%lu out=%lu ems<=%luK xms<=%luK\r\n",
+                 b->id, b->handle, b->pages, b->pages_out, b->ems_max, b->xms_max);
+        out(line);
+        if (i > 0 && b->status != 0x000A) {
+            /* (a box not yet started, status Ah, has no memory yet) */
+            wsprintf(line, "%s's memory: %lu pages (at least 64: 256 KB)", (LPSTR)title_of(b->handle), b->pages);
+            check(b->pages >= 64, line);
+        }
         if (i == 0 && a && b->exec_ms != 0xFFFFFFFFul && a->exec_ms != 0xFFFFFFFFul) {
             DWORD e = b->exec_ms - a->exec_ms;
             /* (a note, not a check: Windows 3.1's Get_VM_Exec_Time for
@@ -234,7 +258,7 @@ static void step(int boxes, int secs)
     }
     wsprintf(line, "run times add up to %lu of %lu ms", sum, dsys);
     check(sum + sum / 20 + 20 >= dsys && dsys + dsys / 20 + 20 >= sum, line);
-    if (!boxes) {
+    if (!boxes && s1.h.vm_count == 1) {
         wsprintf(line, "no box: Windows idle %lu%% (at least 50)", dsys ? didle * 100 / dsys : 0);
         check(didle * 2 >= dsys, line);
     }
@@ -246,10 +270,144 @@ static void step(int boxes, int secs)
     }
 }
 
+/* function 4: the devices; VMM first, VMTASK, VPICD, VTD, SHELL there */
+static void devices(void)
+{
+    static BYTE buf[2 + 96 * sizeof(struct vmt_dev)];
+    WORD r[8];
+    char line[128];
+    int i, n, vmm = 0, self = 0, pic = 0, vtd = 0, shell = 0;
+    r[1] = 0;
+    r[2] = sizeof(buf);
+    r[3] = r[4] = 0;
+    r[5] = OFFSETOF((void FAR *)buf);
+    r[6] = SELECTOROF((void FAR *)buf);
+    if (!api(4, r)) { check(0, "function 4 (the devices)"); return; }
+    n = *(WORD *)buf;
+    for (i = 0; i < n; i++) {
+        struct vmt_dev *d = (struct vmt_dev *)(buf + 2) + i;
+        char nm[9];
+        int k;
+        for (k = 0; k < 8; k++) nm[k] = d->name[k];
+        nm[8] = 0;
+        wsprintf(line, "VMT1 device %s id=%04X %u.%02u order=%08lX services=%lu flags=%lX\r\n",
+                 (LPSTR)nm, d->id, d->major, d->minor, d->init_order, d->services, d->flags);
+        out(line);
+        if (i == 0 && d->id == 1) vmm = 1;
+        if (d->id == 0x5716) self = 1;
+        if (d->id == 0x0003) pic = 1;
+        if (d->id == 0x0005) vtd = 1;
+        if (d->id == 0x0017) shell = 1;
+    }
+    wsprintf(line, "devices: %d, the VMM first, VMTASK, VPICD, VTD, SHELL among them", n);
+    check(n >= 8 && vmm && self && pic && vtd && shell, line);
+}
+
+/* the top-level windows of WINOLDAP tasks (the DOS boxes' windows) */
+static int box_windows(void)
+{
+    HWND w;
+    int n = 0;
+    for (w = GetWindow(GetDesktopWindow(), GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT))
+        if (!GetWindow(w, GW_OWNER) && IsWinOldApTask(GetWindowTask(w))) n++;
+    return n;
+}
+
+static int have_vm(DWORD h)
+{
+    return snapshot(&s1) && find(&s1, h) != NULL;
+}
+
+/* function 3: end box i (1-based) with method (0 Close_VM, 1 Nuke_VM);
+   first the System VM, which must be refused */
+static void end_step(int i, int method, int secs)
+{
+    char line[160];
+    WORD r[8];
+    DWORD h = box_handle[i - 1];
+    int w0 = box_windows(), w1, gone;
+    r[1] = LOWORD(s1.h.sys_vm);
+    r[3] = HIWORD(s1.h.sys_vm);
+    r[2] = 0;
+    r[4] = r[5] = r[6] = 0;
+    api(3, r);
+    wsprintf(line, "end the System VM: ax=%04X cf=%d (refused: 1, carry)", r[0], r[7] & 1);
+    check(r[0] == 1 && (r[7] & 1), line);
+    r[1] = LOWORD(h);
+    r[3] = HIWORD(h);
+    r[2] = method;
+    r[4] = 3000;
+    r[5] = r[6] = 0;
+    api(3, r);
+    wsprintf(line, "VMT1 end %s (vm %08lX) by %s: ax=%04X cf=%d\r\n", (LPSTR)titles[i - 1], h,
+             (LPSTR)(method ? "Nuke_VM" : "Close_VM"), r[0], r[7] & 1);
+    out(line);
+    pump(secs);
+    gone = !have_vm(h);
+    w1 = box_windows();
+    wsprintf(line, "%s's VM gone after %d s (box windows %d before, %d after)", (LPSTR)titles[i - 1], secs, w0, w1);
+    check(gone, line);
+    wsprintf(line, "%s's window closed", (LPSTR)titles[i - 1]);
+    check(w1 == w0 - 1, line);
+    step(nbox - 1, secs);
+}
+
+/* the tasks, for comparing with the VM Task Manager's IDs */
+static void list_tasks(void)
+{
+    TASKENTRY te;
+    char line[96];
+    BOOL any;
+    te.dwSize = sizeof(te);
+    for (any = TaskFirst(&te); any; any = TaskNext(&te)) {
+        wsprintf(line, "VMT1 task %s hTask=%04X hModule=%04X hInst=%04X\r\n", (LPSTR)te.szModule,
+                 (WORD)te.hTask, (WORD)te.hModule, (WORD)te.hInst);
+        out(line);
+    }
+}
+
+/* WIN.INI [vmt1] final=S: S seconds later (another program, the VM Task
+   Manager driven by tests/vmtaskend.sh, has ended things meanwhile), the
+   module gone= must be gone and vms= VMs left */
+static void final_checks(void)
+{
+    char gone[32], line[128];
+    int secs = GetProfileInt("vmt1", "final", 0), vms = GetProfileInt("vmt1", "vms", 0);
+    if (!secs) return;
+    pump(secs);
+    list_tasks();
+    GetProfileString("vmt1", "gone", "", gone, sizeof(gone));
+    if (gone[0]) {
+        wsprintf(line, "%s has ended", (LPSTR)gone);
+        check(!GetModuleHandle(gone), line);
+    }
+    if (vms && snapshot(&s1)) {
+        int i;
+        for (i = 0; i < s1.h.rec_count && i < MAXV; i++) {
+            wsprintf(line, "VMT1 left: vm id=%lu handle=%08lX\r\n", s1.v[i].id, s1.v[i].handle);
+            out(line);
+        }
+        wsprintf(line, "%u VMs left (%d expected)", s1.h.vm_count, vms);
+        check(s1.h.vm_count == vms, line);
+    }
+}
+
+/* [vmt1] launch=: a program started (after the wait, or with late=1
+   after the boxes), so that it is the active window then */
+static void launch_now(void)
+{
+    char launch[128], line[180];
+    GetProfileString("vmt1", "launch", "", launch, sizeof(launch));
+    if (!launch[0]) return;
+    wsprintf(line, "VMT1 launch %s %u\r\n", (LPSTR)launch, WinExec(launch, SW_SHOWNORMAL));
+    out(line);
+    pump(2);
+}
+
 int __cdecl tmain(void)
 {
     char progs[256], line[160], *p;
-    int secs, settle, n = 0;
+    int secs, settle, n = 0, endbox, method;
     WORD r[8];
     HFILE f;
 
@@ -257,6 +415,8 @@ int __cdecl tmain(void)
     InitApp((HINSTANCE)init_regs[5]);
     GetProfileString("vmt1", "progs", "", progs, sizeof(progs));
     secs = GetProfileInt("vmt1", "secs", 6);
+    endbox = GetProfileInt("vmt1", "end", 0);
+    method = GetProfileInt("vmt1", "method", 0);
     settle = GetProfileInt("vmt1", "settle", 6);
     out("VMT1 start\r\n");
     pump(GetProfileInt("vmt1", "wait", 8));
@@ -276,6 +436,9 @@ int __cdecl tmain(void)
     wsprintf(line, "VMT1 version ax=%04X bx=%04X cx=%04X dx=%04X cf=%d\r\n", r[0], r[1], r[2], r[3], r[7] & 1);
     out(line);
     check(r[0] == 0x0100 && r[1] == 0x564D && r[2] == 0x544B && !(r[7] & 1), "function 0: 1.00, VMTK");
+    if (!GetProfileInt("vmt1", "late", 0)) launch_now();
+    list_tasks();
+    devices();
     step(0, secs);
     for (p = progs; *p && nbox < MAXV; ) {
         char pif[128];
@@ -301,6 +464,10 @@ int __cdecl tmain(void)
         pump(settle);
         step(n, secs);
     }
+    if (GetProfileInt("vmt1", "late", 0)) launch_now();
+    if (endbox > 0 && endbox <= nbox && have_vm(box_handle[endbox - 1]))
+        end_step(endbox, method, secs);
+    final_checks();
 done:
     wsprintf(line, "VMT1 done, %d failed\r\n", fails);
     out(line);

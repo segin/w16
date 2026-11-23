@@ -1,8 +1,11 @@
 /*
  * vmtask.rc - VM Task Manager's resources (ARCHITECTURE.md 15.12): a w16
- * extension with no counterpart in Windows 3.1; its menu follows 3.1's
- * conventions (Options, Help, About). The icon is w16's own
- * (tools/mkvmticon.py).
+ * extension with no counterpart in Windows 3.1; its menus follow 3.1's
+ * conventions. The icon is w16's own (tools/mkvmticon.py). The Terminate
+ * warning (End VM) reproduces the text and layout of the warning Windows
+ * 3.1's DOS-window Settings dialog shows for Terminate (observed on 3.1:
+ * screenshots, tests/vmtaskrun.sh's notes in ARCHITECTURE.md 15.12; the
+ * caption is the box's title, Cancel the default button).
  */
 #include <windows.h>
 #include "vmtask.h"
@@ -11,6 +14,20 @@ IDI_VMTASK ICON "vmtask.ico"
 
 IDM_MENU MENU
 BEGIN
+    POPUP "&Task"
+    BEGIN
+        MENUITEM "&Switch To", IDM_SWITCH
+        MENUITEM "End &Task\tDel", IDM_ENDTASK
+        MENUITEM "End &VM\tDel", IDM_ENDVM
+        MENUITEM SEPARATOR
+        MENUITEM "&Details...", IDM_DETAILS
+        MENUITEM "&Copy Details", IDM_COPY
+        MENUITEM SEPARATOR
+        MENUITEM "Virtual Dev&ices...", IDM_VXDS
+        MENUITEM "D&rivers...", IDM_DRIVERS
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", IDM_EXIT
+    END
     POPUP "&Options"
     BEGIN
         POPUP "&Update Interval"
@@ -24,9 +41,8 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "Always on &Top", IDM_ONTOP
         MENUITEM "Show &Windows Tasks", IDM_TASKS
+        MENUITEM "Show &IDs", IDM_IDS
         MENUITEM "Show &History", IDM_GRAPH
-        MENUITEM SEPARATOR
-        MENUITEM "E&xit", IDM_EXIT
     END
     POPUP "&Help"
     BEGIN
@@ -37,4 +53,49 @@ END
 IDM_MENU ACCELERATORS
 BEGIN
     VK_F5, IDM_REFRESH, VIRTKEY
+END
+
+IDD_TERMINATE DIALOG 12, 16, 168, 140
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+BEGIN
+    ICON "", IDC_STOPICON, 6, 8, 18, 20
+    LTEXT "WARNING!", -1, 28, 6, 136, 8
+    LTEXT "Use the Terminate button only as a last resort to quit an application that has stopped responding to the system.",
+          -1, 28, 14, 136, 24
+    LTEXT "To quit an application, use the application's quit or exit command.", -1, 28, 42, 136, 16
+    LTEXT "*", -1, 28, 62, 6, 8
+    LTEXT "Choose Cancel to return to your non-Windows application.", -1, 35, 62, 129, 16
+    LTEXT "*", -1, 28, 82, 6, 8
+    LTEXT "Choose the OK button to terminate this application. You will lose any unsaved information in this application.",
+          -1, 35, 82, 129, 24
+    PUSHBUTTON "OK", IDOK, 52, 124, 28, 12, WS_TABSTOP
+    DEFPUSHBUTTON "Cancel", IDCANCEL, 86, 124, 28, 12, WS_TABSTOP
+END
+
+IDD_VXDS DIALOG 20, 20, 236, 150
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Virtual Devices"
+BEGIN
+    LTEXT "Name", -1, 8, 6, 40, 8
+    LTEXT "ID", -1, 52, 6, 24, 8
+    LTEXT "Version", -1, 78, 6, 26, 8
+    LTEXT "Init order", -1, 104, 6, 42, 8
+    LTEXT "Services", -1, 148, 6, 28, 8
+    LTEXT "API", -1, 176, 6, 30, 8
+    LISTBOX IDC_ITEMS, 6, 16, 224, 108, LBS_USETABSTOPS | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+    PUSHBUTTON "&Refresh", IDC_REFRESH, 120, 130, 50, 14, WS_TABSTOP
+    DEFPUSHBUTTON "Close", IDOK, 178, 130, 50, 14, WS_TABSTOP
+END
+
+IDD_DRIVERS DIALOG 8, 20, 300, 150
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Drivers"
+BEGIN
+    LTEXT "Alias or module", -1, 8, 6, 64, 8
+    LTEXT "Module or file", -1, 72, 6, 100, 8
+    LTEXT "Hnd/Use", -1, 182, 6, 30, 8
+    LTEXT "Module", -1, 212, 6, 40, 8
+    LISTBOX IDC_ITEMS, 6, 16, 288, 108, LBS_USETABSTOPS | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+    PUSHBUTTON "&Refresh", IDC_REFRESH, 184, 130, 50, 14, WS_TABSTOP
+    DEFPUSHBUTTON "Close", IDOK, 242, 130, 50, 14, WS_TABSTOP
 END

@@ -54,6 +54,7 @@ set -- "$@" -c "WIN /3 /B" -t ${VMTASK_TIME:-400} -o "$o/c" -W "$win/VMT1.LOG" \
     -f "$root/build/dos/VMT1.EXE=$win/VMT1.EXE" -f "$root/build/dos/VX14.COM=$win/VX14.COM" \
     -i "WIN.INI:windows:run=C:\\$win\\VMT1.EXE" -i "WIN.INI:vmt1:progs=$progs" \
     -i "WIN.INI:vmt1:secs=${VMTASK_SECS:-6}" -i "WIN.INI:vmt1:settle=${VMTASK_SETTLE:-6}" \
+    -i "WIN.INI:vmt1:end=${VMTASK_END:-1}" -i "WIN.INI:vmt1:method=${VMTASK_METHOD:-0}" \
     ${VMTASK_EXTRA:-}
 [ "${VMTASK_DOSBOX:-}" = x ] && set -- "$@" -p 386
 DROPIN_NOREDIR=1 DROPIN_CPUTYPE=${DROPIN_CPUTYPE:-386} DROPIN_CYCLES=${DROPIN_CYCLES:-fixed 30000} \
