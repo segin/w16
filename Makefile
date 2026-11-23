@@ -2435,6 +2435,13 @@ $(DOS)/US35.EXE: $(B)/tests/start.o $(B)/tests/us35.o $(B)/tests/us29s.o $(B)/te
 	    option map=$(B)/tests/us35.map \
 	    file { $(B)/tests/start.o $(B)/tests/us35.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
 dos: $(DOS)/US35.EXE
+# US36: text past 32767 characters; counts and positions of 32768 or more (tests/apps/us36.c)
+$(B)/tests/us36.o: tests/apps/us36ref.h tests/apps/tklog.h
+$(DOS)/US36.EXE: $(B)/tests/start.o $(B)/tests/us36.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us36.map file { $(B)/tests/start.o $(B)/tests/us36.o }
+dos: $(DOS)/US36.EXE
 # US32S: a window spy for US32's question (tests/apps/us32s.c)
 $(B)/tests/us32s.o: tests/apps/us32ref.h tests/apps/tklog.h
 $(DOS)/US32S.EXE: $(B)/tests/start.o $(B)/tests/us32s.o tests/apps/app.lnk

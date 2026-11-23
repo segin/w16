@@ -493,6 +493,13 @@
 #              procedure's calls, ES_CENTER/ES_RIGHT, EM_SETRECT, undo
 #              sequences, the clipboard keys; the last run without the
 #              pixel checksums)
+#   edit32k    text past 32767 characters (user/edit.c, user/win.c): probe
+#              US36 as the shell on 3.1 and on w16's USER, their OBS lines
+#              identical (GetWindowText and WM_GETTEXT with counts to
+#              65535, EM_SETSEL and EM_GETSEL past 32767 and with -1,
+#              EM_LINEFROMCHAR/LINEINDEX/LINELENGTH/GETLINE there,
+#              EM_LIMITTEXT, changes past 32767; a single-line control,
+#              static controls, buttons, combo boxes)
 #   lbdraw     how a list box draws and what a screen DC covers (ARCHITECTURE.md
 #              10.4): probe US33 as the shell on 3.1 and on w16's USER, their
 #              OBS lines identical: owner-drawn list boxes of every kind
@@ -931,7 +938,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload vsd bigmem filecdr}
+cases=${*:-kernel dosx dosxaudit k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload vsd bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -4240,6 +4247,34 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   editwrap: US35 as 3.1 (word wrap, EM_FMTLINES, the caret, scrolling, the word-break procedure, undo; w16 USER, and USER+GDI)"
         else echo "FAIL editwrap: $r"; fails=$((fails + 1)); fi ;;
+    edit32k)
+        # text past 32767 characters (tests/apps/us36.c)
+        e36() {   # LABEL dropin.sh options...: US36's run, its log in LABEL.log
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 300 -W TK.LOG -o "$out/$_l" \
+                -f "$root/build/dos/US36.EXE=US36.EXE" -i 'boot:shell=C:\US36.EXE' -r "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            : > "$out/$_l.log"
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        DROPIN_WSECS=30 e36 edit32k-ref &
+        DROPIN_WSECS=30 e36 edit32k-w16 -f "$user=WINDOWS/SYSTEM/USER.EXE" &
+        wait
+        r=ok
+        for k in ref w16; do
+            grep -q '^US36 end' "$out/edit32k-$k.log" ||
+                { [ "$r" = ok ] && r="US36 did not finish ($k: $out/edit32k-$k.log)"; }
+        done
+        if [ "$r" = ok ]; then
+            grep '^OBS [^~]' "$out/edit32k-ref.log" > "$out/edit32k-ref.obs"
+            grep '^OBS [^~]' "$out/edit32k-w16.log" > "$out/edit32k-w16.obs"
+            cmp -s "$out/edit32k-ref.obs" "$out/edit32k-w16.obs" ||
+                r="$(diff "$out/edit32k-ref.obs" "$out/edit32k-w16.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/edit32k-ref.obs, edit32k-w16.obs)"
+        fi
+        if [ "$r" = ok ]; then echo "ok   edit32k: US36 as 3.1 (text counts and positions past 32767: GetWindowText, WM_GETTEXT, EM_SETSEL, the line messages, changes; w16 USER)"
+        else echo "FAIL edit32k: $r"; fails=$((fails + 1)); fi ;;
     lbdraw)
         # list box drawing, screen DCs, tab stops (tests/apps/us33.c)
         lb33() {   # LABEL dropin.sh options...: US33's run, its log in LABEL.log
