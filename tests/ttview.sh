@@ -92,6 +92,10 @@ for sys in "$@"; do
             wait=$([ -n "$slow" ] && echo '1200 300' || echo '120 3')
             sed "s/^settle 120 3$/settle $wait/" \
                 "$root/tests/scripts/input/ttview.txt" > "$work/ttview.txt"
+            # /T: then until TTVIEW has ended Windows (it renders the page
+            # twice, hinted and not: the screen can hold still longer than
+            # the settle's wait while it does)
+            [ $mode = test ] && echo "waitexit $([ -n "$slow" ] && echo 1400 || echo 160)" >> "$work/ttview.txt"
             "$root/tests/inputrun.sh" -s -b "$([ -n "$slow" ] && echo 900 || echo 90)" \
                 -t "${TTV_TIMEOUT:-$([ -n "$slow" ] && echo 1500 || echo 180)}" \
                 "$work/ttview.txt" "$work/in" "$@" \
