@@ -11,7 +11,8 @@ code is used. Used by tools/ttgen.py (w16's TrueType fonts, ARCHITECTURE.md
 Writing: build a Font (glyphs with quadratic contours, metrics, names) and
 call Font.build() for the file's bytes. Only what w16 needs:
 
-  - simple glyphs (no composites, no instructions), loca long;
+  - simple glyphs (no composites, no glyph instructions), loca long;
+    optionally a prep table (given as bytes);
   - cmap: one (3,1) format 4 subtable (Unicode BMP);
   - OS/2 version 1, hhea, hmtx, maxp 1.0, head, name (platform 3,
     Unicode, US English), post 2.0 (glyph names), gasp 1, kern 0
@@ -159,6 +160,7 @@ class Font:
         self.vdmx = {}            # ppem -> (yMax, yMin)
         self.bbox_min = None      # head bbox at least this (x0, y0, x1, y1)
         self.typo_metrics = False
+        self.prep = b''            # control value program (bytecode)
 
     # ------------------------------------------------------------ tables
     def _head(self, bbox, loca_long):
@@ -188,7 +190,7 @@ class Font:
         return struct.pack('>IHHHHHHHHHHHHHH', 0x00010000, len(self.glyphs),
                            max(g.npoints() for g in self.glyphs),
                            max(len(g.contours) for g in self.glyphs),
-                           0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0)
+                           0, 0, 2, 0, 0, 0, 0, 8 if self.prep else 0, 0, 0, 0)
 
     def _os2(self):
         if self.avg_width is not None:
@@ -380,6 +382,8 @@ class Font:
             tables[b'hdmx'] = self._hdmx()
         if self.vdmx:
             tables[b'VDMX'] = self._vdmx()
+        if self.prep:
+            tables[b'prep'] = self.prep
         return assemble(tables)
 
 

@@ -21,8 +21,9 @@
  *     advance), GetKerningPairs (kp lines); ABC widths and GGO_METRICS
  *     again at 128, 256, 512 and 1024 pixels per em (abcN, gmN lines: at
  *     2048 3.1's ABC widths are not right);
- *     then for every pixel size (ppem, lfHeight -ppem) 6-255: TEXTMETRIC
- *     and GetCharWidth 0-255 (s lines), the hinted device widths
+ *     then for every pixel size (ppem, lfHeight -ppem) 6-255: TEXTMETRIC,
+ *     GetCharWidth 0-255 (s lines), the hinted device widths, and
+ *     GetTextExtent of three strings (ext lines)
  *   MAP: for each test font present (tools/ttmap.py: C:\TTMAP.TTF, whose
  *     glyph widths name their Unicode character; TTMAPA/TTMAPB.TTF, the
  *     same with an hdmx table, head flags bit 4 clear/set): GetCharWidth
@@ -214,6 +215,8 @@ static void otm_lines(void)
     nl();
 }
 
+static void ext_line(void);
+
 static int widths[256];
 
 static void width_lines(const char *tag)
@@ -383,9 +386,30 @@ static void dump_face(const char *face, int wt, int it, int sizes)
         tm_line(&t);
         nl();
         width_lines("s");
+        ext_line();
         SelectObject(hdc, old);
         DeleteObject(f);
     }
+}
+
+/* text extents (GetTextExtent: what DrawText and layout use) */
+static const char *const exts[] = {
+    "The quick brown fox jumps over the lazy dog. 0123456789",
+    "Zw\xf6lf Boxk\xe4mpfer jagen Viktor quer \xfc" "ber den gro\xdf" "en Deich; \xe9t\xe9, gar\xe7on, \xc0 bient\xf4t, \xa3" "5, \xa9 1992.",
+    "AVAWATAYLTLVLWLYPAFAVaVeVoWaWeWoYaYeYo",
+    0
+};
+
+static void ext_line(void)
+{
+    int i;
+    out(" ext");
+    for (i = 0; exts[i]; i++) {
+        DWORD e = GetTextExtent(hdc, exts[i], lstrlen(exts[i]));
+        out(" ");
+        outl(LOWORD(e));
+    }
+    nl();
 }
 
 typedef struct {

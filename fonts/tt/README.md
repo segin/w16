@@ -16,8 +16,11 @@ faces. The outlines are w16's own. Design and method: ARCHITECTURE.md 6.9.3.
 
 Repertoire: ISO 8859-15 (Latin-9), plus `.notdef`, `.null` and CR; one
 (3,1) format 4 cmap, which also maps U+2219 to the middle dot (Windows 3.1
-looks up ANSI 0xB7 as U+2219). No hinting instructions; gasp says to
-smooth and grid-fit at every size; `hdmx` holds 3.1's device widths.
+looks up ANSI 0xB7 as U+2219). No hinting: the only bytecode is a
+7-byte `prep` that turns on dropout control (so thin strokes survive in
+3.1's monochrome rendering; `W16TT_PREP=0` leaves it out); gasp says to
+smooth and grid-fit at every size; `hdmx` and `VDMX` hold 3.1's device
+widths and per-size ascent/descent, so layout matches at screen sizes too.
 
 Files here:
 

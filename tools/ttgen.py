@@ -58,6 +58,7 @@ VERSION = '1.00'
 # 2026-11-22 00:00 UTC in seconds since 1904-01-01 (head.created/modified)
 CREATED = 2082844800 + 1795305600
 
+PREP = os.environ.get('W16TT_PREP', '1') != '0'
 CC0_URL = 'https://creativecommons.org/publicdomain/zero/1.0/'
 LICENSE = 'CC0 1.0 Universal public domain dedication: no rights reserved.'
 
@@ -204,6 +205,8 @@ def parse_ref(path):
                 cur['panose'] = [int(v) for v in kv['panose'].split(',')]
             elif s.startswith('OTM5'):
                 cur['names'] = {k: v.strip('"') for k, v in kv.items()}
+            elif s.startswith('ext ') and section is not None:
+                cur.setdefault('ext', {})[section] = [int(v) for v in s.split()[1:]]
             elif s.startswith('SIZE '):
                 section = int(kv['ppem'])
                 cur['sizes'][section] = [0] * 256
@@ -426,7 +429,15 @@ class Face:
         f.codepages = (0x00000001, 0)
         f.first_char = 0x20
         f.last_char = 0x20AC
-        f.created = CREATED
+        # each face its own time stamp (3.1 mixed up the glyphs of faces
+        # that shared one, see 6.9.3)
+        f.created = CREATED + 60 * [x[0] for x in FACES].index(self.base)
+        # no hinting; the control value program only turns the
+        # rasterizer's dropout control on at every size (PUSHW 511,
+        # SCANCTRL; PUSHB 1, SCANTYPE: simple dropout control), so thin
+        # strokes stay at small sizes in 3.1's monochrome rendering
+        if PREP:
+            f.prep = bytes([0xB8, 0x01, 0xFF, 0x85, 0xB0, 0x01, 0x8D])
         f.revision = float(VERSION)
         full = self.family if self.style == 'Regular' else '%s %s' % (self.family, self.style)
         ps = self.family.replace(' ', '') + ('' if self.style == 'Regular' else '-' + self.style.replace(' ', ''))

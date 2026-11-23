@@ -62,14 +62,14 @@ class Style:
         elif kind == 'serif':
             self.sv = 258 if b else 172
             self.svc = 290 if b else 190
-            self.sh = 98 if b else 66
-            self.shc = 110 if b else 76
-            self.hair = 92 if b else 58
+            self.sh = 124 if b else 90
+            self.shc = 132 if b else 98
+            self.hair = 118 if b else 84
             self.n, self.ni = 2.05, 2.15
-            self.thin = 120 if b else 70
-            self.sl = 120 if b else 110          # serif length beyond the stem
-            self.st = 64 if b else 46            # serif thickness
-            self.sb = 70 if b else 62            # bracket
+            self.thin = 142 if b else 94
+            self.sl = 108 if b else 98          # serif length beyond the stem
+            self.st = 84 if b else 64            # serif thickness
+            self.sb = 56 if b else 50            # bracket
         else:
             self.sv = 232 if b else 140
             self.svc = 236 if b else 144
@@ -566,7 +566,7 @@ def g_K(s, L, R):
     xj = xs + sv
     yj = top * (0.40 if s.sans else 0.42)
     # upper arm: from the stem to the top right; leg: from the arm to bottom right
-    wa = s.svc * (0.98 if s.sans else 0.55 if s.serif else 0.95)
+    wa = s.svc * (0.98 if s.sans else 0.62 if s.serif else 0.95)
     wl = s.svc * (1.04 if not s.serif else 1.12)
     xa = R - i * 0.6
     ha = dw(wa, xa - xj, top - yj)
@@ -1194,9 +1194,6 @@ def g_r(s, L, R):
 def g_s(s, L, R):
     top = s.xh
     out = s_curve(s, L, R, -s.ov, top + s.ov, s.sv * (1.0 if s.sans else 1.05), s.sh if s.sans else s.hair * 1.1, False)
-    if not s.sans:
-        out += G.rect(R - s.sv * 0.25, top * 0.66, R, top * 0.98)
-        out += G.rect(L, top * 0.02, L + s.sv * 0.25, top * 0.3)
     return out
 
 
@@ -1295,7 +1292,7 @@ def g_y(s, L, R):
     flat = s.sv * 0.3 if s.sans else 0
     # the v, its point at the baseline
     cx = (x0 + x1) / 2
-    out = diag_pair(s, x0, x1, cx, top, wr, wl, flat)
+    out = diag_pair(s, x0, x1, cx, top, wl, wr, flat)
     out = G.mirror_y(out, top / 2)
     # the right arm runs on below the baseline
     al = (cx + flat / 2, 0)
@@ -1471,8 +1468,6 @@ def g_2(s, L, R):
     tans = [(0.35, 1), (1, 0), (0, -1), (-1, -0.9), (-0.7, -1)]
     out = G.stroke(pts, tans, wv=sv, wh=sh, cap0=0 if s.sans else None, cap1=None, tension=0.5)
     out += G.rect(L, 0, R, sh * (1.0 if s.sans else 1.2))
-    if s.serif:
-        out += ball(s, L + sv * 0.55, h * 0.68, sv * 0.52)
     return out
 
 
@@ -1485,8 +1480,6 @@ def g_3(s, L, R):
     lo = open_bowl(s, L, R, -s.ov, ym + sh / 2, -150, 90, 0 if s.sans else 90, None, sv, sh)
     bar = G.rect(L + w * 0.35, ym - sh / 2, L + w * 0.6, ym + sh / 2)
     out = up + lo + bar
-    if s.serif:
-        out += ball(s, L + sv * 0.5, h * 0.22, sv * 0.5) + ball(s, L + w * 0.1 + sv * 0.4, h * 0.82, sv * 0.45)
     return out
 
 
@@ -1518,8 +1511,6 @@ def g_5(s, L, R):
     out += G.poly([(xl, ytop - 2), (xl + sv * 0.95, ytop - 2), (xl + sv * 0.85, yj), (xl - sv * 0.05, yj - sv * 0.2)])
     lo = open_bowl(s, L, R, -s.ov, h * 0.64, -150, 140, 0 if s.sans else 90, None, sv, sh)
     out += lo
-    if s.serif:
-        out += ball(s, L + sv * 0.5, h * 0.2, sv * 0.5)
     return out
 
 

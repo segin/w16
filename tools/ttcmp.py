@@ -14,7 +14,10 @@ the same:
     per em, for each ANSI code whose character w16's fonts have (the rest
     of 0x80-0x9F, and the 8 Latin-1 characters ISO 8859-15 replaced, are
     counted apart: 3.1 shows the default character there);
-  - TEXTMETRIC at the em and at every size (all fields);
+  - TEXTMETRIC at the em and at every size (all fields), and the text
+    extents of FN4's three strings at every size (when both logs have
+    them; the third string is kerning pairs, which GetTextExtent does
+    not apply);
   - OUTLINETEXTMETRIC: everything but the font box (otmrcFontBox: the
     designs' own extents) and the names;
   - the kerning pairs between characters w16's fonts have.
@@ -67,6 +70,9 @@ def main():
             for c in codes:
                 if ws[c] != o['sizes'][p][c]:
                     diffs.append('%d ppem width %02X: %d, 3.1 %d' % (p, c, o['sizes'][p][c], ws[c]))
+            re_, oe = r.get('ext', {}).get(p), o.get('ext', {}).get(p)
+            if re_ and oe and re_ != oe:
+                diffs.append('%d ppem extents: %s, 3.1 %s' % (p, oe, re_))
             for k, v in r['tmsize'][p].items():
                 if k not in TM_SKIP and o['tmsize'][p].get(k) != v:
                     diffs.append('%d ppem tm %s: %s, 3.1 %d' % (p, k, o['tmsize'][p].get(k), v))
