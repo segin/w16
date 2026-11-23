@@ -1,0 +1,5 @@
+# VXM.386: the Virtual DMA Device's probe VxD (tests/vxd/vxm.c), an LE VxD with no device ID
+format windows vxd
+option quiet
+option nodefaultlibs
+export VXM_DDB.1

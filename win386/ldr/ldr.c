@@ -306,6 +306,29 @@ static void ems_setup(struct w386_info *in)
     }
 }
 
+/* SYSTEM.INI [386Enh] DMABufferSize= (KB) and DMABufferIn1MB= for VDMAD's
+ * buffer (ARCHITECTURE.md 12.8 VDMAD). In conventional memory the buffer
+ * is taken here, before Windows: a DOS block of twice the size, of which
+ * VDMAD uses the part that crosses no 64 KB boundary */
+#define DMA_BUF_DEFAULT 16              /* KB */
+static void dma_setup(struct w386_info *in)
+{
+    char __far *q = ini_386("DMABufferSize");
+    union REGS r;
+    unsigned seg, kb;
+    in->dma_buf_kb = kb = q ? ini_num(&q, DMA_BUF_DEFAULT, 1, 64) : DMA_BUF_DEFAULT;
+    in->dma_buf_seg = 0;
+    if (!ini_on(ini_386("DMABufferIn1MB"))) return;
+    r.h.ah = 0x48;
+    r.x.bx = kb * 128;                  /* twice the KB, in paragraphs */
+    intdos(&r, &r);
+    if (r.x.cflag) return;              /* VDMAD then takes it above 1 MB */
+    seg = r.x.ax;
+    if (((unsigned long)seg << 4 & 0xFFFFUL) + kb * 1024UL > 0x10000UL)
+        seg = (seg + 0x0FFF) & 0xF000;  /* the next 64 KB boundary */
+    in->dma_buf_seg = seg;
+}
+
 /* ---- the VMM image ---- */
 #define PAGE 4096UL
 
@@ -506,7 +529,7 @@ static int load_vmm(void)
  * it does with a name given twice (w16 loads it once). */
 static const char *const builtin[] = {
     "vnetbios", "dosnet", "ebios", "vddvga", "vtd",
-    "vdmad", "v86mmgr", "pageswap", "dosmgr",
+    "v86mmgr", "pageswap", "dosmgr",
     "wshell", "blockdev", "pagefile", "vfd", "parity", "biosxlat", "vcd",
     "vmcpd", "combuff", "cdpscsi", "int13", "wdctrl", "qemmfix", 0
 };
@@ -979,6 +1002,7 @@ int main(int argc, char **argv)
                 info.trace = q[9] - '0';
     }
     read_sched(&info);
+    dma_setup(&info);
     /* [w16] V86HltYield=0: a HLT in V86 mode keeps the VM's time slice,
      * as Windows 3.1's WIN386 (ARCHITECTURE.md 12.12) */
     info.hlt_stock = ini_w16_zero("V86HltYield");
