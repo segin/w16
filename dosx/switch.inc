@@ -48,7 +48,12 @@ to_pm:
         ret
 
 ; to_rm: ring 0 -> real mode. IF = 0, DS = G_HD0. Near call; returns in
-; real mode with DS = ES = SS = the image, SP unchanged. AX changed.
+; real mode with DS = ES = SS = the image, SP unchanged. AX changed. On a
+; 386, FS and GS get the values real-mode code last had in them (rm_fsv,
+; rm_gsv; at first the client's when it switched): Microsoft's DOSX keeps
+; them across protected mode, real-mode code finds what it left there
+; (DX9 08: 0 at the first 0301h call, the values it set at the next). FS
+; and GS are loaded with G_HD0 first, so their hidden limits are 64 KB.
 to_rm:
         cmp byte [is386], 0
         je to_rm_286
@@ -71,6 +76,8 @@ to_rm:
         mov es, ax
         mov ss, ax
         cpu 386
+        mov fs, [rm_fsv]
+        mov gs, [rm_gsv]
         pop eax
         cpu 286
         ret
@@ -242,7 +249,13 @@ rm_ret: pushf
         mov [si+R_EDI], di
         mov [si+R_EBP], bp
         mov [si+R_ES], es
-        cli
+        cmp byte [is386], 0
+        je .nfs
+        cpu 386
+        mov [rm_fsv], fs
+        mov [rm_gsv], gs
+        cpu 286
+.nfs:   cli
         cld
         mov ax, cs
         mov ss, ax
@@ -297,8 +310,9 @@ gdt_base_lin:
 ; 16 i): the offset tells i, then the segment tells e. Every one of
 ; those addresses is DOSX's own code, so the number of callbacks is
 ; bounded only by how many segment:offset pairs reach these 16 entries:
-; 16 x min(4096, cb_seg + 1) (the offset must stay below 10000h, the
-; segment at or above 0), 36000 or so where DOSX is loaded.
+; 16 x min(4080, cb_seg + 1) (the segment at or above 0, and the near
+; call to cb_c0, 100h bytes on, and its far jump at offsets below 10000h:
+; tables_init), 36000 or so where DOSX is loaded.
         align 16
 cb_entries:
 %rep CB_ENTRIES
@@ -411,7 +425,15 @@ rmx_common:
         mov [bp+R_RES+2], ax
         mov [bp+R_FS], ax
         mov [bp+R_GS], ax
-        mov [bp+R_IP], ax
+        cmp byte [is386], 0
+        je .nfs
+        cpu 386
+        mov [bp+R_FS], fs       ; the interrupted code's (rmx_resume
+        mov [bp+R_GS], gs       ; reloads them; to_rm's meanwhile)
+        mov [rm_fsv], fs
+        mov [rm_gsv], gs
+        cpu 286
+.nfs:   mov [bp+R_IP], ax
         mov [bp+R_CS], ax
         mov al, [x_kind]
         mov [bp+R_SIZE], ax     ; kind
@@ -432,6 +454,15 @@ rmx_resume:
         mov si, sp              ; DS = image
         mov ax, [si+R_SIZE+4]
         mov [hs_top], ax
+        cmp byte [is386], 0
+        je .nfs
+        cpu 386
+        mov fs, [si+R_FS]
+        mov gs, [si+R_GS]
+        mov [rm_fsv], fs
+        mov [rm_gsv], gs
+        cpu 286
+.nfs:
         mov ss, [si+R_SS]
         mov sp, [si+R_SP]
         cmp byte [si+R_SIZE], 0
@@ -478,7 +509,17 @@ r0_call3:
         pusha
         push ds
         push es
-        push word [tss+2]
+        ; DS and ES are loaded here at ring 0: one ring 3 could not load
+        ; (a callback's structure selector freed since 0303h) becomes 0
+        mov ax, [bx+C_DS]
+        call seg_ok
+        jnc .d
+        mov word [bx+C_DS], 0
+.d:     mov ax, [bx+C_ES]
+        call seg_ok
+        jnc .e
+        mov word [bx+C_ES], 0
+.e:     push word [tss+2]
         push bx
         mov [tss+2], sp
         push word [bx+C_SS]
@@ -501,9 +542,15 @@ r0_call3:
         pop ds
         iret
 
-; ret3_entry: ring 3 entered G_GATER: SP = the TSS's SP0 - 8
+; ret3_entry: ring 3 entered G_GATER: SP = the TSS's SP0 - 8. A call gate
+; leaves the flags as ring 3 had them: DF is cleared (r0_rmx copies with
+; REP MOVSW right after r0_call3, and a callback's procedure returns with
+; the real-mode caller's flags, DF set if it had it) and so is NT (POPF
+; at ring 3 can set it, and an IRET at ring 0 with NT set would be a task
+; return).
 ret3_entry:
         cli
+        cld
         add sp, 8               ; [sp] = context, [sp+2] = old SP0
         push bx
         push bp
@@ -520,6 +567,13 @@ ret3_entry:
         mov [ss:bx+C_ES], es
         mov ax, G_HD0
         mov ds, ax
+.back:  ; (dpmi_ret comes here too: SP = r0_call3's SP0, DS = G_HD0)
+        cld
+        pushf
+        pop ax
+        and ax, ~FL_NT
+        push ax
+        popf
         pop bx
         pop word [tss+2]
         pop es

@@ -40,10 +40,14 @@ start:  ; DOS: DS = ES = PSP, SS:SP from the header
         call patch_segs
         ; the Windows start-up broadcast, before XMS (as Microsoft's DOSX:
         ; INT 2Fh 1605h with DX=1, standard mode, DI=030Ah, ES:BX = DS:SI =
-        ; 0, CX = 0; WC3 between WSWAP and DOSX). A TSR that answers with
-        ; CX other than 0 does not want Windows to run. UNVERIFIED: what
-        ; Microsoft's DOSX does then, and with an ES:BX chain of instance
-        ; data (w16's ignores both).
+        ; 0, CX = 0; WC3 between WSWAP and DOSX). A driver or TSR that
+        ; answers with CX other than 0 cannot run under Windows: Windows
+        ; then prints nothing of its own, broadcasts 1606h and returns to
+        ; DOS (Windows 3.1 DDK, INT 2Fh 1605h). Once 1605h has gone out,
+        ; every way out sends 1606h (DDK, INT 2Fh 1606h; w16's DOSX did not
+        ; when XMS failed). UNVERIFIED: the exit code then (here FFh, as
+        ; after DOSX's other fatal messages), and an ES:BX chain of instance
+        ; data (w16's ignores it).
         push ds
         xor bx, bx
         mov es, bx
@@ -58,9 +62,14 @@ start:  ; DOS: DS = ES = PSP, SS:SP from the header
         push ds
         pop es
         mov byte [did1605], 1
-        call ini_read
+        jcxz .go
+        call end_bcast
+        mov ax, 4CFFh
+        int 21h
+.go:    call ini_read
         call xms_init
         jnc .memok
+        call end_bcast
         mov dx, msg_nomem
         jmp fail_msg
 .memok:
@@ -772,12 +781,15 @@ tables_init:
         shr dx, 4
         add dx, [imgseg]
         mov [cb_seg], dx
-        ; as many as real-mode addresses allow: i up to min(4095, cb_seg)
-        ; (the segment must not go below 0, the offset not beyond
-        ; 0FFFFh), times the 16 entries
-        cmp dx, 0FFFh
+        ; as many as real-mode addresses allow: i up to min(0FEFh, cb_seg)
+        ; (the segment must not go below 0, and entry e reached as
+        ; (cb_seg + e - i):(cb_off + 16 i) runs its near call to cb_c0,
+        ; 100h bytes on, and the far jump after it at offsets that must
+        ; stay below 10000h: i - e at most 0FEFh, so i at most 0FEFh for
+        ; every e), times the 16 entries
+        cmp dx, 0FEFh
         jbe .cbi
-        mov dx, 0FFFh
+        mov dx, 0FEFh
 .cbi:   inc dx
         shl dx, 4
         dec dx                  ; (at most 0FFFFh)
@@ -885,8 +897,14 @@ int24_rm:
 ; environment strings) into kpath; BX = just past its last '\' or ':'
 ; (where a file name of its directory goes). ES changed.
 own_path:
+        mov di, kpath
+        mov bx, kpath
+        mov byte [di], 0
         mov es, [psp_seg]
-        mov es, [es:2Ch]
+        mov ax, [es:2Ch]
+        or ax, ax               ; no environment: no path (DOSX's
+        jz .pd                  ; directory is the current one)
+        mov es, ax
         xor si, si
 .env:   cmp byte [es:si], 0
         je .envd
@@ -894,10 +912,19 @@ own_path:
         cmp byte [es:si-1], 0
         jne .env1
         jmp .env
-.envd:  add si, 3               ; the double NUL's second byte, the count
-        mov di, kpath
-        mov bx, kpath
-.pc:    mov al, [es:si]
+.envd:  ; past the strings' end: the count (1), then the path. An empty
+        ; environment may be one NUL or two before the count.
+        cmp word [es:si+1], 1
+        je .cnt
+        cmp byte [es:si+1], 0
+        jne .cnt
+        cmp word [es:si+2], 1
+        jne .cnt
+        inc si
+.cnt:   add si, 3
+.pc:    cmp di, epb - 13        ; room for the name after it (KRNLx86.EXE)
+        jae .long
+        mov al, [es:si]
         mov [di], al
         inc si
         inc di
@@ -909,6 +936,7 @@ own_path:
         jne .pc
 .ps:    mov bx, di
         jmp .pc
+.long:  mov bx, kpath           ; too long for DOS anyway: no path
 .pd:    ret
 
 ; ---------------------------------------------------------------------------
@@ -1019,13 +1047,8 @@ cleanup:
         ; text mode after WSWAP. w16's DOSX used to set back the mode it
         ; found at its start: 12h, the logo's, and Windows ended in VGA
         ; graphics with the BIOS's text on it)
-        ; the end broadcast: INT 2Fh 1606h, DX=1 (WC3)
-        cmp byte [did1605], 0
-        je .nc2
-        mov dx, 1
-        mov ax, 1606h
-        int 2Fh
-.nc2:   call hooks_remove
+        call end_bcast
+        call hooks_remove
         cmp byte [xms_ok], 0
         je .d
 
@@ -1033,6 +1056,17 @@ cleanup:
         call far [xms]
         call xms_release
 .d:     ret
+
+; end_bcast: the end broadcast, INT 2Fh 1606h with DX=1 (WC3), once,
+; if 1605h went out
+end_bcast:
+        cmp byte [did1605], 0
+        je .r
+        mov byte [did1605], 0
+        mov dx, 1
+        mov ax, 1606h
+        int 2Fh
+.r:     ret
 
 ; client_rm_reset (real mode): the client's real-mode traces: the
 ; interrupt vectors DOSX hooked for it, its environment segment
@@ -1096,7 +1130,13 @@ pm_entry:
         mov [cs:c_di], di
         mov [cs:c_bp], bp
         mov [cs:c_ds], ds
-        pop word [cs:c_ip]
+        cmp byte [cs:is386], 0
+        je .nfs
+        cpu 386
+        mov [cs:rm_fsv], fs     ; real mode's FS and GS (to_rm)
+        mov [cs:rm_gsv], gs
+        cpu 286
+.nfs:   pop word [cs:c_ip]
         pop word [cs:c_cs]
         mov [cs:c_ss], ss
         mov [cs:c_sp], sp

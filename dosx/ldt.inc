@@ -125,7 +125,12 @@ bm_pos: mov bx, ax
         ret
 
 ; ldt_alloc: CX descriptors -> AX = the first one's selector (RPL 3);
-; CF (AX = 0) if there are not that many in a row
+; CF (AX = 0) if there are not that many in a row. More than the LDT has
+; fail at once (a count near 10000h wrapped the end's index, and the
+; search ran for seconds at ring 0 with interrupts off before failing);
+; a candidate run that failed at an allocated descriptor rules out every
+; candidate up to it (lo_bad..hi_bad), so walking an ascending chain is
+; not quadratic.
 ldt_alloc:
         push bx
         push cx
@@ -137,6 +142,10 @@ ldt_alloc:
         mov es, ax
         or cx, cx
         jz .fail
+        cmp cx, LDT_COUNT - LDT_RES_END
+        ja .fail
+        mov word [la_lo], 0FFFFh
+        mov word [la_hi], 0
         mov di, [ldt_head]
         cmp cx, 1
         jne .cand
@@ -149,7 +158,11 @@ ldt_alloc:
         jz .fail
         mov ax, di
         shr ax, 3
-        mov dx, ax
+        cmp ax, [la_lo]
+        jb .c1
+        cmp ax, [la_hi]
+        jbe .next               ; its run reaches the descriptor that
+.c1:    mov dx, ax              ; ended one before
         add dx, cx
         cmp dx, LDT_COUNT
         ja .next
@@ -160,9 +173,12 @@ ldt_alloc:
         add ax, si
         call bm_test
         pop ax
-        jnz .next
+        jnz .busy
         inc si
         jmp .chk
+.busy:  mov [la_lo], ax         ; candidates from here to the allocated
+        add ax, si              ; one cannot have the run either
+        mov [la_hi], ax
 .next:  mov di, [es:di]
         jmp .cand
 .found: ; unlink descriptors DI .. DI + 8*CX - 1 from the chain
@@ -284,12 +300,16 @@ segmap:
         jmp .ret
 .sn:    inc si
         jmp .s
-.new:   mov si, [seg_next]
-        cmp si, 1
-        jb .chain
+.new:   ; the next of 4Fh-00h (00h too: Microsoft's DOSX gives 0007h as
+        ; the 80th, DX9 16), past one 000Dh took
+        mov si, [seg_next]
+        cmp si, 0FFFFh
+        je .chain
         dec word [seg_next]
         mov bx, si
         shl bx, 3
+        cmp byte [es:bx+5], 0
+        jne .new
         or bx, 7
         jmp .set
 .chain: push cx
