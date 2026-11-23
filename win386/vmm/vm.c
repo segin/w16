@@ -536,6 +536,25 @@ void vm_idle(void)
     if (v == &sysvm) system_idle();
 }
 
+/* KERNEL's idle call, INT 2Fh 1689h, from the System VM (each pass of
+ * its idle loop, after an INT 28h). Windows 3.1 (VXT.386 under
+ * tests/kidlerun.sh, ARCHITECTURE.md 12.15): with another VM that wants
+ * to run, Release_Time_Slice through the service table (a device that
+ * hooked it saw one for each 1689h), and the System VM ran again at its
+ * next interrupt (18 times a second beside a busy DOS box, 1 per cent of
+ * the time); with none, the Call_When_Idle callbacks, one round for each
+ * 1689h, and back to KERNEL at once */
+void vm_kernel_idle(void)
+{
+    struct vm *v;
+    for (v = vm_list; v; v = v->next)
+        if (v != &sysvm && scheduled(v) && !v->idle) {
+            vxd_release_time_slice();
+            return;
+        }
+    vm_idle();
+}
+
 /* the current VM releases its time slice (INT 2Fh 1680h,
  * Release_Time_Slice, VMPOLL's detection): it gets no more time until an
  * interrupt of its own or Wake_Up_VM wakes it. Windows 3.1 (VXT.386): a

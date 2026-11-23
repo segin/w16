@@ -545,6 +545,26 @@ static void refstk_check(void)
               cur_vm->id, cur_vm->refsp, cur_vm->refstk_top, exec_depth());
 }
 
+/* A software interrupt the System VM's protected-mode program has made
+ * in V86 mode (one reflected from protected mode, DPMI 0300h): the
+ * devices' Hook_V86_Int_Chain procedures first. The DDK: the hook is
+ * called "whenever the specified interrupt occurs, a virtual device calls
+ * the Simulate_Int service, or the system simulates a hardware
+ * interrupt". Windows 3.1 (VXT.386 under tests/kidlerun.sh, ARCHITECTURE.md
+ * 12.15): KERNEL's protected-mode INT 28h reached VXT's V86 hook, every
+ * one. A procedure that services it (carry clear): no V86 call. */
+void v86_int_sim(struct cregs *v, int vec)
+{
+    u32 fl = v->eflags;
+    v->eflags = (fl & 0x0FD5) | EFL_VM | EFL_IOPL | 2;
+    if (vxd_v86_int_hooks(v, vec)) {
+        v->eflags &= ~(EFL_VM | EFL_IOPL);
+        return;
+    }
+    v->eflags = fl;
+    v86_int(v, vec);
+}
+
 /* INT vec in V86 mode with registers *v (SS:SP 0: the reflection stack) */
 void v86_int(struct cregs *v, int vec)
 {
@@ -622,7 +642,7 @@ static int int2f_v86(struct cregs *r)
         return 1;
     case 0x1689:                        /* kernel idle (observed: AL=0): the */
         SETLO(r->eax, 0);               /* System VM releases its time slice */
-        if (cur_vm == &sysvm) vm_idle();
+        if (cur_vm == &sysvm) vm_kernel_idle();
         return 1;
     case 0x1681:                        /* begin/end critical section (the DDK) */
     case 0x1682:

@@ -338,7 +338,7 @@ int pm_v86_reflect(struct cregs *r, int vec, int hw)
     v.ds = ds < 0 ? info->xbuf_seg : ds;
     v.es = es < 0 ? info->xbuf_seg : es;
     v.eflags = pm.eflags;
-    v86_int(&v, vec);
+    v86_int_sim(&v, vec);
     if (dpmi_verbose && vec == 0x21 && ds >= 0) {
         u32 ah = (AX(&pm) >> 8) & 0xFF;
         if (ah == 0x3D || ah == 0x3C || ah == 0x4E || ah == 0x43 || ah == 0x5B || ah == 0x41)
@@ -411,7 +411,7 @@ static void dpmi_simulate(struct cregs *r, int fn)
         v86_push16(&v, *(u16 *)(src + i - 2));
     if (dpmi_verbose) trace("[31:%x %x:%x]", fn, fn == 0x300 ? BX(r) & 0xFF : s->cs, s->ip);
     if (fn == 0x0300)
-        v86_int(&v, BX(r) & 0xFF);
+        v86_int_sim(&v, BX(r) & 0xFF);
     else {
         v.cs = s->cs;
         v.eip = s->ip;
@@ -1062,7 +1062,9 @@ int int2f_pm(struct cregs *r)
     case 0x1680:                        /* release time slice: AL=0 */
     case 0x1689:                        /* KERNEL's idle loop (Pietrek ch. 6): */
         SETLO(r->eax, 0);               /* the System VM's time goes to the others */
-        if (AX(r) == 0x1680) vm_release(); else vm_idle();
+        if (AX(r) == 0x1680) vm_release();
+        else if (cur_vm == &sysvm) vm_kernel_idle();
+        else vm_idle();
         return 1;
     case 0x1681:                        /* begin/end critical section */
     case 0x1682:
@@ -1214,7 +1216,13 @@ static void disk_flags(struct cregs *r)
 void dpmi_int(struct cregs *r, int vec, int hw)
 {
     if (!hw && vec == 0x31) { dpmi_call(r); return; }
-    if (!hw && vec == 0x2F && int2f_pm(r)) return;
+    /* INT 2Fh: the client's handlers first, the host's functions (16xxh)
+     * where they chain to the default (dpmi_pmbp). Windows 3.1 (VX17,
+     * tests/kidlerun.sh, ARCHITECTURE.md 12.15): a program's handler of
+     * the protected-mode INT 2Fh saw each of KERNEL's 1689h idle calls (as
+     * WISPy in Schulman's Undocumented Windows ch. 4); w16 answered them
+     * before any handler */
+    if (!hw && vec == 0x2F && pmvec_default(vec) && int2f_pm(r)) return;
     if (hw && !pmvec_default(vec)) {
         /* on the host's stack, as for an interrupt in V86 mode (VX4) */
         run_hw_handler(vec, r, r->cs, r->eip, r->ds, r->eflags);

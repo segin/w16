@@ -199,6 +199,16 @@ static u32 svc_slot(u32 dev, u32 svc)
     return *(u32 *)(d->svc_table + svc * 4);
 }
 
+/* Release_Time_Slice called through the VMM's service table, so that a
+ * device that hooked it (Hook_Device_Service) sees the call */
+void vxd_release_time_slice(void)
+{
+    struct svcregs s;
+    memset(&s, 0, sizeof(s));
+    s.ebx = VMH(cur_vm);
+    vmm_call_proc(vmm_slots[0x38], &s);
+}
+
 /* a device's service from the VMM's C code; 0 if it is not there */
 int vxd_service_call(u32 dev, u32 svc, struct svcregs *s)
 {

@@ -218,6 +218,7 @@ void exec_v86(struct cregs *v);            /* run client code until REFRET/IRQRE
 void exec_return(struct cregs *r);
 int exec_depth(void);         /* that breakpoint: back to exec_v86's caller */
 void v86_int(struct cregs *v, int vec);    /* INT vec in V86 mode, synchronously */
+void v86_int_sim(struct cregs *v, int vec);    /* the same, the devices' V86 hooks first */
 void v86_farcall(struct cregs *v, int iret);
 u32 xbuf_lin(void);                        /* the transfer buffer */
 u32 xbuf_size(void);
@@ -275,6 +276,8 @@ void vm_tick(void);                 /* a timer tick */
 void vm_tick_wakes(int on);
 void vm_crit(int begin);            /* INT 2Fh 1681h/1682h */         /* VTD's requests: wakes that respect a release's penalty */
 void vm_release(void);              /* Release_Time_Slice, INT 2Fh 1680h */
+void vm_kernel_idle(void);          /* the System VM's INT 2Fh 1689h */
+void vxd_release_time_slice(void);  /* Release_Time_Slice through its slot */
 #define IDLE_WAKE 7000              /* ms: a released Background VM runs again (Windows 3.1: ~7 s) */
 u32 vmm_system_time(void);          /* vxd.c: Get_System_Time, ms */
 u32 vmm_last_time(void);            /* Get_Last_Updated_System_Time */
