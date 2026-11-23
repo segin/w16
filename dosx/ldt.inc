@@ -182,13 +182,14 @@ ldt_alloc:
 .next:  mov di, [es:di]
         jmp .cand
 .found: ; unlink descriptors DI .. DI + 8*CX - 1 from the chain
+        push cx
         mov dx, cx
         shl dx, 3
         add dx, di              ; the end
         xor bx, bx              ; the previous free one (0: the head)
         mov si, [ldt_head]
 .ul:    or si, si
-        jz .got
+        jz .uld
         mov ax, [es:si]
         cmp si, di
         jb .keep
@@ -199,11 +200,14 @@ ldt_alloc:
         mov [ldt_head], ax
         jmp .uln
 .ulm:   mov [es:bx], ax
-.uln:   mov si, ax
+.uln:   dec cx
+        jz .uld
+        mov si, ax
         jmp .ul
 .keep:  mov bx, si
         mov si, ax
         jmp .ul
+.uld:   pop cx
 .got:   ; CX fresh descriptors from DI
         mov si, di
         mov dx, cx

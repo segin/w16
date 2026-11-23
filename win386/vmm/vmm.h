@@ -194,6 +194,7 @@ u32 pages_free(void);
 void page_free(u32 phys);
 u32 phys_to_lin(u32 phys);
 int map_page(u32 lin, u32 phys, u32 flags);
+int map_page_noflush(u32 lin, u32 phys, u32 flags);
 u32 lin_to_phys(u32 lin);
 u32 lin_to_phys_x(u32 lin);          /* ~0: not present */
 int lin_user_ok(u32 lin, u32 len, int write);   /* ring 3 could reach it all */

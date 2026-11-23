@@ -21,6 +21,19 @@ static void put_pixel(int x, int y, BYTE rop, int idx)
     if (x < clipr.left || x >= clipr.right || y < clipr.top || y >= clipr.bottom)
         return;
     m = (BYTE)(0x80 >> (x & 7));
+    if (D.screen && (rop == 0xF0 || rop == 0x00 || rop == 0xFF)) {
+        int c = rop == 0x00 ? 0 : rop == 0xFF ? 15 : idx;
+        volatile BYTE __far *vl = (volatile BYTE __far *)MK_FP(vga_sel, (WORD)y * 80 + (x >> 3));
+        outw(0x3C4, 0x0F02);
+        outw(0x3CE, (WORD)((c & 15) << 8) | 0x00);
+        outw(0x3CE, 0x0003);
+        outw(0x3CE, 0x0305);
+        outw(0x3CE, 0xFF08);
+        (void)*vl;
+        *vl = m;
+        scr_reset();
+        return;
+    }
     for (p = 0; p < D.planes; p++) {
         if (D.screen)
             scr_plane(p);
@@ -85,45 +98,160 @@ static int style_next(void)
    line's upper end (the start when y0 <= y1, else the end). */
 static void line(int x0, int y0, int x1, int y1, BYTE rop, int fg, BYTE bgrop, int bg)
 {
-    long dx = (long)x1 - x0, dy = (long)y1 - y0;
-    long sx = dx < 0 ? -1L : 1L, sy = dy < 0 ? -1L : 1L;
-    long i, n, dmaj, dmin, base = 0, rem = 0, off, x, y;
-    int up = y0 > y1;
+    long dx, dy, sx, sy, i, n, dmaj, dmin, rem = 0, cx, cy, cbase;
+    int up, xmaj, wm3 = 0, fgc = 0, bgc = 0, cur_c = 0;
+    if (x0 == x1 && y0 == y1)
+        return;
+    /* fast path for solid horizontal and vertical segments */
+    if (style_m == 0xFF) {
+        if (y0 == y1) {
+            int hx0 = x0 < x1 ? x0 : x1 + 1;
+            int hx1 = x0 < x1 ? x1 : x0 + 1;
+            if (y0 < clipr.top || y0 >= clipr.bottom)
+                return;
+            if (hx0 < clipr.left)
+                hx0 = clipr.left;
+            if (hx1 > clipr.right)
+                hx1 = clipr.right;
+            if (hx0 >= hx1)
+                return;
+            if (D.screen && (rop == 0xF0 || rop == 0x00 || rop == 0xFF)) {
+                scr_fill_solid(hx0, y0, hx1, y0 + 1, rop == 0x00 ? 0 : rop == 0xFF ? 15 : fg);
+            } else {
+                int b0 = hx0 >> 3, nb = ((hx1 - 1) >> 3) - b0 + 1, p;
+                BYTE lm = (BYTE)(0xFF >> (hx0 & 7)), rm = (BYTE)(0xFF << (7 - ((hx1 - 1) & 7)));
+                for (p = 0; p < D.planes; p++) {
+                    if (D.screen)
+                        scr_plane(p);
+                    rop_run(rop, surf_line(&D, y0, p) + b0, NULL,
+                            (BYTE)((fg >> p) & 1 ? 0xFF : 0), (WORD)nb, lm, rm);
+                }
+            }
+            return;
+        }
+        if (x0 == x1) {
+            int vy0 = y0 < y1 ? y0 : y1 + 1;
+            int vy1 = y0 < y1 ? y1 : y0 + 1;
+            BYTE m;
+            WORD bx;
+            if (x0 < clipr.left || x0 >= clipr.right)
+                return;
+            if (vy0 < clipr.top)
+                vy0 = clipr.top;
+            if (vy1 > clipr.bottom)
+                vy1 = clipr.bottom;
+            if (vy0 >= vy1)
+                return;
+            m = (BYTE)(0x80 >> (x0 & 7));
+            bx = (WORD)(x0 >> 3);
+            if (D.screen && (rop == 0xF0 || rop == 0x00 || rop == 0xFF)) {
+                int c = rop == 0x00 ? 0 : rop == 0xFF ? 15 : fg, yy;
+                volatile BYTE __far *vl = (volatile BYTE __far *)MK_FP(vga_sel, (WORD)vy0 * 80 + bx);
+                outw(0x3C4, 0x0F02);
+                outw(0x3CE, (WORD)((c & 15) << 8) | 0x00);
+                outw(0x3CE, 0x0F01);
+                outw(0x3CE, 0x0003);
+                outw(0x3CE, 0x0005);
+                outw(0x3CE, (WORD)(m << 8) | 0x08);
+                for (yy = vy0; yy < vy1; yy++, vl += 80) {
+                    (void)*vl;
+                    *vl = 0xFF;
+                }
+                scr_reset();
+            } else {
+                int p, yy;
+                for (p = 0; p < D.planes; p++) {
+                    BYTE pv = (BYTE)((fg >> p) & 1 ? 0xFF : 0);
+                    if (D.screen)
+                        scr_plane(p);
+                    for (yy = vy0; yy < vy1; yy++) {
+                        BYTE __far *l = surf_line(&D, yy, p) + bx;
+                        BYTE v = *l;
+                        *l = (BYTE)((rop3_apply(rop, pv, 0, v) & m) | (v & ~m));
+                    }
+                }
+            }
+            return;
+        }
+    }
+    dx = (long)x1 - x0;
+    dy = (long)y1 - y0;
+    sx = dx < 0 ? -1L : 1L;
+    sy = dy < 0 ? -1L : 1L;
+    up = y0 > y1;
     if (dx < 0)
         dx = -dx;
     if (dy < 0)
         dy = -dy;
-    style_segment(dx > dy);
-    if (dx > dy) {
+    xmaj = dx > dy;
+    style_segment(xmaj);
+    if (xmaj) {
         dmaj = dx;
         dmin = dy;
+        cx = x0;
+        cbase = y0;
     } else {
         dmaj = dy;
         dmin = dx;
+        cy = y0;
+        cbase = x0;
     }
     n = dmaj;
+    if (D.screen && (rop == 0xF0 || rop == 0x00 || rop == 0xFF) &&
+        (bg < 0 || bgrop == 0xF0 || bgrop == 0x00 || bgrop == 0xFF)) {
+        wm3 = 1;
+        fgc = rop == 0x00 ? 0 : rop == 0xFF ? 15 : fg;
+        bgc = bg >= 0 ? (bgrop == 0x00 ? 0 : bgrop == 0xFF ? 15 : bg) : 0;
+        cur_c = fgc;
+        outw(0x3C4, 0x0F02);
+        outw(0x3CE, (WORD)((cur_c & 15) << 8) | 0x00);
+        outw(0x3CE, 0x0003);
+        outw(0x3CE, 0x0305);
+        outw(0x3CE, 0xFF08);
+    }
     for (i = 0; i < n; i++) {
         /* rem / dmaj: the fraction past base, of i * dmin / dmaj */
-        off = base;
-        if (2 * rem > dmaj || (2 * rem == dmaj && up))
-            off++;
-        if (dx > dy) {
-            x = x0 + sx * i;
-            y = y0 + sy * off;
+        int bump = 2 * rem > dmaj || (2 * rem == dmaj && up);
+        if (xmaj) {
+            cy = bump ? cbase + sy : cbase;
         } else {
-            y = y0 + sy * i;
-            x = x0 + sx * off;
+            cx = bump ? cbase + sx : cbase;
         }
-        if (style_next())
-            put_pixel((int)x, (int)y, rop, fg);
-        else if (bg >= 0)
-            put_pixel((int)x, (int)y, bgrop, bg);
+        if (wm3) {
+            int on = style_next();
+            if (on || bg >= 0) {
+                int px = (int)cx, py = (int)cy;
+                if (cx == px && cy == py &&
+                    px >= clipr.left && px < clipr.right &&
+                    py >= clipr.top && py < clipr.bottom) {
+                    int want = on ? fgc : bgc;
+                    volatile BYTE __far *vl;
+                    if (want != cur_c) {
+                        outw(0x3CE, (WORD)((want & 15) << 8) | 0x00);
+                        cur_c = want;
+                    }
+                    vl = (volatile BYTE __far *)MK_FP(vga_sel, (WORD)py * 80 + (px >> 3));
+                    (void)*vl;
+                    *vl = (BYTE)(0x80 >> (px & 7));
+                }
+            }
+        } else if (style_next()) {
+            put_pixel((int)cx, (int)cy, rop, fg);
+        } else if (bg >= 0) {
+            put_pixel((int)cx, (int)cy, bgrop, bg);
+        }
+        if (xmaj)
+            cx += sx;
+        else
+            cy += sy;
         rem += dmin;
         if (rem >= dmaj) {
             rem -= dmaj;
-            base++;
+            cbase += xmaj ? sy : sx;
         }
     }
+    if (wm3)
+        scr_reset();
 }
 
 static int set_clip(LPRECT clip)

@@ -281,6 +281,9 @@ int  trace_wanted(const char FAR *mod, u16 ordinal);   /* winboot.c */
 
 /* ---- task.c ---- */
 extern u16 cur_task, cur_pdb;           /* the running task (0: none) */
+extern u16 dos_owner_task;              /* task whose DOS PSP/DTA/CWD is active */
+extern u8  dos_nosync;                  /* non-zero: do not lazy-sync in INT 21h */
+void __cdecl sync_dos_context(void);    /* kentry.asm: lazy DOS state switch */
 u16  task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
                  const u8 FAR *tail, const u16 FAR *show, u16 libinit);
 void task_start(u16 t);

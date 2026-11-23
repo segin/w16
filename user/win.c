@@ -163,15 +163,59 @@ static void free_wnd(HWND h)
     LocalFree((HLOCAL)h);
 }
 
+/* Fast near validation of a fixed block in USER's DGROUP local heap.
+   Returns its usable size (> 0), or 0 if not a valid busy fixed block.
+   Matches KERNEL's local.c (both KRNL286 and KRNL386 heap info layouts)
+   without cross-module calls into KERNEL. */
+static WORD local_fixed_size(WORD p)
+{
+    static BYTE last_off;       /* 0: detect, 8: KRNL286, 10: KRNL386, 0xFF: fallback */
+    WORD info, first, last, a, pv, nx;
+    if (!p || (p & 3))
+        return 0;
+    info = *(WORD __near *)6;
+    if (!last_off) {
+        if (info && !(info & 3) && info >= 0x10) {
+            WORD ia = info - 4;
+            WORD isz = *(WORD __near *)(ia + 2) - ia;
+            if (isz >= 0x2E && *(WORD __near *)(info + 0x28) == 0x484C)
+                last_off = 0x0A;        /* KRNL386: LI_LAST = 0x0A, LI_MAGIC = 0x28 */
+            else if (isz >= 0x28 && *(WORD __near *)(info + 0x22) == 0x484C)
+                last_off = 0x08;        /* KRNL286: LI_LAST = 0x08, LI_MAGIC = 0x22 */
+            else
+                last_off = 0xFF;
+        } else {
+            last_off = 0xFF;
+        }
+    }
+    if (last_off == 0xFF || !info)
+        return LocalSize((HLOCAL)p);
+    first = *(WORD __near *)(info + 0x06);
+    last = *(WORD __near *)(info + last_off);
+    a = p - 4;
+    if (a <= first || a >= last)
+        return 0;
+    pv = *(WORD __near *)a;
+    if ((pv & 3) != 1)                  /* LA_BUSY | !LA_MOVEABLE */
+        return 0;
+    pv &= ~3;
+    nx = *(WORD __near *)(a + 2);
+    if (nx <= a || nx > last || pv >= a || pv < first)
+        return 0;
+    if (*(WORD __near *)(pv + 2) != a || (*(WORD __near *)nx & ~3) != a)
+        return 0;
+    return nx - a - 4;
+}
+
 PWND valid_wnd(HWND h)
 {
     PWND w;
     WORD sz;
-    if (!h || ((WORD)h & 1))
+    if (!h || ((WORD)h & 3))
         return 0;
-    /* a live window is a local block of ours that points to a class */
-    sz = LocalSize((HLOCAL)h);
-    if (sz < (ext_user_heap ? sizeof(STUB) : sizeof(WND)) || LocalHandle((UINT)h) != (HLOCAL)h)
+    /* a live window is a fixed local block of ours that points to a class */
+    sz = local_fixed_size((WORD)h);
+    if (sz < (ext_user_heap ? sizeof(STUB) : sizeof(WND)))
         return 0;
     if (ext_user_heap) {
         STUB __near *st = (STUB __near *)(WORD)h;
@@ -185,12 +229,11 @@ PWND valid_wnd(HWND h)
     w = PW(h);
     if (!w->cls || (w->flags & 0x8000))
         return 0;
-    /* ... a class: a block of DGROUP's heap with the class signature (any
-       block of WND's size with a word at 1Ch passed before: USER audit,
+    /* ... a class: a fixed block of DGROUP's heap with the class signature
+       (any block of WND's size with a word at 1Ch passed before: USER audit,
        item 9). A class with windows is never freed (UnregisterClass and
        the module's end leave it), so a window's class is a live one. */
-    if ((w->cls & 1) || LocalHandle(w->cls) != (HLOCAL)w->cls ||
-        LocalSize((HLOCAL)w->cls) < sizeof(CLS) || ((PCLS)w->cls)->sig != CLS_SIG)
+    if (local_fixed_size(w->cls) < sizeof(CLS) || ((PCLS)w->cls)->sig != CLS_SIG)
         return 0;
     return w;
 }
@@ -804,6 +847,7 @@ HWND WINAPI SetParent(HWND h, HWND parent)
         OffsetRect(&w->rcWindow, dx, dy);
         OffsetRect(&w->rcClient, dx, dy);
     }
+    invalidate_dce_cache();
     if (vis)
         ShowWindow(h, SW_SHOWNA);
     return old;
@@ -1036,7 +1080,12 @@ LONG WINAPI SetWindowLong(HWND h, int i, LONG v)
         return 0;
     switch (i) {
     case GWL_WNDPROC: old = (LONG)w->lpfnWndProc; w->lpfnWndProc = (WNDPROC)v; return old;
-    case GWL_STYLE: old = w->style; w->style = v; return old;
+    case GWL_STYLE:
+        old = w->style;
+        w->style = v;
+        if ((old ^ v) & (WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_MINIMIZE))
+            invalidate_dce_cache();
+        return old;
     case GWL_EXSTYLE: old = w->exstyle; w->exstyle = v; return old;
     }
     p = extra_field(w, i, 4);

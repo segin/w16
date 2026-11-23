@@ -67,24 +67,75 @@ BYTE rop2_to_rop3(int r2)
    the operation has no source */
 void rop_run(BYTE rop, BYTE __far *d, const BYTE *src, BYTE pat, WORD n, BYTE lmask, BYTE rmask)
 {
-    WORD i;
-    BYTE m, v, s;
-    if (n == 1)
+    WORD i, start = 0, end = n, cnt;
+    BYTE v, s;
+    if (!n)
+        return;
+    if (n == 1) {
         lmask &= rmask;
-    for (i = 0; i < n; i++) {
-        m = i == 0 ? lmask : i == n - 1 ? rmask : 0xFF;
-        s = src ? src[i] : 0;
-        if (m == 0xFF) {
-            switch (rop) {
-            case 0xCC: d[i] = s; continue;
-            case 0xF0: d[i] = pat; continue;
-            case 0x00: d[i] = 0; continue;
-            case 0xFF: d[i] = 0xFF; continue;
-            }
-            d[i] = rop3_apply(rop, pat, s, d[i]);
-        } else {
-            v = d[i];
-            d[i] = (BYTE)((rop3_apply(rop, pat, s, v) & m) | (v & ~m));
-        }
+        rmask = 0xFF;
     }
+    if (lmask != 0xFF) {
+        v = d[0];
+        s = src ? src[0] : 0;
+        d[0] = (BYTE)((rop3_apply(rop, pat, s, v) & lmask) | (v & ~lmask));
+        start = 1;
+    }
+    if (end > start && rmask != 0xFF) {
+        WORD last = end - 1;
+        v = d[last];
+        s = src ? src[last] : 0;
+        d[last] = (BYTE)((rop3_apply(rop, pat, s, v) & rmask) | (v & ~rmask));
+        end = last;
+    }
+    cnt = end - start;
+    if (!cnt)
+        return;
+    switch (rop) {
+    case 0xCC:
+        if (src)
+            memcpyf(d + start, src + start, cnt);
+        else
+            memsetf(d + start, 0, cnt);
+        return;
+    case 0xF0:
+        memsetf(d + start, pat, cnt);
+        return;
+    case 0x00:
+        memsetf(d + start, 0, cnt);
+        return;
+    case 0xFF:
+        memsetf(d + start, 0xFF, cnt);
+        return;
+    case 0xAA:
+        return;
+    case 0x55:
+        for (i = start; i < end; i++)
+            d[i] = (BYTE)~d[i];
+        return;
+    case 0x5A:
+        if (pat)
+            for (i = start; i < end; i++)
+                d[i] ^= pat;
+        return;
+    case 0x66:
+        if (src)
+            for (i = start; i < end; i++)
+                d[i] ^= src[i];
+        return;
+    case 0x88:
+        if (src)
+            for (i = start; i < end; i++)
+                d[i] &= src[i];
+        else
+            memsetf(d + start, 0, cnt);
+        return;
+    case 0xEE:
+        if (src)
+            for (i = start; i < end; i++)
+                d[i] |= src[i];
+        return;
+    }
+    for (i = start; i < end; i++)
+        d[i] = rop3_apply(rop, pat, src ? src[i] : 0, d[i]);
 }

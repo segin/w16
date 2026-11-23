@@ -36,9 +36,13 @@
 #include "vga.h"
 
 #define CHUNK 512
+#define DBATCH 8
 
 static BYTE ibuf[CHUNK];                /* colour indices, or mono values */
 static BYTE lbuf[CHUNK * 3 + 4];        /* the bytes of a DIB line across 64K */
+static BYTE pbuf[4][CHUNK / 8 + 2];     /* packed planar bytes for one chunk */
+static BYTE sbatch[DBATCH][4][80];      /* batched screen rows for DIBScreenBlt */
+static short sbatch_y[DBATCH];
 static BYTE map_idx[256], map_mono[256];
 
 static void build_map(LPBITMAPINFOHEADER bi)
@@ -113,27 +117,39 @@ static BYTE __far *dib_line(LPBYTE bits, DWORD off, WORD bpp, int x, int n, WORD
 /* pixels [x, x + n) of a DIB line into ibuf (index or mono value) */
 static void dib_read(const BYTE __far *row, LPBITMAPINFOHEADER bi, int x, int n, int mono)
 {
-    int i, v = 0;
-    for (i = 0; i < n; i++) {
-        int px = x + i;
-        switch (bi->biBitCount) {
-        case 1:
-            v = (row[px >> 3] >> (7 - (px & 7))) & 1;
-            break;
-        case 4:
-            v = px & 1 ? row[px >> 1] & 15 : row[px >> 1] >> 4;
-            break;
-        case 8:
-            v = row[px];
-            break;
-        case 24: {
-            const BYTE __far *q = row + (WORD)((DWORD)px * 3);
-            COLORREF c = RGB(q[2], q[1], q[0]);
-            ibuf[i] = (BYTE)(mono ? rgb_mono(c) : rgb_index(c));
-            continue;
+    int i;
+    const BYTE *map = mono ? map_mono : map_idx;
+    switch (bi->biBitCount) {
+    case 1:
+        for (i = 0; i < n; i++) {
+            int px = x + i;
+            ibuf[i] = map[(row[px >> 3] >> (7 - (px & 7))) & 1];
         }
+        return;
+    case 4:
+        for (i = 0; i < n; i++) {
+            int px = x + i;
+            BYTE b = row[px >> 1];
+            ibuf[i] = map[px & 1 ? (b & 15) : (b >> 4)];
         }
-        ibuf[i] = mono ? map_mono[v] : map_idx[v];
+        return;
+    case 8: {
+        const BYTE __far *q = row + x;
+        for (i = 0; i < n; i++)
+            ibuf[i] = map[q[i]];
+        return;
+    }
+    case 24: {
+        const BYTE __far *q = row + (WORD)((DWORD)x * 3);
+        if (mono) {
+            for (i = 0; i < n; i++, q += 3)
+                ibuf[i] = (BYTE)rgb_mono(RGB(q[2], q[1], q[0]));
+        } else {
+            for (i = 0; i < n; i++, q += 3)
+                ibuf[i] = (BYTE)rgb_index(RGB(q[2], q[1], q[0]));
+        }
+        return;
+    }
     }
 }
 
@@ -147,29 +163,127 @@ static void dib_read_at(LPBYTE bits, DWORD off, LPBITMAPINFOHEADER bi, int x, in
     dib_read(row, bi, x, n, mono);
 }
 
+/* pack n 4-bit colour indices from src (starting at pixel x) into planar
+   buffers out0..out3 (indexed 0..nb-1 for screen bytes b0..b1) */
+static void pack_planes_4(const BYTE *src, int x, int n,
+                          BYTE *out0, BYTE *out1, BYTE *out2, BYTE *out3)
+{
+    int px = 0, bi = 0, bit;
+    int lbit = x & 7;
+    if (lbit) {
+        BYTE p0 = 0, p1 = 0, p2 = 0, p3 = 0;
+        for (bit = lbit; bit < 8 && px < n; bit++, px++) {
+            BYTE bm = (BYTE)(0x80 >> bit), c = src[px];
+            if (c & 1) p0 |= bm;
+            if (c & 2) p1 |= bm;
+            if (c & 4) p2 |= bm;
+            if (c & 8) p3 |= bm;
+        }
+        out0[bi] = p0;
+        out1[bi] = p1;
+        out2[bi] = p2;
+        out3[bi] = p3;
+        bi++;
+    }
+    while (px + 8 <= n) {
+        const BYTE *s = src + px;
+        BYTE p0 = 0, p1 = 0, p2 = 0, p3 = 0, c;
+        c = s[0]; if (c & 1) p0 |= 0x80; if (c & 2) p1 |= 0x80; if (c & 4) p2 |= 0x80; if (c & 8) p3 |= 0x80;
+        c = s[1]; if (c & 1) p0 |= 0x40; if (c & 2) p1 |= 0x40; if (c & 4) p2 |= 0x40; if (c & 8) p3 |= 0x40;
+        c = s[2]; if (c & 1) p0 |= 0x20; if (c & 2) p1 |= 0x20; if (c & 4) p2 |= 0x20; if (c & 8) p3 |= 0x20;
+        c = s[3]; if (c & 1) p0 |= 0x10; if (c & 2) p1 |= 0x10; if (c & 4) p2 |= 0x10; if (c & 8) p3 |= 0x10;
+        c = s[4]; if (c & 1) p0 |= 0x08; if (c & 2) p1 |= 0x08; if (c & 4) p2 |= 0x08; if (c & 8) p3 |= 0x08;
+        c = s[5]; if (c & 1) p0 |= 0x04; if (c & 2) p1 |= 0x04; if (c & 4) p2 |= 0x04; if (c & 8) p3 |= 0x04;
+        c = s[6]; if (c & 1) p0 |= 0x02; if (c & 2) p1 |= 0x02; if (c & 4) p2 |= 0x02; if (c & 8) p3 |= 0x02;
+        c = s[7]; if (c & 1) p0 |= 0x01; if (c & 2) p1 |= 0x01; if (c & 4) p2 |= 0x01; if (c & 8) p3 |= 0x01;
+        out0[bi] = p0;
+        out1[bi] = p1;
+        out2[bi] = p2;
+        out3[bi] = p3;
+        px += 8;
+        bi++;
+    }
+    if (px < n) {
+        BYTE p0 = 0, p1 = 0, p2 = 0, p3 = 0;
+        for (bit = 0; px < n; bit++, px++) {
+            BYTE bm = (BYTE)(0x80 >> bit), c = src[px];
+            if (c & 1) p0 |= bm;
+            if (c & 2) p1 |= bm;
+            if (c & 4) p2 |= bm;
+            if (c & 8) p3 |= bm;
+        }
+        out0[bi] = p0;
+        out1[bi] = p1;
+        out2[bi] = p2;
+        out3[bi] = p3;
+    }
+}
+
+/* write nb packed bytes from src to d[0..nb-1] with edge masks lmask/rmask */
+static void write_plane_run(BYTE __far *d, const BYTE *src, int nb, BYTE lmask, BYTE rmask)
+{
+    int start = 0, end = nb;
+    if (nb == 1) {
+        lmask &= rmask;
+        rmask = 0xFF;
+    }
+    if (lmask != 0xFF) {
+        d[0] = (BYTE)((d[0] & ~lmask) | (src[0] & lmask));
+        start = 1;
+    }
+    if (end > start && rmask != 0xFF) {
+        int last = end - 1;
+        d[last] = (BYTE)((d[last] & ~rmask) | (src[last] & rmask));
+        end = last;
+    }
+    if (end > start)
+        memcpyf(d + start, src + start, (WORD)(end - start));
+}
+
 /* the n pixels of src to line y of D from x */
 static void put_indices(SURF *D, int y, int x, int n, const BYTE *src)
 {
-    int p, b, b0 = x >> 3, b1 = (x + n - 1) >> 3;
-    BYTE __far *l;
-    BYTE m, v, bit;
-    for (p = 0; p < D->planes; p++) {
+    int p, b0 = x >> 3, b1 = (x + n - 1) >> 3, nb = b1 - b0 + 1;
+    BYTE lmask = (BYTE)(0xFF >> (x & 7));
+    BYTE rmask = (BYTE)(0xFF << (7 - ((x + n - 1) & 7)));
+    if (D->planes == 1) {
+        int px = 0, bi = 0, bit, lbit = x & 7;
+        if (lbit) {
+            BYTE v = 0;
+            for (bit = lbit; bit < 8 && px < n; bit++, px++)
+                if (src[px])
+                    v |= (BYTE)(0x80 >> bit);
+            pbuf[0][bi++] = v;
+        }
+        while (px + 8 <= n) {
+            const BYTE *s = src + px;
+            BYTE v = 0;
+            if (s[0]) v |= 0x80;
+            if (s[1]) v |= 0x40;
+            if (s[2]) v |= 0x20;
+            if (s[3]) v |= 0x10;
+            if (s[4]) v |= 0x08;
+            if (s[5]) v |= 0x04;
+            if (s[6]) v |= 0x02;
+            if (s[7]) v |= 0x01;
+            pbuf[0][bi++] = v;
+            px += 8;
+        }
+        if (px < n) {
+            BYTE v = 0;
+            for (bit = 0; px < n; bit++, px++)
+                if (src[px])
+                    v |= (BYTE)(0x80 >> bit);
+            pbuf[0][bi] = v;
+        }
+        write_plane_run(surf_line(D, y, 0) + b0, pbuf[0], nb, lmask, rmask);
+        return;
+    }
+    pack_planes_4(src, x, n, pbuf[0], pbuf[1], pbuf[2], pbuf[3]);
+    for (p = 0; p < 4; p++) {
         if (D->screen)
             scr_plane(p);
-        l = surf_line(D, y, p);
-        for (b = b0; b <= b1; b++) {
-            m = 0;
-            v = 0;
-            for (bit = 0; bit < 8; bit++) {
-                int px = b * 8 + bit - x;
-                if (px < 0 || px >= n)
-                    continue;
-                m |= (BYTE)(0x80 >> bit);
-                if (D->planes == 1 ? src[px] : (src[px] >> p) & 1)
-                    v |= (BYTE)(0x80 >> bit);
-            }
-            l[b] = (BYTE)((l[b] & ~m) | v);
-        }
+        write_plane_run(surf_line(D, y, p) + b0, pbuf[p], nb, lmask, rmask);
     }
 }
 
@@ -627,15 +741,58 @@ WORD EXPORT DIBScreenBlt(LPVOID lpDev, short X, short Y, WORD scan, WORD scans, 
         scr_begin(r.left, r.top, r.right, r.bottom);
     x0 = r.left;
     x1 = r.right;
-    for (j = 0; j < scans; j++) {
-        long yl = (long)Y + bi->biHeight - 1 - ((long)scan + j);
-        if (yl < r.top || yl >= r.bottom)
-            continue;
-        y = (int)yl;
-        for (k = x0; k < x1; k += CHUNK) {
-            n = x1 - k > CHUNK ? CHUNK : x1 - k;
-            dib_read_at(bits, (DWORD)j * stride, bi, (int)((long)k - X), n, D.planes == 1);
-            put_indices(&D, y, k, n, ibuf);
+    if (D.screen) {
+        int b0 = x0 >> 3, b1 = (x1 - 1) >> 3, nb = b1 - b0 + 1;
+        BYTE lmask = (BYTE)(0xFF >> (x0 & 7));
+        BYTE rmask = (BYTE)(0xFF << (7 - ((x1 - 1) & 7)));
+        int nbatch = 0, p, ri;
+        for (j = 0; j < scans; j++) {
+            long yl = (long)Y + bi->biHeight - 1 - ((long)scan + j);
+            if (yl < r.top || yl >= r.bottom)
+                continue;
+            sbatch_y[nbatch] = (short)yl;
+            for (k = x0; k < x1; ) {
+                int kend = ((k >> 3) + (CHUNK >> 3)) << 3;
+                int boff = (k >> 3) - b0;
+                if (kend > x1)
+                    kend = x1;
+                n = kend - k;
+                dib_read_at(bits, (DWORD)j * stride, bi, (int)((long)k - X), n, 0);
+                pack_planes_4(ibuf, k, n,
+                              sbatch[nbatch][0] + boff, sbatch[nbatch][1] + boff,
+                              sbatch[nbatch][2] + boff, sbatch[nbatch][3] + boff);
+                k = kend;
+            }
+            nbatch++;
+            if (nbatch == DBATCH) {
+                for (p = 0; p < 4; p++) {
+                    scr_plane(p);
+                    for (ri = 0; ri < nbatch; ri++)
+                        write_plane_run((BYTE __far *)MK_FP(vga_sel, (WORD)sbatch_y[ri] * 80 + b0),
+                                        sbatch[ri][p], nb, lmask, rmask);
+                }
+                nbatch = 0;
+            }
+        }
+        if (nbatch) {
+            for (p = 0; p < 4; p++) {
+                scr_plane(p);
+                for (ri = 0; ri < nbatch; ri++)
+                    write_plane_run((BYTE __far *)MK_FP(vga_sel, (WORD)sbatch_y[ri] * 80 + b0),
+                                    sbatch[ri][p], nb, lmask, rmask);
+            }
+        }
+    } else {
+        for (j = 0; j < scans; j++) {
+            long yl = (long)Y + bi->biHeight - 1 - ((long)scan + j);
+            if (yl < r.top || yl >= r.bottom)
+                continue;
+            y = (int)yl;
+            for (k = x0; k < x1; k += CHUNK) {
+                n = x1 - k > CHUNK ? CHUNK : x1 - k;
+                dib_read_at(bits, (DWORD)j * stride, bi, (int)((long)k - X), n, D.planes == 1);
+                put_indices(&D, y, k, n, ibuf);
+            }
         }
     }
     if (D.screen)

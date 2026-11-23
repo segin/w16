@@ -145,7 +145,7 @@ HS_SIZE         equ 1800h   ; ring 0 and real-mode host stack
 H3_SIZE         equ 1800h   ; ring-3 host stack (callbacks, exceptions)
 H3_CHUNK        equ 400h    ; one nesting level of it
 RM_RESERVE      equ 600h    ; real-mode code's room on the host stack
-TB_SIZE         equ 1000h   ; real-mode transfer buffer
+TB_SIZE         equ 4000h   ; real-mode transfer buffer
 INIT_STACK      equ 200h
 EMB_KB_MAX      equ 300000h ; the most XMS 89h is asked for at once (3 GB): a
                             ; block's size in bytes fits in 32 bits

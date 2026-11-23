@@ -163,24 +163,32 @@ void dpmi_free_desc(u16 sel)
 
 int dpmi_set_desc(u16 sel, u32 base, u32 limit, int code)
 {
-    regs16 r;
-    r.ax = 0x0007;
-    r.bx = sel;
-    r.cx = (u16)(base >> 16);
-    r.dx = (u16)base;
-    if (!call(&r))
-        return 0;
-    r.ax = 0x0008;
-    r.bx = sel;
-    r.cx = (u16)(limit >> 16);
-    r.dx = (u16)limit;
-    if (!call(&r))
-        return 0;
-    r.ax = 0x0009;
-    r.bx = sel;
+    u8 desc[8];
+    if (limit > 0xFFFFFUL) {
+        if ((limit & 0xFFFUL) != 0xFFFUL)
+            return 0;
+        limit >>= 12;
+        desc[6] = (u8)(0x80 | ((limit >> 16) & 0x0F));
+    } else {
+        desc[6] = (u8)((limit >> 16) & 0x0F);
+    }
+    desc[0] = (u8)limit;
+    desc[1] = (u8)(limit >> 8);
+    desc[2] = (u8)base;
+    desc[3] = (u8)(base >> 8);
+    desc[4] = (u8)(base >> 16);
     /* accessed set, as Windows 3.1 sets it (observed access F3h, FBh) */
-    r.cx = (code ? 0x9B : 0x93) | (cpl << 5);
-    return call(&r);
+    desc[5] = (u8)((code ? 0x9B : 0x93) | (cpl << 5));
+    desc[7] = (u8)(base >> 24);
+#ifdef KRNL386
+    if (ldt_alias && (sel & 4) && ldt_ok(sel & 0xFFF8)) {
+        u8 FAR *p = ldt_at(sel & 0xFFF8);
+        *(u32 FAR *)p = *(u32 *)desc;
+        *(u32 FAR *)(p + 4) = *(u32 *)(desc + 4);
+        return 1;
+    }
+#endif
+    return dpmi_set_ldt(sel, (const u8 FAR *)desc);
 }
 
 u32 dpmi_get_base(u16 sel)

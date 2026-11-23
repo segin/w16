@@ -53,9 +53,11 @@ struct vsave {
     u32 vram[32];                       /* physical pages, A0000h-BFFFFh */
     u8 *shadow;                         /* the text at the last Clear_Mod */
     int shadow_ok;
+    u32 shadow_bytes;                   /* bytes valid in shadow */
     u16 last_cur;                       /* the cursor then (40:50h) */
     u8 *seen;                           /* the text Get_Mod reported on */
     int seen_ok;
+    u32 seen_bytes;                     /* bytes valid in seen */
     u16 seen_cur;
     int pending;                        /* a 41Ah event not answered yet */
     u8 *font;                           /* plane 2 for Get_Mem (ring 3) */
@@ -63,6 +65,9 @@ struct vsave {
     u32 *zero;                          /* Get_Mem's colour table (dac_table) */
     u32 mod_sum, mod_time;              /* VDD_Get_ModTime: the text's sum, when it changed */
     int mod_ok;
+    u16 mod_cur;                        /* cursor at last mod_check */
+    u32 last_bytes;                     /* text_bytes() at last check */
+    int win_dirty;                      /* B8000h PTEs dirty since last windowed check */
 };
 static struct vsave *saves;
 static u32 mod_check(struct vsave *d);
@@ -285,6 +290,8 @@ static void to_ram(struct vsave *d)
     d->shadow_ok = 0;
     d->seen_ok = 0;
     d->pending = 0;
+    d->mod_ok = 0;
+    d->win_dirty = 1;
     map_video(d, 1);
 }
 
@@ -303,6 +310,7 @@ static void from_ram(struct vsave *d)
     map_video(d, 0);
     for (i = 0; i < 32; i++) page_free(d->vram[i]);
     d->windowed = 0;
+    d->mod_ok = 0;
 }
 
 /* SHELL: v windowed (its display is the grabber's) or full screen */
@@ -437,6 +445,8 @@ void vdd_vm_init(struct vm *v)
         v->crit--;
         vga_restore(g);
         kfree(g);
+        d->win_dirty = 1;
+        d->mod_ok = 0;
     }
 }
 
@@ -454,6 +464,11 @@ void vdd_vm_destroy(struct vm *v)
             s->windowed = 0;
         }
         s->valid = 0;
+        s->shadow_ok = 0;
+        s->seen_ok = 0;
+        s->mod_ok = 0;
+        s->win_dirty = 0;
+        s->last_bytes = 0;
     }
 }
 
@@ -483,6 +498,25 @@ static u16 cursor_of(struct vsave *d)
     return *(u16 *)vm_lin(d->vm, 0x450);
 }
 
+/* Check and clear 386 PTE Dirty bit (0x40) on the 1-4 pages at B8000h.
+ * Flush TLB if any bit was cleared on the currently running VM so the CPU
+ * will mark the PTE dirty again on subsequent writes. */
+static int vram_poll_dirty(struct vsave *d, u32 bytes)
+{
+    u32 *pt = (u32 *)phys_to_lin(d->vm->ptab_phys);
+    u32 npg = (bytes + 4095) >> 12, i;
+    int dirty = 0;
+    if (npg > 4) npg = 4;
+    for (i = 0; i < npg; i++) {
+        if (pt[0xB8 + i] & 0x40) {
+            pt[0xB8 + i] &= ~0x40u;
+            dirty = 1;
+        }
+    }
+    if (dirty && d->vm == cur_vm) vmm_flush_tlb();
+    return dirty;
+}
+
 /* each timer tick: a windowed VM whose screen changed gets event 41Ah
  * (once until the grabber looks: Get_Mod / Clear_Mod) */
 void vdd_tick(void)
@@ -492,8 +526,14 @@ void vdd_tick(void)
     for (d = saves; d; d = d->next) if (d->vm->id && !d->vm->ended) mod_check(d);
     for (d = saves; d; d = d->next) {
         int mem, cur;
+        u32 nb;
         if (!d->windowed || d->pending || !d->vm->id || d->vm->ended) continue;
-        mem = !d->shadow_ok || memcmp(text_of(d), d->shadow, text_bytes(d, NULL, NULL));
+        nb = text_bytes(d, NULL, NULL);
+        mem = !d->shadow_ok || d->shadow_bytes != nb;
+        if (!mem && d->win_dirty) {
+            mem = memcmp(text_of(d), d->shadow, nb) != 0;
+            if (!mem) d->win_dirty = 0;
+        }
         cur = cursor_of(d) != d->last_cur;
         if (mem || cur) {
             d->pending = shell_display_changed(d->vm, cur && !mem);
@@ -513,9 +553,22 @@ void vdd_tick(void)
  * same bytes at B8000h) */
 static u32 mod_check(struct vsave *d)
 {
-    u32 n = text_bytes(d, NULL, NULL), i, h = cursor_of(d);
-    u32 *p = (u32 *)text_of(d);
-    for (i = 0; i < n / 4; i++) h = ((h << 5) | (h >> 27)) ^ p[i];
+    u32 n = text_bytes(d, NULL, NULL), i, h;
+    u16 cur = cursor_of(d);
+    int dirty = vram_poll_dirty(d, n);
+    if (n != d->last_bytes) {
+        d->last_bytes = n;
+        dirty = 1;
+    }
+    if (dirty) d->win_dirty = 1;
+    if (d->mod_ok && !dirty && cur == d->mod_cur)
+        return d->mod_time;
+    {
+        u32 *p = (u32 *)text_of(d);
+        h = cur;
+        for (i = 0; i < n / 4; i++) h = ((h << 5) | (h >> 27)) ^ p[i];
+    }
+    d->mod_cur = cur;
     if (!d->mod_ok || h != d->mod_sum) {
         /* a VM idle (released) whose screen changed runs again: Windows
          * 3.1 woke VX14 V within 5 ms of its release (VMPOLL) */
@@ -633,21 +686,41 @@ int vdd_api(struct cregs *r)
             u8 *t = text_of(d);
             u16 flags = 0;
             u32 cols, rows, bytes = text_bytes(d, &cols, &rows);
-            u32 i, l = cols, tp = rows, rt = 0, bt = 0;
+            u32 l = cols, tp = rows, rt = 0, bt = 0;
             SETW(r->eax, 0xFFFF);
             SETW(r->ebx, 0);
-            if (!d->shadow_ok) {
+            if (!d->shadow_ok || d->shadow_bytes != bytes) {
                 flags = 0x38;
                 SETW(r->ebx, 0xFFFF);
             } else {
-                for (i = 0; i < bytes; i += 2)
-                    if (t[i] != d->shadow[i] || t[i + 1] != d->shadow[i + 1]) {
-                        u32 c = (i / 2) % cols, rw = (i / 2) / cols;
+                u32 rw, c;
+                for (rw = 0; rw < rows; rw++) {
+                    const u16 *tr = (const u16 *)(t + rw * cols * 2);
+                    const u16 *sr = (const u16 *)(d->shadow + rw * cols * 2);
+                    for (c = 0; c + 1 < cols; c += 2) {
+                        u32 tv = *(const u32 *)(tr + c), sv = *(const u32 *)(sr + c);
+                        if (tv != sv) {
+                            if ((tv & 0xFFFF) != (sv & 0xFFFF)) {
+                                if (c < l) l = c;
+                                if (c > rt) rt = c;
+                                if (rw < tp) tp = rw;
+                                if (rw > bt) bt = rw;
+                            }
+                            if ((tv >> 16) != (sv >> 16)) {
+                                if (c + 1 < l) l = c + 1;
+                                if (c + 1 > rt) rt = c + 1;
+                                if (rw < tp) tp = rw;
+                                if (rw > bt) bt = rw;
+                            }
+                        }
+                    }
+                    if (c < cols && tr[c] != sr[c]) {
                         if (c < l) l = c;
                         if (c > rt) rt = c;
                         if (rw < tp) tp = rw;
                         if (rw > bt) bt = rw;
                     }
+                }
                 if (l <= rt) {
                     flags |= 0x10;
                     SETW(r->eax, (tp << 8) | (l + 1));
@@ -662,8 +735,10 @@ int vdd_api(struct cregs *r)
             /* what this answer covers: the VM runs on until Clear_Mod
              * (Windows 3.1 held it: UNVERIFIED how long), and a change made
              * meanwhile must come in the next answer, not be taken as seen */
+            vram_poll_dirty(d, bytes);
+            d->win_dirty = 0;
             if (!d->seen) d->seen = kmalloc(TEXT_MAX);
-            if (d->seen) { memcpy(d->seen, t, TEXT_MAX); d->seen_ok = 1; d->seen_cur = cursor_of(d); }
+            if (d->seen) { memcpy(d->seen, t, bytes); d->seen_bytes = bytes; d->seen_ok = 1; d->seen_cur = cursor_of(d); }
             if (vm_trace) trace("(MOD %x %x %x cur %x)", flags, AX(r), BX(r), cursor_of(d));
         }
         SETW(r->edx, 0x000C);
@@ -671,10 +746,18 @@ int vdd_api(struct cregs *r)
         return 1;
     case 0x0004:                        /* Clear_Mod */
         if (!d || !d->windowed) return 0;
-        if (!d->shadow) d->shadow = kmalloc(TEXT_MAX);
-        if (d->shadow) {
-            memcpy(d->shadow, d->seen_ok ? d->seen : text_of(d), TEXT_MAX);
-            d->shadow_ok = 1;
+        {
+            u32 bytes = d->seen_ok ? d->seen_bytes : text_bytes(d, NULL, NULL);
+            if (!d->shadow) d->shadow = kmalloc(TEXT_MAX);
+            if (d->shadow) {
+                if (!d->seen_ok) {
+                    vram_poll_dirty(d, bytes);
+                    d->win_dirty = 0;
+                }
+                memcpy(d->shadow, d->seen_ok ? d->seen : text_of(d), bytes);
+                d->shadow_bytes = bytes;
+                d->shadow_ok = 1;
+            }
         }
         d->last_cur = d->seen_ok ? d->seen_cur : cursor_of(d);
         d->seen_ok = 0;

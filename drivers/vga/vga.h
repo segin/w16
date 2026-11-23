@@ -296,6 +296,7 @@ extern const BYTE dib_to_index[16], index_to_dib[16];
 void pattern_planes(LPPBRUSH b, LPDRAWMODE dm, int mono, BYTE pat[4][8], BYTE *mask, BYTE *transp);
 void fill_rect(SURF *s, int x0, int y0, int x1, int y1, BYTE rop, LPPBRUSH b, LPDRAWMODE dm);
 void fill_solid(SURF *s, int x0, int y0, int x1, int y1, BYTE rop, int idx, int mono);
+void scr_fill_solid(int x0, int y0, int x1, int y1, int idx);
 void row_op(SURF *D, int y, int x0, int x1, BYTE rop, BYTE pat[4][8], int smask);
 
 /* cursor (cursor.c, entry.asm) */

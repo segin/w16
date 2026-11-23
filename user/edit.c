@@ -85,6 +85,8 @@ typedef struct ED {
     /* multi-line */
     WORD   lines;               /* moveable local block of hseg: the lines' starts */
     WORD   nlines;
+    int    max_w;               /* cached widest line width (-1: dirty) */
+    int    max_line;            /* line index achieving max_w (-1: unknown) */
     RECT   fmt;                 /* the format rectangle */
     BYTE   eol;                 /* the caret shown at the end of the line before */
     BYTE   fmtlines;            /* EM_FMTLINES TRUE */
@@ -664,6 +666,8 @@ static void relayout(HWND h, PED e)
     }
     meas_end(h, &m);
     E(e)->nlines = n ? n : 1;
+    E(e)->max_w = -1;
+    E(e)->max_line = -1;
 }
 
 /* the lines made again after a change at pos (rem characters taken out,
@@ -744,6 +748,37 @@ static void relayout_change(HWND h, PED e, WORD pos, WORD rem, WORD ins)
     for (k = 0; k < cnt; k++)
         lt[L + k] = nw[k];
     E(e)->nlines = L + cnt + tail;
+    /* Incrementally update cached max_w across only the cnt modified lines */
+    if (E(e)->max_w >= 0) {
+        int old_end = synced ? (int)j : (int)n;
+        int best_w = 0, best_l = L;
+        BOOL hit_max = (E(e)->max_line >= L && E(e)->max_line < old_end);
+        meas_begin(h, e, &m);
+        for (k = 0; k < cnt; k++) {
+            int x = span_w(&m, e, lstart(e, L + k), line_end(e, L + k), 0);
+            if (x > best_w) {
+                best_w = x;
+                best_l = L + k;
+            }
+        }
+        meas_end(h, &m);
+        if (hit_max) {
+            if (best_w >= E(e)->max_w) {
+                E(e)->max_w = best_w;
+                E(e)->max_line = best_l;
+            } else {
+                E(e)->max_w = -1;
+                E(e)->max_line = -1;
+            }
+        } else {
+            if (E(e)->max_line >= old_end)
+                E(e)->max_line += (L + (int)cnt) - old_end;
+            if (best_w > E(e)->max_w) {
+                E(e)->max_w = best_w;
+                E(e)->max_line = best_l;
+            }
+        }
+    }
 }
 
 /* ---- the format rectangle (multi-line) ---- */
@@ -1125,14 +1160,21 @@ static int char_w(HWND h, PED e)
 static int widest(HWND h, PED e)
 {
     MEAS m;
-    int w = 0, i, n = line_count(e);
+    int w = 0, ml = 0, i, n;
+    if (E(e)->max_w >= 0)
+        return E(e)->max_w;
+    n = line_count(e);
     meas_begin(h, e, &m);
     for (i = 0; i < n; i++) {
         int x = span_w(&m, e, lstart(e, i), line_end(e, i), 0);
-        if (x > w)
+        if (x > w) {
             w = x;
+            ml = i;
+        }
     }
     meas_end(h, &m);
+    E(e)->max_w = w;
+    E(e)->max_line = ml;
     return w;
 }
 
@@ -1166,10 +1208,15 @@ static void scroll_to(HWND h, PED e, int top, int xoff, BOOL nv, BOOL nh, BOOL f
     if (xoff < 0)
         xoff = 0;
     if (top != E(e)->topline || xoff != E(e)->xoff) {
+        int old_top = E(e)->topline, old_xoff = E(e)->xoff;
+        RECT f = E(e)->fmt;
         E(e)->topline = top;
         E(e)->xoff = xoff;
         HideCaret(h);
-        InvalidateRect(h, NULL, TRUE);
+        if (E(e)->multi && f.right > f.left && f.bottom > f.top)
+            ScrollWindow(h, old_xoff - xoff, (old_top - top) * line_height(h, e), &f, &f);
+        else
+            InvalidateRect(h, NULL, TRUE);
         place_caret(h, e);
         ShowCaret(h);
         set_scrollbars(h, e);
@@ -1853,8 +1900,11 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         SetWindowWord(h, 0, (WORD)e);
         {
             CREATESTRUCT __far *cs = (CREATESTRUCT __far *)lp;
-            if (E(e)->multi)
+            if (E(e)->multi) {
                 SetRect(&E(e)->fmt, 0, 0, cs->cx, cs->cy);
+                E(e)->max_w = -1;
+                E(e)->max_line = -1;
+            }
             if (cs->lpszName && !ISATOM(cs->lpszName))
                 set_text(h, e, cs->lpszName);
         }
@@ -2269,9 +2319,11 @@ LRESULT WINAPI __loadds EditWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
            scroll; the first line * 100 / (lines - 1) rounded (3.1:
            Notepad, 45 lines, first line 32: its thumb at 73) */
         if (wp == WM_USER + 14) {
+            int mw;
             if (v)
                 return n > 1 ? (LRESULT)(((long)top * 200 + (n - 1)) / (2L * (n - 1))) : 0;
-            return widest(h, e) > 0 ? (LRESULT)(((long)x * 200 + widest(h, e)) / (2L * widest(h, e))) : 0;
+            mw = widest(h, e);
+            return mw > 0 ? (LRESULT)(((long)x * 200 + mw) / (2L * mw)) : 0;
         }
         if (page < 1)
             page = 1;

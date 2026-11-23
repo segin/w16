@@ -121,6 +121,7 @@ static void normalise(pcache *pc)
    OpenFile, the profiles and AddAtom take 600-900 bytes of it (KERNEL
    audit #16); KERNEL does not yield in them, and none calls itself */
 static char rs_tmp[160], cf_win[128], api_path[128];
+static int cf_win_ok;
 
 static int resolve(const char FAR *file, char *path)
 {
@@ -151,8 +152,9 @@ static int same_path(const char *a, const char *b)
 /* the cache for a private profile: WIN.INI has its own */
 static pcache *cache_for(const char *path)
 {
-    char *w = cf_win;
-    if (resolve("WIN.INI", w) && same_path(w, path))
+    if (!cf_win_ok)
+        cf_win_ok = resolve("WIN.INI", cf_win);
+    if (cf_win_ok && same_path(cf_win, path))
         return &win_ini;
     return &priv_ini;
 }
@@ -169,6 +171,30 @@ static int load(pcache *pc, const char *path)
     u16 fh, err, sel;
     u32 size, got;
 
+    if (pc->valid && same_path(pc->path, path)) {
+        regs16 r;
+        r.ax = 0x4300;                  /* Get File Attributes: 1 DOS call vs open+close */
+        r.dx = FP_OFF((const char FAR *)path);
+        r.ds = FP_SEG((const char FAR *)path);
+        r.es = 0;
+        r.bx = r.cx = r.si = r.di = 0;
+        if (dos_call(&r)) {
+            if (!(r.cx & 0x10))         /* exists and is not a directory */
+                return 1;
+            drop(pc);
+            pc->path[0] = 0;
+            return -1;
+        }
+        err = r.ax;
+        drop(pc);
+        if (err != DOSE_NOFILE && err != DOSE_NOPATH) {
+            pc->path[0] = 0;
+            return -1;
+        }
+        kmemcpy(pc->path, path, sizeof pc->path);
+        return 0;
+    }
+
     fh = dos_open(path, 0, &err);
     if (fh == HFILE_ERROR) {
         drop(pc);
@@ -182,10 +208,6 @@ static int load(pcache *pc, const char *path)
         }
         kmemcpy(pc->path, path, sizeof pc->path);
         return 0;
-    }
-    if (pc->valid && same_path(pc->path, path)) {
-        dos_close(fh);
-        return 1;
     }
     drop(pc);
     size = dos_seek(fh, 0, 2);

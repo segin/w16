@@ -16,8 +16,20 @@
 #include "vga.h"
 
 #define TROWB 132
+#define MAX_GRUN 256
 
 static BYTE tbuf[TROWB];
+
+typedef struct {
+    DWORD goff;                         /* c->base + glyph offset in font */
+    WORD sel, off;                      /* pre-resolved pointer when fast != 0 */
+    short rel;                          /* px - bx0 */
+    short w;                            /* glyph width in pixels */
+    BYTE cols;                          /* (w + 7) >> 3 */
+    BYTE fast;                          /* 1 if entire glyph fits in one 64K seg */
+} GLYPH_RUN;
+
+static GLYPH_RUN grun[MAX_GRUN];
 
 typedef struct {
     LPFONTINFO f;
@@ -143,6 +155,108 @@ static void build_row(FONTCTX *c, LPCSTR s, int n, int x, int r, int bx0, int nb
             }
         }
         px += char_advance(c, ch, w, widths, (WORD)i, dm, &berr);
+    }
+}
+
+/* pre-resolve visible glyphs in chunk [bx0, bx0 + 8 * nbuf); returns count
+   or -1 if more than MAX_GRUN visible glyphs */
+static int prep_chunk(FONTCTX *c, LPCSTR s, int n, int x, int bx0, int nbuf,
+                      LPSHORT widths, LPDRAWMODE dm)
+{
+    int i, ng = 0, w, cols;
+    long px = x, bx1 = (long)bx0 + (long)nbuf * 8;
+    short berr = dm ? dm->BreakErr : 0;
+    BYTE __far *e;
+    DWORD goff;
+    WORD fsel = SELECTOROF(c->f);
+    for (i = 0; i < n; i++) {
+        BYTE ch = (BYTE)s[i];
+        e = char_entry(c, ch);
+        w = *(WORD __far *)e;
+        if (w > 0 && px + w + c->bold > bx0 && px < bx1) {
+            if (ng >= MAX_GRUN)
+                return -1;
+            goff = c->base + *(DWORD __far *)(e + 2);
+            cols = (w + 7) >> 3;
+            grun[ng].goff = goff;
+            grun[ng].rel = (short)(px - bx0);
+            grun[ng].w = (short)w;
+            grun[ng].cols = (BYTE)cols;
+            if ((goff & 0xFFFFL) + (DWORD)cols * c->height <= 0x10000L) {
+                grun[ng].sel = fsel + (WORD)(goff >> 16) * ahincr;
+                grun[ng].off = (WORD)goff;
+                grun[ng].fast = 1;
+            } else {
+                grun[ng].fast = 0;
+            }
+            ng++;
+        }
+        px += char_advance(c, ch, w, widths, (WORD)i, dm, &berr);
+    }
+    return ng;
+}
+
+/* build one scanline r from pre-resolved grun[0..ng-1] into tbuf */
+static void build_row_fast(FONTCTX *c, int ng, int r, int nbuf)
+{
+    int g, k, rel, idx, sh, h = c->height, bold = c->bold;
+    BYTE gb;
+    memsetf(tbuf, 0, (WORD)nbuf);
+    for (g = 0; g < ng; g++) {
+        GLYPH_RUN *gr = &grun[g];
+        int cols = gr->cols, w = gr->w;
+        BYTE __far *gp = gr->fast ? (BYTE __far *)MK_FP(gr->sel, gr->off + (WORD)r) : NULL;
+        rel = gr->rel;
+        for (k = 0; k < cols; k++, rel += 8) {
+            if (gp) {
+                gb = *gp;
+                gp += h;
+            } else {
+                gb = *glyph_byte(c, gr->goff + (DWORD)k * h + r);
+            }
+            if (k == cols - 1 && (w & 7))
+                gb &= (BYTE)(0xFF << (8 - (w & 7)));
+            if (!gb)
+                continue;
+            idx = rel >= 0 ? rel >> 3 : -((-rel + 7) >> 3);
+            sh = rel - idx * 8;
+            if (idx >= 0 && idx < nbuf)
+                tbuf[idx] |= (BYTE)(gb >> sh);
+            if (sh && idx + 1 >= 0 && idx + 1 < nbuf)
+                tbuf[idx + 1] |= (BYTE)(gb << (8 - sh));
+            if (bold) {
+                int sh2 = sh + 1, idx2 = idx;
+                if (sh2 == 8) {
+                    sh2 = 0;
+                    idx2++;
+                }
+                if (idx2 >= 0 && idx2 < nbuf)
+                    tbuf[idx2] |= (BYTE)(gb >> sh2);
+                if (sh2 && idx2 + 1 >= 0 && idx2 + 1 < nbuf)
+                    tbuf[idx2 + 1] |= (BYTE)(gb << (8 - sh2));
+            }
+        }
+    }
+}
+
+/* the text colour where tbuf has 1 bits, within [x0, x1) of line y on screen
+   using VGA Write Mode 3 (already configured by caller) */
+static void put_row_scr(int y, int x0, int x1, int bx0)
+{
+    int i, b0 = x0 >> 3, b1 = (x1 - 1) >> 3, o = b0 - (bx0 >> 3);
+    BYTE lm = (BYTE)(0xFF >> (x0 & 7)), rm = (BYTE)(0xFF << (7 - ((x1 - 1) & 7)));
+    volatile BYTE __far *l = (volatile BYTE __far *)MK_FP(vga_sel, (WORD)y * 80);
+    BYTE m;
+    for (i = b0; i <= b1; i++) {
+        m = tbuf[o + i - b0];
+        if (i == b0)
+            m &= lm;
+        if (i == b1)
+            m &= rm;
+        if (m) {
+            (void)l[i];
+            l[i] = m;
+        }
     }
 }
 
@@ -279,16 +393,32 @@ static DWORD text_out(LPVOID lpDev, short x, short y, LPRECT clip, LPCSTR s, sho
     if (has_text) {
         if (dm->bkMode == OPAQUE)
             fill_solid(&D, box.left, box.top, box.right, box.bottom, 0xF0, bg, bg != 0);
+        if (D.screen) {
+            outw(0x3C4, 0x0F02);                        /* map mask: all 4 planes */
+            outw(0x3CE, (WORD)((fg & 15) << 8) | 0x00); /* set/reset: fg */
+            outw(0x3CE, 0x0003);                        /* rotate 0, replace */
+            outw(0x3CE, 0x0305);                        /* write mode 3, read mode 0 */
+            outw(0x3CE, 0xFF08);                        /* bit mask: all */
+        }
         for (k = box.left; k < box.right; k += (TROWB - 1) * 8) {
-            int x1 = k + (TROWB - 1) * 8, bx0 = k & ~7, nbuf;
+            int x1 = k + (TROWB - 1) * 8, bx0 = k & ~7, nbuf, ng;
             if (x1 > box.right)
                 x1 = box.right;
             nbuf = ((x1 - 1) >> 3) - (bx0 >> 3) + 1;
+            ng = prep_chunk(&c, s, n, x, bx0, nbuf, widths, dm);
             for (r = box.top; r < box.bottom; r++) {
-                build_row(&c, s, n, x, r - y, bx0, nbuf, widths, dm);
-                put_row(&D, r, k, x1, bx0, fg);
+                if (ng >= 0)
+                    build_row_fast(&c, ng, r - y, nbuf);
+                else
+                    build_row(&c, s, n, x, r - y, bx0, nbuf, widths, dm);
+                if (D.screen)
+                    put_row_scr(r, k, x1, bx0);
+                else
+                    put_row(&D, r, k, x1, bx0, fg);
             }
         }
+        if (D.screen)
+            scr_reset();
     }
     if (D.screen)
         scr_end();
