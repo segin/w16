@@ -24,6 +24,11 @@
  *   C name args -> AX [DX] popped=       a call to the driver
  *   ~C ...                               the raw record
  *   R kind w1 w2 w3 w4 w5                a real-mode record (KB4)
+ *   P n cx cy                            a bitmap on the clipboard (Print
+ *                                        Screen: the whole screen, Alt+Print
+ *                                        Screen: the active window, KB2's
+ *                                        400 x 300), as the timer found it
+ *                                        (then emptied: the next is new)
  *   S xx xx ...                          the bytes the keyboard controller
  *                                        gave (port 60h), as an INT 9
  *                                        handler of KB2's in front of the
@@ -77,6 +82,25 @@ static WORD FAR *msgs;          /* 4 words each: msg, wParam, lParam */
 static WORD nmsg, maxmsg = 4000;
 static WORD ticks;
 static int done;
+static WORD nsnap;
+
+static void put(const char FAR *s);
+
+/* a snapshot on the clipboard (VK_SNAPSHOT): its size, then empty it */
+static void snap_poll(HWND hwnd)
+{
+    HBITMAP hb;
+    BITMAP bm;
+    if (!IsClipboardFormatAvailable(CF_BITMAP) || !OpenClipboard(hwnd))
+        return;
+    hb = (HBITMAP)GetClipboardData(CF_BITMAP);
+    if (hb && GetObject(hb, sizeof bm, &bm)) {
+        wsprintf(line, "P %u %d %d\r\n", ++nsnap, bm.bmWidth, bm.bmHeight);
+        put(line);
+    }
+    EmptyClipboard();
+    CloseClipboard();
+}
 
 static void flush(void)
 {
@@ -113,6 +137,7 @@ LRESULT FAR PASCAL __export __loadds kb2proc(HWND hwnd, UINT msg, WPARAM wp, LPA
         return 0;                       /* no menus, no task switching */
     case WM_TIMER:
         ticks++;
+        snap_poll(hwnd);
         return 0;
     case WM_SYSCOMMAND:
         return 0;

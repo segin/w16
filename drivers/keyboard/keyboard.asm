@@ -1602,14 +1602,15 @@ key:
         cmp bl, SC_SYSREQ
         jne .ignore
         ; Alt+Print Screen (the enhanced keyboard's 54h): VK_SNAPSHOT, BX
-        ; 1 (the active window; DDK, "Keyboard-Interrupt Handler").
-        ; UNVERIFIED: DOSBox under the harness sends no Print Screen.
+        ; 0: USER copies the active window (Windows 3.1's USER with this
+        ; driver: KB2's 400 x 300 window on the clipboard; BX 1 gave the
+        ; whole screen. Boot-test case kbdsnap, in DOSBox-X)
         test byte [es:KB_FLAG], F_CTRL
         jnz .sr
         test byte [es:KB_FLAG], F_ALT
         jz .sr
         mov al, VK_SNAPSHOT
-        mov bx, 1
+        xor bx, bx
         jmp event
 .sr:
         ; Ctrl+Alt+SysReq: the debugger (EnableKBSysReq), on the make
@@ -1652,7 +1653,8 @@ key:
 .nofake:
         cmp al, VK_SNAPSHOT
         jne .nosnap
-        xor bx, bx                      ; the whole screen (DDK; UNVERIFIED)
+        mov bx, 1                       ; the whole screen (kbdsnap: 3.1's
+                                        ; USER; 3.1's driver's key-up 01)
         jmp event
 .nosnap:
         cmp al, VK_CONTROL

@@ -302,3 +302,56 @@ void clip_window_destroyed(HWND h)
     if (h == hwndClipViewer)
         hwndClipViewer = 0;
 }
+
+/* Print Screen (VK_SNAPSHOT, at task time as the key is taken): a copy of
+   the whole screen, or with window TRUE of the active window (frame and
+   caption: GetWindowRect's size), put on the clipboard as CF_BITMAP in
+   place of what was there (Windows 3.1, boot-test case kbdsnap: 640 x 480,
+   KB2's 400 x 300 window). Nothing happens while the clipboard is open.
+   UNVERIFIED: the clipboard's owner afterwards (none here). */
+void clip_snapshot(BOOL window)
+{
+    HWND h = 0;
+    HDC hdc, mem;
+    HBITMAP hb, ob;
+    RECT r;
+    int cx, cy;
+    if (clip_is_open)
+        return;
+    if (window) {
+        if (!hwndActive || !valid_wnd(hwndActive))
+            return;
+        h = top_level(hwndActive);
+        GetWindowRect(h, &r);
+        cx = r.right - r.left;
+        cy = r.bottom - r.top;
+        hdc = GetWindowDC(h);
+    } else {
+        cx = sysmet[SM_CXSCREEN];
+        cy = sysmet[SM_CYSCREEN];
+        hdc = GetDC(0);
+    }
+    if (!hdc)
+        return;
+    hb = cx > 0 && cy > 0 ? CreateCompatibleBitmap(hdc, cx, cy) : 0;
+    mem = hb ? CreateCompatibleDC(hdc) : 0;
+    if (mem) {
+        ob = SelectObject(mem, hb);
+        BitBlt(mem, 0, 0, cx, cy, hdc, 0, 0, SRCCOPY);
+        SelectObject(mem, ob);
+        DeleteDC(mem);
+    }
+    ReleaseDC(h, hdc);
+    if (!mem) {
+        if (hb)
+            DeleteObject(hb);
+        return;
+    }
+    if (!OpenClipboard(0)) {
+        DeleteObject(hb);
+        return;
+    }
+    EmptyClipboard();
+    SetClipboardData(CF_BITMAP, hb);
+    CloseClipboard();
+}

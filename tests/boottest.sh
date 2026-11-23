@@ -658,6 +658,9 @@
 #   kbdwoados  the woados script with w16's KEYBOARD.DRV on Microsoft's
 #              stack (Disable and Enable around the DOS program): the
 #              screens as all-Microsoft's up to the cursor
+#   kbdsnap    Print Screen and Alt+Print Screen with w16's KEYBOARD.DRV
+#              under KB2, on Microsoft's USER and on w16's: the clipboard's
+#              bitmap 640x480 (the screen), then 400x300 (KB2's window)
 #   sysdrv     w16's SYSTEM.DRV (drivers/system) on Microsoft's stack under
 #              real input: kbtype, tabs, alttab, helpmenus, dragoff,
 #              pmkeys, every screen against Microsoft's SYSTEM.DRV: 0
@@ -939,7 +942,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload vsd bigmem filecdr}
+cases=${*:-kernel dosx dosxaudit kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload vsd bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -5376,6 +5379,33 @@ serial1=nullmodem server:127.0.0.1 port:$port" "$root/tests/inputrun.sh" "$@" -i
         ls "$out/kbdwrite-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
         if [ "$r" = ok ]; then echo "ok   kbdwrite: 0 pixels (Write with w16's KEYBOARD.DRV)"
         else echo "FAIL kbdwrite: $r ($out)"; fails=$((fails + 1)); fi ;;
+    kbdsnap)
+        # Print Screen and Alt+Print Screen with w16's KEYBOARD.DRV (KB2,
+        # tests/apps/kb2.c, as the shell, its 400 x 300 window active;
+        # tests/scripts/input/kbsnap.txt): the clipboard's CF_BITMAP is the
+        # whole screen (640 x 480), then the active window (400 x 300), as
+        # on Windows 3.1, and KB2 gets VK_SNAPSHOT's key-ups only, as
+        # there. On Microsoft's KRNL286, DOSX and USER (ms: all Microsoft's,
+        # which shows the harness sent the keys), then with w16's USER and
+        # GDI. In DOSBox-X (-p 386): DOSBox 0.74 sends no
+        # Print Screen scan codes
+        scr=$root/tests/scripts/input/kbsnap.txt
+        want='P 1 640 480|P 2 400 300'
+        r=ok
+        for k in ms drv usr; do
+            set -- -f "$root/build/dos/KB2.EXE=KB2.EXE" -i 'boot:shell=C:\KB2.EXE' -i w16:kb2secs=60
+            [ $k = ms ] || set -- "$@" -f "$root/build/dos/KEYBOARD.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV"
+            [ $k = usr ] && set -- "$@" -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE"
+            "$root/tests/inputrun.sh" -b 30 -t 120 "$scr" "$out/kbdsnap-$k" -r -p 386 "$@" > "$out/kbdsnap-$k.txt" 2>&1 || true
+            # the bitmaps, and the VK_SNAPSHOT messages KB2 got (3.1: the
+            # key-ups only, scan code 01) as all-Microsoft's
+            got=$(tr -d '\r' < "$out/kbdsnap-$k/work/c/WINDOWS/TK.LOG" 2>/dev/null | grep -E '^(P |M 010. 002C )' | paste -sd'|' -)
+            [ $k = ms ] && want="$want|$(echo "$got" | tr '|' '\n' | grep '^M' | paste -sd'|' -)"
+            echo "kbdsnap $k: ${got:-no bitmap}" >> "$out/kbdsnap.log"
+            [ "$r" = ok ] && [ "$got" != "$want" ] && r="$k: ${got:-no bitmap}, not $want"
+        done
+        if [ "$r" = ok ]; then echo "ok   kbdsnap: Print Screen 640x480, Alt+Print Screen 400x300 (w16's KEYBOARD.DRV, Microsoft's and w16's USER)"
+        else echo "FAIL kbdsnap: $r ($out/kbdsnap.log)"; fails=$((fails + 1)); fi ;;
     kbdwoados)
         # the MS-DOS Prompt (the woados case's script: KEYBOARD.Disable and
         # Enable around the DOS program, the BIOS's keyboard in between)

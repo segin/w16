@@ -989,6 +989,16 @@ BOOL input_message(HQUEUE hq, HWND hf, UINT lo, UINT hi, BOOL remove, MSG __far 
                     qkeystate[vk] |= 0x80;
                 }
             }
+            /* Print Screen: a copy of the screen on the clipboard;
+               KEYBOARD's BX (the scan-code byte here) 1 the whole screen,
+               0 the active window (Alt+Print Screen). Only the key-up is
+               delivered (Windows 3.1's USER and KEYBOARD.DRV, KB2 in
+               boot-test case kbdsnap: 640 x 480, then 400 x 300; no
+               WM_KEYDOWN or WM_SYSKEYDOWN for VK_SNAPSHOT) */
+            if ((e.msg == WM_KEYDOWN || e.msg == WM_SYSKEYDOWN) && (BYTE)e.wParam == VK_SNAPSHOT) {
+                clip_snapshot(((e.lParam >> 16) & 0xFF) == 0);
+                continue;
+            }
             /* Ctrl+Esc: the active window gets WM_SYSCOMMAND SC_TASKLIST,
                whatever has the focus (3.1: from Character Map, a dialog,
                and from Notepad's text the Task List came up - probe TM1;

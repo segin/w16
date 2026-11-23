@@ -308,6 +308,7 @@ HWND create_window(DWORD exstyle, LPCSTR cls, LPCSTR title, DWORD style,
 BOOL destroy_window(HWND h);
 void destroy_abandoned(HWND h);   /* its task ended inside its destruction */
 void clip_window_destroyed(HWND h);     /* clip.c */
+void clip_snapshot(BOOL window);        /* clip.c: Print Screen */
 void savebits_invalidated(HWND by, HRGN rgn);     /* savebits.c */
 void savebits_forget_all(void);
 BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags);
