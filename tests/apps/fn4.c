@@ -494,6 +494,20 @@ static int fot_section(void)
     return n;
 }
 
+/* take w16's fonts out again (left in, 3.1 did not come back from the
+   end of the session) */
+static void remove_ours(void)
+{
+    char fot[160];
+    int i;
+    for (i = 0; ours[i].face; i++) {
+        cat(fot, sysdir, "\\", ours[i].file);
+        lstrcat(fot, ".FOT");
+        if (exists(fot))
+            RemoveFontResource(fot);
+    }
+}
+
 static int CALLBACK fam_cb(const LOGFONT FAR *lf, const TEXTMETRIC FAR *tm, int type, LPARAM l)
 {
     const ENUMLOGFONT FAR *e = (const ENUMLOGFONT FAR *)lf;
@@ -648,6 +662,7 @@ int __cdecl tmain(void)
             page = *tail - '1';
         out("FN4 show\r\n");
         i = show(page);
+        remove_ours();
         ReleaseDC(NULL, hdc);
         return i;
     }
@@ -674,6 +689,8 @@ int __cdecl tmain(void)
                 dump_face(ours[i].face, ours[i].wt, ours[i].it, !exists("C:\\FN4QUICK"));
     }
     families();
+    out("FAMILIES done\r\n");
+    remove_ours();
 
     ReleaseDC(NULL, hdc);
     out("FN4 done\r\n");

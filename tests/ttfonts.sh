@@ -51,8 +51,8 @@ for f in W16SANS W16SANBD W16SANIT W16SANBI W16SERIF W16SERBD W16SERIT W16SERBI 
     get="$get WINDOWS/SYSTEM/$f.FOT FOTB/$f.FOB FOTC/$f.FOC"
 done
 : > "$tmp/FN4NOREF"
-# one session per family (3.1 did not get through all twelve faces in one:
-# it hung near the end of the twelfth); the first also brings the .FOTs
+# one session per family, at once (faster; FN4SETn picks the family);
+# the first also brings the .FOTs
 for n in 1 2 3; do
     : > "$tmp/FN4SET$n"
     o=$out; [ $n = 1 ] || o=$tmp/out$n

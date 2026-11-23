@@ -59,10 +59,7 @@ VERSION = '1.00'
 CREATED = 2082844800 + 1795305600
 
 CC0_URL = 'https://creativecommons.org/publicdomain/zero/1.0/'
-LICENSE = ('To the extent possible under law, the w16 contributors have waived all '
-           'copyright and related or neighboring rights to this font (CC0 1.0 '
-           'Universal public domain dedication). It may be used, modified and '
-           'distributed for any purpose without permission.')
+LICENSE = 'CC0 1.0 Universal public domain dedication: no rights reserved.'
 
 # base name, family, style, kind, bold, italic, reference face
 FACES = [
@@ -317,7 +314,7 @@ class Face:
         if not s.slant:
             sh = design.draw(s, ch, L, R)
             sh = G.union(sh)
-            return G.fit(sh)
+            return G.fit(self.clamp(sh, ch, L, R))
         # italic: find the upright ink box whose slanted ink is L..R
         w = R - L
         L0, R0 = L, R
@@ -335,7 +332,33 @@ class Face:
         sh = G.shear(G.union(design.draw(s, ch, L0, R0)), s.slant)
         x0 = G.bbox(sh)[0]
         sh = G.move(sh, L - x0, 0)
-        return G.fit(sh)
+        return G.fit(self.clamp(sh, ch, L, R))
+
+    def clamp(self, sh, ch, L, R):
+        """keep the ink within the reference's (L..R; an accented letter:
+        its own reference's, which counts the accent) by narrowing the
+        drawing where a serif or an accent runs over: the font's box, and
+        so tmMaxCharWidth, stay 3.1's"""
+        if ch in design.COMPOSED or ch == '\u0131':
+            L, R = self.inkbox_own(ch)
+        o = self.ref['otm']
+        L, R = max(L, o['box.l'] - 1), min(R, o['box.r'])   # (ABC at 256 is
+        x0, _, x1, _ = G.bbox(sh)                            # 8 units coarse)
+        n0, n1 = max(x0, L), min(x1, R)
+        if (n0, n1) == (x0, x1) or x1 - x0 < 1:
+            return sh
+        k = (n1 - n0) / (x1 - x0)
+        return G.xform(sh, lambda x, y: (n0 + (x - x0) * k, y))
+
+    def inkbox_own(self, ch):
+        """the character's own ink box from ABC (not its base letter's)"""
+        code = self.uni2ansi.get(ord(ch))
+        if code is None:
+            base = design.COMPOSED.get(ch, ('i',))[0]
+            return self.inkbox(base)
+        a, b, c = self.ref['abc'][256][code]
+        k = self.em / 256.0
+        return a * k, (a + b) * k
 
     def build(self):
         f = w16ttf.Font()
@@ -388,7 +411,8 @@ class Face:
         f.underline = (otm['ulpos'] - 1, otm['ulsize'])
         # tmMaxCharWidth (and the .FOT's dfMaxWidth) come from head's box:
         # it is at least the reference's (otmrcFontBox)
-        f.bbox_min = (otm['box.l'], otm['box.b'], otm['box.r'], otm['box.t'])
+        # (its negative sides reported one nearer zero, as above)
+        f.bbox_min = (otm['box.l'] - 1, otm['box.b'] - 1, otm['box.r'], otm['box.t'])
         # per-size ascent and descent as 3.1 reports them (VDMX)
         f.vdmx = {p: (t['a'], -t['d']) for p, t in r['tmsize'].items()}
         f.lowest_ppem = otm['minppem']
@@ -407,13 +431,11 @@ class Face:
         full = self.family if self.style == 'Regular' else '%s %s' % (self.family, self.style)
         ps = self.family.replace(' ', '') + ('' if self.style == 'Regular' else '-' + self.style.replace(' ', ''))
         f.names = {
-            0: 'No rights reserved. %s is dedicated to the public domain under CC0 1.0 by the w16 contributors.' % full,
+            0: 'Public domain (CC0 1.0). The w16 contributors, 2026.',
             1: self.family, 2: self.style,
             3: 'w16: %s: %s' % (full, VERSION),
             4: full, 5: 'Version %s' % VERSION, 6: ps,
             8: 'The w16 project', 9: 'The w16 contributors',
-            10: ('%s: an original design by the w16 project, metric-compatible with '
-                 'Windows 3.1\'s TrueType core fonts.' % full),
             13: LICENSE, 14: CC0_URL,
         }
         # kerning: GetKerningPairs gives ANSI codes

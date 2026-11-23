@@ -334,14 +334,17 @@ class Font:
         return out
 
     def _vdmx(self):
-        """version 0, one ratio (0:0:0, every aspect ratio), one group"""
+        """version 0: one group, for the 1:1 aspect ratio with the Windows
+        ANSI character set (bCharSet 1; Windows 3.1 ignores the table
+        with bCharSet 0 and a 0:0:0 ratio), and the same group again for
+        0:0:0 (any ratio)"""
         recs = sorted(self.vdmx.items())
         group = struct.pack('>HBB', len(recs), recs[0][0], recs[-1][0])
         for ppem, (ymax, ymin) in recs:
             group += struct.pack('>Hhh', ppem, ymax, ymin)
-        head = struct.pack('>HHH', 0, 1, 1) + struct.pack('>BBBB', 0, 0, 0, 0)
-        off = len(head) + 2
-        return head + struct.pack('>H', off) + group
+        head = struct.pack('>HHH', 0, 1, 2) + struct.pack('>BBBB', 1, 1, 1, 1) + struct.pack('>BBBB', 1, 0, 0, 0)
+        off = len(head) + 4
+        return head + struct.pack('>HH', off, off) + group
 
     def build(self):
         glyf = b''
