@@ -1,0 +1,12 @@
+# wlink directives for TTVIEW.EXE (tests/apps/ttview.c), a Windows 2.x
+# program: as Program Manager's 2.x build (shell/progman/progman2.lnk),
+# fixed segments, since real-mode Windows moves and discards them
+format windows
+option quiet
+option start=start
+option stack=8k
+option heapsize=4k
+option description 'w16 TrueType viewer (TTVIEW)'
+segment class 'CODE' fixed preload
+segment class 'DATA' fixed preload
+library windows.lib
