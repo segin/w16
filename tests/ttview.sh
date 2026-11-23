@@ -91,14 +91,18 @@ for sys in "$@"; do
             slow=$([ $sys = 286 ] && echo 1 || echo)
             rm -rf "$work/in"
             # the script, its last wait long enough for a slow render (the
-            # screen holds still while TTVIEW renders): on the 80286, 300 s
+            # screen holds still while TTVIEW renders): on the 80286, 300 s.
+            # /T: instead of the last settle and shot, until TTVIEW has
+            # ended Windows (it renders the page twice, hinted and not, and
+            # captures the screen itself; a settle could outlast Windows)
             wait=$([ -n "$slow" ] && echo '1200 300' || echo '120 3')
-            sed "s/^settle 120 3$/settle $wait/" \
-                "$root/tests/scripts/input/ttview.txt" > "$work/ttview.txt"
-            # /T: then until TTVIEW has ended Windows (it renders the page
-            # twice, hinted and not: the screen can hold still longer than
-            # the settle's wait while it does)
-            [ $mode = test ] && echo "waitexit $([ -n "$slow" ] && echo 1400 || echo 160)" >> "$work/ttview.txt"
+            if [ $mode = test ]; then
+                sed '/^settle 120 3$/,$d' "$root/tests/scripts/input/ttview.txt" > "$work/ttview.txt"
+                echo "waitexit $([ -n "$slow" ] && echo 1400 || echo 160)" >> "$work/ttview.txt"
+            else
+                sed "s/^settle 120 3$/settle $wait/" \
+                    "$root/tests/scripts/input/ttview.txt" > "$work/ttview.txt"
+            fi
             "$root/tests/inputrun.sh" -s -b "$([ -n "$slow" ] && echo 900 || echo 90)" \
                 -t "${TTV_TIMEOUT:-$([ -n "$slow" ] && echo 1500 || echo 180)}" \
                 "$work/ttview.txt" "$work/in" "$@" \
