@@ -245,6 +245,32 @@ u32 page_alloc(void)
     return phys;
 }
 
+/* n physically contiguous pages, zeroed, from the window's never-used end:
+ * the first a multiple of align pages (0 or 1: any), all of them below
+ * max_phys (0: anywhere); the pages skipped for the alignment go to the
+ * free list. The first page's physical address, or 0 */
+u32 page_alloc_run(u32 n, u32 align, u32 max_phys)
+{
+    u32 first, skip;
+    if (!n) return 0;
+    first = info->xms_phys + next_page;
+    skip = align > 1 ? ((align * 4096 - first % (align * 4096)) % (align * 4096)) : 0;
+    if (n + skip / 4096 > (info->xms_size - next_page) / 4096) return 0;
+    if (max_phys && first + skip + n * 4096 > max_phys) return 0;
+    while (skip) {
+        u32 pg = info->xms_phys + next_page;
+        next_page += 4096;
+        page_free(pg);
+        nfree_pages--;                  /* (counted free already) */
+        skip -= 4096;
+    }
+    first = info->xms_phys + next_page;
+    next_page += n * 4096;
+    nfree_pages -= n;
+    memset((void *)phys_to_lin(first), 0, n * 4096);
+    return first;
+}
+
 void page_free(u32 phys)
 {
     *(u32 *)phys_to_lin(phys) = free_list;
@@ -322,6 +348,16 @@ int lin_user_ok(u32 lin, u32 len, int write)
         if (a >= (end & ~0xFFFu)) break;
     }
     return 1;
+}
+
+/* lin_to_phys, ~0 when the page is not present (physical page 0 is) */
+u32 lin_to_phys_x(u32 lin)
+{
+    u32 pde = pdir()[lin >> 22], pte;
+    if (!(pde & 1)) return ~0u;
+    pte = ((u32 *)phys_to_lin(pde & ~0xFFFu))[(lin >> 12) & 0x3FF];
+    if (!(pte & 1)) return ~0u;
+    return (pte & ~0xFFFu) | (lin & 0xFFF);
 }
 
 u32 lin_to_phys(u32 lin)

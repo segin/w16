@@ -102,6 +102,11 @@ struct w386_info {
     w_u16 hma_used;
     w_u16 dos_high;     /* A20 on when Windows started (XMS 07h): the VMs' A20 stays on */
     w_u32 ems_size;
+    /* VDMAD (win386/vxd/vdmad.c): SYSTEM.INI [386Enh] DMABufferSize in
+       KB, and with DMABufferIn1MB the buffer the loader took in
+       conventional memory (a segment, 0: none; dma_buf_kb of it) */
+    w_u16 dma_buf_kb;
+    w_u16 dma_buf_seg;
 };
 #pragma pack()
 

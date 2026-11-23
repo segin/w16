@@ -79,6 +79,37 @@ failed instead). ARCHITECTURE.md 24.4 has the numbers.
 - SNDBLST2's DRV_ENABLE answers 0 although it works; SB16.DRV does the
   same.
 
+## 386 Enhanced mode (2026-11-23, run name w16-sb16enh)
+
+Order from the user: VDMAD first, then the Sound Blaster VxD and
+SB16.DRV in Enhanced mode on top of it.
+
+- [x] VDMAD (win386/vxd/vdmad.c, ARCHITECTURE.md 12.8 VDMAD): probed
+  against Windows 3.1 with VXM.386 and SBD.COM (tests/vdmadprobe.sh),
+  boot-test case vdmad. Two side changes it needed: DOS VMs' memory
+  physically contiguous (vm.c), and VPICD's local IRQs (an unvirtualised
+  IRQ masked at start belongs to the first VM that unmasks it).
+- [ ] The Sound Blaster VxD. What Windows 3.1 ships for its Sound Blaster
+  drivers: SETUP.INF's [Installable.Drivers] gives sndblst.drv and
+  sndblst2.drv the VxD vsbd.386 (`device=vsbd.386` in [386Enh]); Ad Lib
+  (msadlib.drv) gets vadlibd.386. VSBD.386's format facts (readexe, no
+  code read): DDB "VSBD", device 0445h, 3.00, init order Undefined
+  (80000000h), V86 and PM API (one procedure for both), 2 services. Its
+  dynamic links: VPICD 01h-04h, 08h-0Ah (Virtualize_IRQ, Set/Clear_
+  Int_Request, Phys_EOI, Physically_Mask/Unmask, Set_Auto_Masking), VMM
+  Install_IO_Handler and Install_Mult_IO_Handlers, Enable/Disable_Local_
+  Trapping, Simulate_IO, Allocate_Device_CB_Area, the profile services
+  (ABh, AFh, B1h), SHELL 0004h (SHELL_Message: a message box, likely its
+  contention question; not SHELL_Resolve_Contention, 0001h), and device
+  0446h (VADLIBD) services 0, 3, 4. No VDMAD link at all: the DMA is
+  VDMAD's default handling. Next: observe SNDBLST2 + VSBD under 3.1 in
+  Enhanced mode black-box (which VM gets the IRQ, what the PM API is
+  called with: a VxD of w16's with VSBD's ID in its place logs the calls),
+  then design w16's VxD.
+- [ ] SB16.DRV in Enhanced mode (remove the WF_ENHANCED check in enable()
+  once the VxD is there; merge master first: the drivers audit changed
+  sb16.c, wave.c, midi.c).
+
 ## Left, and where to start
 
 - FM: an OPL3 MIDI synthesiser device (modMessage device 1,

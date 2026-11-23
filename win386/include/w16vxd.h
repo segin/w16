@@ -123,6 +123,23 @@ struct reboot_link {
     void (*close)(vu32 vm);
 };
 
+/* The VMM and w16's VDMAD: the DDB's reference data points at a struct
+ * vdmad_link, which the VMM fills in: what the DDK's VDMAD gets from the
+ * VMM's memory services (a linear address's physical page, physically
+ * contiguous pages for its buffer) and the SYSTEM.INI settings the loader
+ * read ([386Enh] DMABufferSize, DMABufferIn1MB: the loader's buffer) */
+#define VDMAD_LINK_MAGIC 0x4B4E4C44u        /* "DLNK" */
+struct vdmad_link {
+    vu32 magic;
+    /* the physical address of ring-0 linear address lin; ~0 if not present */
+    vu32 (*lin_to_phys)(vu32 lin);
+    /* n contiguous pages, a multiple of align pages, below max_phys (0:
+     * anywhere): their ring-0 linear address (phys in *phys), or 0 */
+    vu32 (*alloc_run)(vu32 n, vu32 align, vu32 max_phys, vu32 *phys);
+    vu32 buf_kb;                            /* DMABufferSize (16 when absent) */
+    vu32 buf_conv;                          /* the conventional buffer (physical; 0: none) */
+};
+
 /* the VM control block's fields the devices read (the DDK's CB_VM_Status,
  * CB_High_Linear, CB_Client_Pointer, CB_VMID) */
 #define CB_HIGH_LINEAR(vm)  (*(vu32 *)((vm) + 4))
