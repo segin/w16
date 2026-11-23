@@ -464,9 +464,6 @@ void __cdecl vkd_service(struct vregs *r)
     r->eflags |= VF_CF;
 }
 
-#define SYS_CRITICAL_INIT 0x00
-#define DESTROY_VM        0x0C
-#define SET_DEVICE_FOCUS  0x0F
 #define VKD_ID            0x000D
 
 void __cdecl vkd_control(struct vregs *r)

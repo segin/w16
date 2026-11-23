@@ -40,15 +40,6 @@ extern struct ddb VMM_DDB;
 u32 __cdecl vxd_control(u32 proc, u32 msg, u32 ebx, u32 esi, u32 edx, u32 edi, u32 ebp);
 extern u8 svc_common[];
 
-#define SYS_CRITICAL_INIT   0x00
-#define DEVICE_INIT         0x01
-#define INIT_COMPLETE       0x02
-#define SYS_VM_INIT         0x03
-#define SYS_VM_TERMINATE    0x04
-#define SYSTEM_EXIT         0x05
-#define SYS_CRITICAL_EXIT   0x06
-#define BEGIN_PM_APP        0x15
-#define END_PM_APP          0x16
 
 #define VMM_SERVICES        242     /* Windows 3.1's VMM (docs/win386-vxds.md) */
 

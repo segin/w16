@@ -11,6 +11,31 @@ typedef unsigned char  vu8;
 typedef unsigned short vu16;
 typedef unsigned int   vu32;
 
+/* the VMM's control messages (EAX of a device's control procedure; the
+ * DDK's Virtual Device Adaptation Guide), shared by the VMM and every
+ * w16 VxD */
+#define SYS_CRITICAL_INIT   0x00
+#define DEVICE_INIT         0x01
+#define INIT_COMPLETE       0x02
+#define SYS_VM_INIT         0x03
+#define SYS_VM_TERMINATE    0x04
+#define SYSTEM_EXIT         0x05
+#define SYS_CRITICAL_EXIT   0x06
+#define CREATE_VM           0x07
+#define VM_CRITICAL_INIT    0x08
+#define VM_INIT             0x09
+#define VM_TERMINATE        0x0A
+#define VM_NOT_EXECUTEABLE  0x0B
+#define DESTROY_VM          0x0C
+#define VM_SUSPEND          0x0D
+#define VM_RESUME           0x0E
+#define SET_DEVICE_FOCUS    0x0F
+#define BEGIN_MESSAGE_MODE  0x10
+#define END_MESSAGE_MODE    0x11
+#define BEGIN_PM_APP        0x15
+#define END_PM_APP          0x16
+#define CLOSE_VM_NOTIFY     0x19
+
 /* registers as an entry point got them (PUSHAD order, then the flags and
  * one word of the entry's own: a service number or a C function) */
 struct vregs {

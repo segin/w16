@@ -184,9 +184,6 @@ void __cdecl vmpoll_service(struct vregs *r)
     }
 }
 
-#define SYS_CRITICAL_INIT 0x00
-#define DEVICE_INIT       0x01
-#define CREATE_VM         0x07
 
 void __cdecl vmpoll_control(struct vregs *r)
 {

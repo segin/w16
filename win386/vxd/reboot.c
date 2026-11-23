@@ -546,8 +546,6 @@ void __cdecl reboot_time_out(struct vregs *r)
     cad_state = 0;
 }
 
-#define SYS_CRITICAL_INIT 0x00
-#define DEVICE_INIT       0x01
 
 void __cdecl reboot_control(struct vregs *r)
 {
