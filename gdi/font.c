@@ -21,7 +21,9 @@
  * font is a candidate at the integer scale its size gives, and a font
  * that has to be scaled is realized as a scaled copy of its own
  * (font_scale), which is what the driver gets (ARCHITECTURE.md 11.10).
- * TrueType and vector fonts are not mapped to yet. w16 ships no fonts:
+ * TrueType fonts (.FOT) are ttfont.c's: candidates at exactly the size
+ * asked, realized as sizes of their own (ARCHITECTURE.md 11.12); vector
+ * fonts are not mapped to yet. w16 ships no fonts:
  * whatever .FON files the installation has are used.
  */
 #include "gdi.h"
@@ -123,6 +125,10 @@ static int font_add_module(HINSTANCE h, LPCSTR file)
         f->pitch = e[90];
         f->type = *(short __far *)(e + 66);
         f->il = *(short __far *)(e + 76);
+        f->first = e[95];
+        f->last = e[96];
+        f->dflt = e[97];
+        f->brk = e[98];
         dev = (const char __far *)e + 0x71;
         face = dev;
         while (*face)
@@ -133,6 +139,9 @@ static int font_add_module(HINSTANCE h, LPCSTR file)
         for (k = 0; file && k < 12 && file[k]; k++)
             f->file[k] = file[k];           /* (file: base_name's) */
         f->sx = f->sy = 1;
+        /* a .FOT: TrueType (ttfont.c) */
+        tt_dirent(xf, h);
+        f = xptr(xf);
         /* at the table's end: the mapper takes the first of equal
            candidates, in the order the fonts were added (GD11's test
            fonts on 3.1, ARCHITECTURE.md 11.10) */
@@ -174,6 +183,9 @@ void font_init(void)
 {
     char buf[80];
     XP x;
+    /* WIN.INI [TrueType] TTEnable (the Fonts applet's TrueType
+       Options); UNVERIFIED: what 3.1 does with .FOT files then */
+    tt_enabled = GetProfileInt("TrueType", "TTEnable", 1) != 0;
     font_load_boot("FONTS.FON");
     GetPrivateProfileString("boot", "fixedfon.fon", "", buf, sizeof buf, "SYSTEM.INI");
     if (buf[0]) {
@@ -312,6 +324,8 @@ static void font_free(XP xf)
     XP x;
     scaled_drop(0, xf);                 /* (none a DC has: font_in_use) */
     f = xptr(xf);
+    tt_free(f);
+    f = xptr(xf);
     h = f->hMod;
     unload = f->unload;
     if (f->hRes) {
@@ -444,25 +458,78 @@ static int xfor(int w, int aw)
     return bx;
 }
 
+/* penalty's notes for font_map: the font is a raster font of exactly
+   the size asked, in a character set the request takes; a TrueType font
+   below 10 pixels per em */
+static BYTE exact, tt_small;
+
 static long penalty(LPFONT f, const LOGFONT __far *lf, const char *face, int h, int *px, int *py)
 {
     long p = 0, d;
     int ref, want, k, x, w = lf->lfWidth < 0 ? -lf->lfWidth : lf->lfWidth;
     *px = *py = 1;
-    if (f->type & 4 || !f->height)       /* TrueType (.FOT): not rendered yet */
+    exact = tt_small = 0;
+    if (f->tt && !tt_usable(f))
+        return 0x7FFFFFFFL;             /* TrueType off, or its .TTF not found */
+    if (!f->tt && (f->type & 4 || !f->height))
         return 0x7FFFFFFFL;
-    if (f->type & 1)                     /* vector fonts: not drawn yet */
+    if (!f->tt && (f->type & 1))         /* vector fonts: not drawn yet */
         p += 20000;
-    if (lf->lfCharSet != f->charset && !(lf->lfCharSet == 1))
+    /* GD11 on 3.1, TrueType: a face asked of a TrueType font is taken
+       in any character set ("Symbol" asked in ANSI or OEM is Symbol),
+       and a TrueType font of another face costs less than a raster font
+       of the face but another family scaled far ("System" asked as
+       FF_ROMAN, -44, is Times New Roman: System's would cost 9000 + 926)
+       yet more than one scaled less ("Small Fonts" -44 FF_ROMAN is its
+       8-pixel font x 5, 9000 + 846; "Courier" -44 FF_ROMAN its 20 x 2,
+       9000 + 741), and one of the face asked 200 wide ("Courier" 16 x
+       200 is Courier's 16-pixel font, 9925 here, a tie the earlier entry
+       wins; "System" x 200 is Arial: System's would cost 10425): 9924,
+       with TrueType's 1 below 9925 in all. One request is left
+       ("Small Fonts" 39 FF_ROMAN: 3.1 keeps Small Fonts at 9996): the
+       scaling terms are a fit (ARCHITECTURE.md 11.10) */
+    if (lf->lfCharSet != f->charset && !(lf->lfCharSet == 1) &&
+        !(f->tt && face[0] && !str_icmp(face, f->face)))
         p += 65000L;
     if (face[0] && str_icmp(face, f->face))
-        p += 10000;
+        p += f->tt ? 9924 : 10000;
     if ((lf->lfPitchAndFamily & 0xF0) && (lf->lfPitchAndFamily & 0xF0) != (f->pitch & 0xF0))
         p += 9000;
     if ((lf->lfPitchAndFamily & 3) == 1 && (f->pitch & 1))
         p += 15000;                      /* fixed asked, variable font */
     if ((lf->lfPitchAndFamily & 3) == 2 && !(f->pitch & 1))
         p += 350;                        /* variable asked, fixed font */
+    /* GD11 on 3.1, no face, default pitch: a fixed-pitch raster font of
+       exactly the size asked loses to TrueType ("" -20 is Arial, not
+       Courier's 20-pixel font; "" -12 Arial, not Fixedsys) but not to a
+       variable one ("" -16 is MS Sans Serif). UNVERIFIED: how much */
+    if (!(lf->lfPitchAndFamily & 3) && !(f->pitch & 1) && !f->tt)
+        p += 2;
+    if (f->tt) {
+        /* TrueType: any size, exactly, at 1 more than a raster font of
+           exactly the size asked (GD11 on 3.1, no face: "" -16 is MS
+           Sans Serif's 20-pixel font, -20, which no raster font is
+           unscaled, Arial; a raster font scaled or a pixel off costs
+           far more) */
+        p += 1;
+        /* small sizes (the size estimated from the FONTDIR: a cell height
+           times the em over ascent + descent). Below 10 pixels per em
+           with a face asked: font_map's second pass. No face: 2 or less
+           costs more than a raster font a pixel bigger (GD11: "" -2
+           FF_SWISS is Small Fonts' 3-pixel font; "" 4 and "" -6 Arial) */
+        {
+            long ppem = h < 0 ? -(long)h : f->height ? (long)h * f->points / f->height : h;
+            tt_small = ppem < 10;
+            if (!face[0] && ppem <= 2)
+                p += 1000;
+        }
+        d = (lf->lfWeight ? lf->lfWeight : 400) - f->weight;
+        p += 3L * (d < 0 ? -d : d) / 100;
+        if (!!lf->lfItalic != !!f->italic)
+            p += 4;
+        return p;
+    }
+    tt_small = 0;
     if (h > 0) {
         want = h;
         ref = f->height;
@@ -483,6 +550,8 @@ static long penalty(LPFONT f, const LOGFONT __far *lf, const char *face, int h, 
             return 0x7FFFFFFFL;          /* no candidate */
     }
     d = (long)ref * k - want;
+    exact = k == 1 && !d && !w && !(f->type & 1) &&
+            (lf->lfCharSet == f->charset || lf->lfCharSet == 1);
     if (d < 0)
         p += 150L * -d + (k == 1);
     else if (d > 0)
@@ -517,6 +586,8 @@ static XP font_map(const LOGFONT __far *lf, int h0, int *psx, int *psy)
     XP x, best = 0;
     long bp = 0x7FFFFFFFL;
     int h = lf->lfHeight ? lf->lfHeight : h0, sx, sy;
+    XP bexact = 0;
+    int best_small = 0;
     substitute(lf->lfFaceName, face);
     if ((lf->lfPitchAndFamily & 3) == 1 && fixed_face[0] && !str_icmp(face, "System")) {
         int i;
@@ -529,9 +600,23 @@ static XP font_map(const LOGFONT __far *lf, int h0, int *psx, int *psy)
         if (p < bp) {
             bp = p;
             best = x;
+            best_small = tt_small;
             *psx = sx;
             *psy = sy;
         }
+        if (exact && !bexact)           /* the first in the table */
+            bexact = x;
+    }
+    /* GD13 and GD11 on 3.1: a TrueType font chosen below 10 pixels per
+       em for a face asked gives way to a raster font of exactly the size
+       in a character set the request takes, whatever its face, the
+       first such in the table ("Arial" -7 is Small Fonts' 8-pixel font,
+       -8 MS Serif's 10-pixel one, before Small Fonts' 10-pixel one; -6,
+       which no raster font is, and -10 are Arial; "Symbol" -9 is Symbol,
+       no raster font of its character set being 9) */
+    if (best_small && face[0] && bexact) {
+        best = bexact;
+        *psx = *psy = 1;
     }
     return best;
 }
@@ -546,15 +631,23 @@ static XP font_map(const LOGFONT __far *lf, int h0, int *psx, int *psy)
    name moved by as much (dfFace 171Ah). */
 static LPFONTINFO font_scale(LPFONT s, LPFONTINFO bf);
 
-static LPFONTINFO font_info(LPFONT f)
+static LPFONTINFO font_info(XP xf)
 {
+    LPFONT f = xptr(xf);
     HRSRC r;
     BYTE __far *p, __far *base;
     LPFONTINFO fi;
     if (f->fi)
         return f->fi;
+    if (f->base && f->tt) {             /* a TrueType size */
+        LPFONTINFO fi = tt_info(xf);
+        f = xptr(xf);
+        f->fi = fi;
+        return fi;
+    }
     if (f->base) {                      /* a scaled copy */
-        LPFONTINFO bf = font_info(xptr(f->base));
+        LPFONTINFO bf = font_info(f->base);
+        f = xptr(xf);
         f->fi = bf ? font_scale(f, bf) : 0;
         return f->fi;
     }
@@ -625,7 +718,7 @@ static LPFONTINFO font_info(LPFONT f)
 extern WORD __cdecl gdi_ahincr;         /* entry.asm: KERNEL's __AHINCR */
 
 /* a byte of a block over 64K (selectors __AHINCR apart) */
-static BYTE __far *huge_at(BYTE __far *base, DWORD off)
+BYTE __far *font_huge(BYTE __far *base, DWORD off)
 {
     off += OFFSETOF(base);
     return (BYTE __far *)MAKELP(SELECTOROF(base) + (WORD)(off >> 16) * gdi_ahincr, (WORD)off);
@@ -708,9 +801,9 @@ void font_bits(LPFONT s)
     DWORD size;
     BYTE row[64];
     HGLOBAL hn;
-    if (!s || !s->base || s->bits || !s->fi)
+    if (!s || !s->base || s->bits || !s->fi || s->tt)
         return;
-    bf = font_info(xptr(s->base));
+    bf = font_info(s->base);
     if (!bf)
         return;
     src = (BYTE __far *)bf - 0x42;
@@ -745,7 +838,7 @@ void font_bits(LPFONT s)
                 row[c] = 0;
             for (j = 0; j < w; j++) {
                 if (!(j & 7)) {
-                    b = *huge_at(src, goff + (DWORD)(j >> 3) * bh + r);
+                    b = *font_huge(src, goff + (DWORD)(j >> 3) * bh + r);
                     if (!b) {
                         j += 7;         /* (the loop's j++ makes it 8) */
                         continue;
@@ -761,7 +854,7 @@ void font_bits(LPFONT s)
                 if (!row[c])
                     continue;
                 for (dy = 0; dy < sy; dy++)
-                    *huge_at(q, off + (DWORD)c * h + r * sy + dy) = row[c];
+                    *font_huge(q, off + (DWORD)c * h + r * sy + dy) = row[c];
             }
         }
     }
@@ -769,14 +862,14 @@ void font_bits(LPFONT s)
 
 /* the entry of base font xb scaled sx by sy: one a DC has already, or a
    new one */
-static XP font_scaled(XP xb, int sx, int sy)
+static XP font_scaled(XP xb, int sx, int sy, WORD ppem, WORD xppem)
 {
     XP xs;
     LPFONT s, b;
     XP __far *pp;
     for (pp = &scaled; (xs = *pp) != 0; pp = &s->next) {
         s = xptr(xs);
-        if (s->base == xb && s->sx == sx && s->sy == sy) {
+        if (s->base == xb && s->sx == sx && s->sy == sy && s->ppem == ppem && s->xppem == xppem) {
             *pp = s->next;              /* the most recently used first */
             s->next = scaled;
             scaled = xs;
@@ -795,6 +888,9 @@ static XP font_scaled(XP xb, int sx, int sy)
     s->base = xb;
     s->sx = (BYTE)sx;
     s->sy = (BYTE)sy;
+    s->ppem = ppem;
+    s->xppem = xppem;
+    s->bits = 0;
     s->next = scaled;
     scaled = xs;
     return xs;
@@ -853,8 +949,19 @@ LPFONT font_realize(LPDC dc)
     x = font_map(&lf, -mul_div(12, dc->dev->info.dpLogPixelsY, 72), &sx, &sy);
     if (!x)
         return 0;
-    if (sx > 1 || sy > 1) {
-        x = font_scaled(x, sx, sy);
+    if (((LPFONT)xptr(x))->tt) {
+        /* TrueType: a size of its own, at the ppem the height asks */
+        WORD xppem;
+        int ppem = tt_ppem(x, lf.lfHeight ? lf.lfHeight : -mul_div(12, dc->dev->info.dpLogPixelsY, 72),
+                           lf.lfWidth, &xppem);
+        /* italic a font lacks: the outline slanted (GD11 on 3.1: tmItalic
+           FFh and no overhang, unlike a raster font's) */
+        int sim = lf.lfItalic && !((LPFONT)xptr(x))->italic;
+        x = font_scaled(x, sim ? 2 : 1, 1, (WORD)(ppem < 1 ? 1 : ppem), xppem);
+        if (!x)
+            return 0;
+    } else if (sx > 1 || sy > 1) {
+        x = font_scaled(x, sx, sy, 0, 0);
         if (!x)
             return 0;
     }
@@ -866,7 +973,8 @@ LPFONT font_realize(LPDC dc)
     gdi_loghex(" y", sy);
     gdi_log(f->face);
     gdi_log("\r\n");
-    if (!font_info(f)) {
+    if (!font_info(x)) {
+        f = xptr(x);
         if (f->base)
             scaled_reap();
         return 0;

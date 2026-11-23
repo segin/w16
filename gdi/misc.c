@@ -279,19 +279,18 @@ WORD GDIAPI ShrinkGdiHeap(void)                                    /* GDI.354 */
 }
 
 
-BOOL GDIAPI GetCharABCWidths(HDC hdc, WORD a, WORD b, void __far *p) /* GDI.307 */
-{
-    (void)hdc; (void)a; (void)b; (void)p;
-    return FALSE;                       /* TrueType only */
-}
 
 WORD GDIAPI GetRasterizerCaps(void __far *p, int n)               /* GDI.313 */
 {
     /* RASTERIZER_STATUS: nSize 6, wFlags, nLanguageID; GD5 on 3.1: nSize
-       is 6 and the language 0409h, n bytes of it are written. w16 has no
-       TrueType rasterizer: wFlags 0 (3.1's: TT_AVAILABLE | TT_ENABLED) */
-    static const short rs[3] = { 6, 0, 0x0409 };
+       is 6 and the language 0409h, n bytes of it are written; wFlags
+       TT_AVAILABLE | TT_ENABLED (3). w16's: TT_ENABLED only with WIN.INI
+       [TrueType] TTEnable on (UNVERIFIED: 3.1's flags then) */
+    short rs[3];
+    rs[0] = 6;
+    rs[1] = tt_enabled ? 3 : 1;
+    rs[2] = 0x0409;
     if (p && n > 0)
         mem_copy(p, rs, n < 6 ? n : 6);
-    return TRUE;
+    return 0x0409;                      /* GD13 on 3.1: not 1 (the language?) */
 }

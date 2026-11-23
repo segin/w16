@@ -1,0 +1,14 @@
+# GD11 requests where w16's mapper still answers otherwise than 3.1 since
+# TrueType fonts are candidates (ARCHITECTURE.md 11.12); tools/gd11.py cmp
+# leaves these out (and says how many). Each line: the request as GD11
+# logs it, before " -> ".
+#
+# A raster face asked 200 wide (and one in another family) that 3.1 keeps
+# raster though TrueType could match: the raster scaling terms are a fit
+# (11.10), and no TrueType penalty separates these from "System" -44
+# FF_ROMAN, which 3.1 gives Times New Roman.
+M "MS Sans Serif" 26 200 0 0 0 0 0 0
+M "MS Serif" 26 200 0 0 0 0 0 0
+M "Courier" 0 200 0 0 0 0 0 0
+M "Courier" 16 200 0 0 0 0 0 0
+M "Small Fonts" 39 0 400 0 0 0 0 16
