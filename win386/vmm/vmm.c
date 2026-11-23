@@ -97,11 +97,25 @@ void memset(void *d, int c, u32 n)
     while (n--) *p++ = (u8)c;
 }
 
+/* dwords, then the bytes left (REP MOVSD, REP MOVSB) */
+void copy_fast(void *d, const void *s, u32 n);
+#pragma aux copy_fast = \
+    "mov eax, ecx" "shr ecx, 2" "rep movsd" "mov ecx, eax" "and ecx, 3" "rep movsb" \
+    parm [edi] [esi] [ecx] modify exact [eax ecx esi edi];
+
+/* forward, byte by byte where the destination overlaps the source from
+ * above (an XMS move inside a block: Windows 3.1's result is the bytes
+ * copied one at a time, MEMLOAD's overlap-up), else a dword at a time
+ * (XMS and EMS moves, the instance data at each VM switch) */
 void memcpy(void *d, const void *s, u32 n)
 {
     u8 *p = d;
     const u8 *q = s;
-    while (n--) *p++ = *q++;
+    if (p > q && p < q + n) {
+        while (n--) *p++ = *q++;
+        return;
+    }
+    copy_fast(d, s, n);
 }
 
 int memcmp(const void *a, const void *b, u32 n)

@@ -301,7 +301,10 @@ Microsoft's WIN386 (ARCHITECTURE.md 12.12). XMS and EMS in a DOS box:
 prints its log of XMS and INT 67h results (`V86MM_PIF` the PIF's limits,
 `V86MM_INI` SYSTEM.INI keys such as `386Enh:NoEMMDriver=on`); the case
 `win386xms` compares it with Microsoft's WIN386 for three PIFs
-(ARCHITECTURE.md 12.13).
+(ARCHITECTURE.md 12.13). `tests/memloadrun.sh OUTDIR MODE [w16]` runs
+MEMLOAD.EXE's workloads (x XMS, e EMS, 3 XMS 3.0 and UMBs, c three boxes
+at once) and prints their logs; the case `win386memload` compares them
+with Microsoft's WIN386.
 
 ## 5. Running on a remote host
 

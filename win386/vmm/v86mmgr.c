@@ -76,12 +76,16 @@ struct mmvm {
     s32 map[4];                         /* per frame page: handle << 16 | page, -1 none */
     u32 frame_pte[16];                  /* the frame's PTEs as the VM had them */
     u32 hma_pte[16];                    /* the HMA's */
+    u32 *hma_pg;                        /* its own HMA's pages, or NULL (a global HMA) */
     int hma;                            /* 0 free, 1 in use, 2 the VM's */
     int a20_global, a20_local;          /* XMS 03h-06h */
     int wrap;                           /* the HMA mapped onto 0-FFFFh now */
     int a20_fixed;                      /* A20 was on at the start: it stays on */
 };
 
+static u32 *get_pages(u32 n);
+static void free_pages(u32 *pg, u32 n);
+static int hma_inherit = 1;             /* the HMA's state a new VM starts with */
 static u32 sys_lim = 0x800;             /* Get_EMS_XMS_Limits for the System VM */
 static u32 xbuf_seg_set, xbuf_free_set, xbuf_size_set;   /* Set_Xlat_Buff_State */
 
@@ -113,8 +117,12 @@ void v86mm_vm_create(struct vm *v, const u8 *b)
         m->ems_lim = kb_round(info->ems_size);
     /* the HMA in use at first: Windows 3.1's boxes got 91h for 01h, then
      * 02h succeeded once (DOSBox's HMA was free when WIN386 started:
-     * UNVERIFIED who holds it; w16's loader notes it in hma_used) */
-    m->hma = 1;
+     * UNVERIFIED who holds it; w16's loader notes it in hma_used); of three
+     * boxes started together only the first found it so, the others free
+     * (02h: 93h; MEMLOAD C). UNVERIFIED: whether it is the first box of the
+     * session or the first while the first still runs */
+    m->hma = hma_inherit;
+    hma_inherit = 0;
     /* A20 on when Windows started (DOSBox-X: its DOS in the HMA, a
      * global user): Windows 3.1's XMS said A20 was on at every query,
      * whatever 03h-06h did, and the HMA stays mapped (the DDK: the A20
@@ -127,6 +135,16 @@ void v86mm_vm_create(struct vm *v, const u8 *b)
     if (info->ems_frame)
         for (i = 0; i < 16; i++) m->frame_pte[i] = pt[(info->ems_frame >> 8) + i];
     for (i = 0; i < 16; i++) m->hma_pte[i] = pt[0x100 + i];
+    /* no global HMA user (A20 off when Windows started): the VM's HMA is
+     * its own, 64 KB of pages starting as the HMA was (the DDK: the HMA is
+     * local unless a global user has it; two boxes using it at once must
+     * not see each other's data: MEMLOAD C) */
+    if (!info->dos_high && (m->hma_pg = get_pages(16)) != NULL)
+        for (i = 0; i < 16; i++) {
+            memcpy((void *)phys_to_lin(m->hma_pg[i]), (void *)phys_to_lin(m->hma_pte[i] & ~0xFFFu), 4096);
+            m->hma_pte[i] = m->hma_pg[i] | 7;
+            pt[0x100 + i] = m->hma_pte[i];
+        }
     m->eh[0].used = 1;                  /* handle 0: the system's, no pages */
     /* no EMS in the VMs but a manager loaded before Windows (NoEMMDriver):
      * its INT 67h is not the VM's (Windows 3.1: no EMMXXXX0 at the
@@ -153,6 +171,7 @@ void v86mm_vm_destroy(struct vm *v)
         if (m->emb[i].used) { free_pages(m->emb[i].pg, m->emb[i].n); kfree(m->emb[i].pg); }
     for (i = 0; i < EMS_HANDLES; i++)
         if (m->eh[i].used && m->eh[i].pg) { free_pages(m->eh[i].pg, m->eh[i].n * 4); kfree(m->eh[i].pg); }
+    if (m->hma_pg) { free_pages(m->hma_pg, 16); kfree(m->hma_pg); }
     kfree(m);
     v->mm = NULL;
 }

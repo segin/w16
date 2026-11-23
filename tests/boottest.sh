@@ -133,6 +133,8 @@
 #              (tests/vmpollrun.sh), Microsoft's WIN386 alongside
 #   win386xms  w16's WIN386: VX15's XMS and EMS calls in a DOS box (3 PIFs)
 #              give the same log as under Microsoft's WIN386
+#   win386memload  w16's WIN386: MEMLOAD's XMS and EMS workloads, XMS 3.0 calls
+#              and three boxes at once, as under Microsoft's WIN386
 #   win386pifwin  plain DOSBox, the tree alone, WIN /3: a PIF that starts
 #              its program windowed (made at run time with tools/mkpif.py),
 #              then VER typed: the window shows the text (not black), as
@@ -913,7 +915,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386idle win386xms vsd bigmem filecdr}
+cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386idle win386xms win386memload vsd bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1760,6 +1762,41 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386xms: XMS and EMS in a DOS box as under Microsoft's WIN386 (3 PIFs)"
         else echo "FAIL win386xms: $r"; fails=$((fails + 1)); fi ;;
+    win386memload)
+        # V86MMGR under load (ARCHITECTURE.md 12.13): MEMLOAD.EXE
+        # (tests/dos/memload.c, tests/memloadrun.sh), XMS and EMS used as
+        # real programs use them: the XMS workload (blocks filled through
+        # moves, block-to-block and overlapping moves, everything read
+        # back, the HMA), the EMS workload (pages over three handles,
+        # random remapping, 47h/48h, 4Eh, 50h, 57h), the XMS 3.0 and UMB
+        # calls, and three Background boxes running both workloads at once
+        # (each checking its own data), and a box seeing a file another box
+        # makes while it waits (f). Every log under w16's WIN386 must
+        # equal Microsoft's but for the RATE lines, with no FAIL
+        r=ok
+        for k in x e 3 c f; do
+            refrun win386memload-ref$k win386memload \
+                sh "$root/tests/memloadrun.sh" "$out/win386memload-ref$k" $k ms "$root/build/dos/MEMLOAD.EXE" &
+            sh "$root/tests/memloadrun.sh" "$out/win386memload-w16$k" $k w16 > "$out/win386memload-w16$k.txt" 2>&1 &
+        done
+        wait
+        rates=
+        for k in x e 3 c f; do
+            for t in A B C; do
+                [ $k = c ] || [ $t = A ] || { [ $k = f ] && [ $t = B ]; } || continue
+                a=$out/win386memload-ref$k/ML$t.LOG b=$out/win386memload-w16$k/ML$t.LOG
+                grep -q '^MEMLOAD end, 0 failure' "$a" 2>/dev/null || { r="$k $t: the reference did not pass ($a)"; break 2; }
+                grep -q '^MEMLOAD end, 0 failure' "$b" 2>/dev/null || { r="$k $t: w16's did not pass ($b)"; break 2; }
+                grep -v '^RATE\|^INFO' "$a" > "$out/win386memload-a.txt"
+                grep -v '^RATE\|^INFO' "$b" > "$out/win386memload-b.txt"
+                cmp -s "$out/win386memload-a.txt" "$out/win386memload-b.txt" || { r="$k $t: the logs differ (diff $a $b)"; break 2; }
+            done
+        done
+        for k in x e; do
+            rates="$rates $k: $(grep '^RATE' "$out/win386memload-w16$k/MLA.LOG" 2>/dev/null | awk '{print $2"="$3}' | tr '\n' ' ')(3.1: $(grep '^RATE' "$out/win386memload-ref$k/MLA.LOG" 2>/dev/null | awk '{print $2"="$3}' | tr '\n' ' '))"
+        done
+        if [ "$r" = ok ]; then echo "ok   win386memload: XMS, EMS, XMS 3.0 and three boxes at once as under Microsoft's WIN386; KB/s$rates"
+        else echo "FAIL win386memload: $r"; fails=$((fails + 1)); fi ;;
     win386pifwin)
         # the user's report (2026-11-22): a PIF made with the PIF Editor
         # ("Command Prompt", windowed) opened a window whose client area
