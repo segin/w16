@@ -69,6 +69,8 @@
  *     movewin x y cx cy      MoveWindow the active window (decimal)
  *     post <msg> <wp> <lp>   post a message (hex) to the active window
  *     send <msg> <wp> <lp>   send it and log the result
+ *     postwin <class> <msg> <wp> <lp>   post it to the top-level window
+ *                            of that class (one behind a modal dialog too)
  *     timers                 take every timer USER has left (and log how
  *                            many), to see what a program does without one
  *     freetimers             give them back
@@ -1747,6 +1749,20 @@ static void run_line(char *l)
             outhex(r, 8);
         }
         pump(300);
+    } else if (same(l, "postwin")) {
+        /* postwin CLASS msg wp lp: to that class's top-level window, also
+           while one of its modal dialogs has the focus */
+        char cls[32], *s = arg;
+        int k = 0;
+        WORD msg, wp, ll;
+        while (*s && *s != ' ' && k < (int)sizeof cls - 1)
+            cls[k++] = *s++;
+        cls[k] = 0;
+        msg = next_num(&s, 16);
+        wp = next_num(&s, 16);
+        ll = next_num(&s, 16);
+        PostMessage(FindWindow(cls, NULL), msg, wp, MAKELONG(ll, 0));
+        pump(300);
     } else if (same(l, "timers")) {
         UINT id;
         while (ntimers < MAXTIMERS && (id = SetTimer(NULL, 0, 60000u, NULL)) != 0)
@@ -2360,6 +2376,7 @@ static const char *const help[] = {
     "syscmd <hex>             post WM_SYSCOMMAND <hex> to the window",
     "post <msg> <wp> <lp>     post a message (hex; lp also hi:lo)",
     "send <msg> <wp> <lp>     send it and log the result",
+    "postwin CLASS msg wp lp  post it to that class's window",
     "settime hh:mm:ss[.cc]    set the DOS time",
     "setdate mm/dd/yyyy       set the DOS date",
     "freeze hh:mm:ss <ms>     hold the DOS time there for <ms> ms",

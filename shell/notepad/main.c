@@ -118,6 +118,8 @@ static void place_edit(void)
    a 64K segment of its own, so it holds at least as much (ZOI). Kept for
    the program's life and shared by both Word Wrap edit controls (one at a
    time). Without the segment, Notepad's own data segment as the original. */
+static WORD text_sel;                   /* the segment's selector; 0: ours */
+
 static HINSTANCE edit_ds(void)
 {
     static HINSTANCE ds;
@@ -138,7 +140,66 @@ static HINSTANCE edit_ds(void)
         GlobalFree(h);
         return ds = g_hinst;
     }
+    text_sel = SELECTOROF(p);
     return ds = (HINSTANCE)SELECTOROF(p);
+}
+
+/* LocalLock and LocalUnlock in the local heap of segment `sel` (KERNEL's
+   local heap functions work on the caller's DS). */
+static WORD lock_in(WORD sel, HLOCAL h)
+{
+    WORD r = 0;
+    _asm {
+        push ds
+        mov ax, sel
+        mov ds, ax
+        push h
+        call LocalLock
+        pop ds
+        mov r, ax
+    }
+    return r;
+}
+
+static void unlock_in(WORD sel, HLOCAL h)
+{
+    _asm {
+        push ds
+        mov ax, sel
+        mov ds, ax
+        push h
+        call LocalUnlock
+        pop ds
+    }
+}
+
+/* A copy of the edit control's text (mem_free it), its length in *len;
+   NULL if there is no memory for it. Read from the control's block
+   (EM_GETHANDLE), not with GetWindowText, whose count is an int: w16's
+   USER returns nothing for 32767 characters or more (3.1's copies them;
+   docs/notes/notepad-audit-triage.md C1). */
+LPSTR edit_text(WORD *len)
+{
+    WORD n = (WORD)SendMessage(g_edit, WM_GETTEXTLENGTH, 0, 0), i;
+    HLOCAL h = (HLOCAL)SendMessage(g_edit, EM_GETHANDLE, 0, 0);
+    LPSTR p = mem_alloc((DWORD)n + 1), t;
+    *len = 0;
+    if (!p)
+        return NULL;
+    if (h) {
+        WORD off = text_sel ? lock_in(text_sel, h) : (WORD)(LocalLock(h));
+        if (off) {
+            t = text_sel ? (LPSTR)MAKELP(text_sel, off) : (LPSTR)(char NEAR *)off;
+            for (i = 0; i < n && t[i]; i++)
+                p[i] = t[i];
+            *len = i;
+            if (text_sel)
+                unlock_in(text_sel, h);
+            else
+                LocalUnlock(h);
+        }
+    }
+    return p;
 }
 
 HWND make_edit(BOOL wrap)
@@ -159,29 +220,45 @@ HWND make_edit(BOOL wrap)
 }
 
 /* Word Wrap: a new edit control with the other style takes the text
-   (observed: the selection starts over at the beginning). */
+   (observed: the selection starts over at the beginning). The text's block
+   goes over to it (EM_SETHANDLE; the new control's empty one back to the
+   old control, which frees it): a copy would need room for the text twice
+   in the segment, and a copy that did not fit lost the text (audit C2).
+   3.1's Notepad wraps 24000 bytes of 64-character lines but refuses
+   28000 and 51190 with IDS_WRAPLARGE, the text kept; w16's wraps whatever
+   it holds (as it opens files 3.1's cannot, ZOI), IDS_WRAPLARGE when it
+   cannot (tests/scripts/np/large.txt). */
+static BOOL swapping;                   /* no EN_ERRSPACE message now */
+
 static void toggle_wrap(void)
 {
     HWND old = g_edit, e;
     BOOL modified = (BOOL)SendMessage(old, EM_GETMODIFY, 0, 0);
     WORD len = (WORD)SendMessage(old, WM_GETTEXTLENGTH, 0, 0);
-    LPSTR buf = mem_alloc((DWORD)len + 1);
-    if (!buf) {
+    HLOCAL text = (HLOCAL)SendMessage(old, EM_GETHANDLE, 0, 0), empty;
+    e = text ? make_edit(!g_wrap) : NULL;
+    empty = e ? (HLOCAL)SendMessage(e, EM_GETHANDLE, 0, 0) : NULL;
+    if (!empty) {
+        if (e)
+            DestroyWindow(e);
         msg_box(g_main, IDS_WRAPLARGE, NULL, MB_OK | MB_ICONEXCLAMATION);
         return;
     }
-    GetWindowText(old, buf, len + 1);
-    e = make_edit(!g_wrap);
-    if (!e) {
-        mem_free(buf);
+    swapping = TRUE;
+    SendMessage(e, EM_SETHANDLE, (WPARAM)text, 0);
+    if ((WORD)SendMessage(e, WM_GETTEXTLENGTH, 0, 0) != len) {
+        /* no room for its lines: the old control keeps the text */
+        SendMessage(e, EM_SETHANDLE, (WPARAM)empty, 0);
+        DestroyWindow(e);
+        swapping = FALSE;
         msg_box(g_main, IDS_WRAPLARGE, NULL, MB_OK | MB_ICONEXCLAMATION);
         return;
     }
+    SendMessage(old, EM_SETHANDLE, (WPARAM)empty, 0);
+    swapping = FALSE;
     g_wrap = !g_wrap;
     g_edit = e;
     place_edit();
-    SetWindowText(e, buf);
-    mem_free(buf);
     SendMessage(e, EM_SETMODIFY, modified, 0);
     DestroyWindow(old);
     SetScrollRange(g_main, SB_HORZ, 0, g_wrap ? 0 : 100, TRUE);
@@ -321,7 +398,8 @@ LRESULT FAR PASCAL __export NPWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_COMMAND:
         if (LOWORD(wp) == IDC_EDIT && (HWND)LOWORD(lp) == g_edit) {
-            if ((HIWORD(lp) == EN_ERRSPACE || HIWORD(lp) == EN_MAXTEXT) && !file_is_loading())
+            if ((HIWORD(lp) == EN_ERRSPACE || HIWORD(lp) == EN_MAXTEXT) && !file_is_loading() &&
+                !swapping)
                 msg_box(hwnd, IDS_NOMEMORY, NULL, MB_OK | MB_ICONEXCLAMATION);
             else if (HIWORD(lp) == EN_HSCROLL || HIWORD(lp) == EN_VSCROLL)
                 sync_scroll();
@@ -337,7 +415,7 @@ LRESULT FAR PASCAL __export NPWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             DestroyWindow(hwnd);
         return 0;
     case WM_QUERYENDSESSION:
-        return file_query_save();
+        return file_query_end();
     case WM_DESTROY:
         help(0);                        /* HELP_QUIT */
         DragAcceptFiles(hwnd, FALSE);

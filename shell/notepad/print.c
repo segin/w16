@@ -76,6 +76,30 @@ static long margin_mils(const char *s)
     return in * 1000 + mils;
 }
 
+static HDC printer_dc(void);
+
+/* Margins (as typed: left, right, top, bottom) that leave room on the
+   printer's page: on 3.1 with Generic / Text Only (8.5 x 11 inches)
+   left + right of 8.5 or more, or top + bottom of 11 or more, give "The
+   Margin values are not correct" (8.4 and 10.9 do not), the focus back
+   in Left; with no printer anything goes (tests/scripts/np/margins.txt,
+   margins0.txt; audit H2, M1: such margins printed blank pages without
+   end). */
+static BOOL margins_fit(char m[4][16])
+{
+    HDC dc = printer_dc();
+    long w, h;
+    BOOL ok;
+    if (!dc)
+        return TRUE;
+    w = MulDiv(GetDeviceCaps(dc, HORZRES), 1000, GetDeviceCaps(dc, LOGPIXELSX));
+    h = MulDiv(GetDeviceCaps(dc, VERTRES), 1000, GetDeviceCaps(dc, LOGPIXELSY));
+    DeleteDC(dc);
+    ok = margin_mils(m[0]) + margin_mils(m[1]) < w &&
+         margin_mils(m[2]) + margin_mils(m[3]) < h;
+    return ok;
+}
+
 BOOL FAR PASCAL __export PageSetupDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
     int i;
@@ -98,6 +122,12 @@ BOOL FAR PASCAL __export PageSetupDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM 
                     SendDlgItemMessage(dlg, IDC_LEFT + i, EM_SETSEL, 0, MAKELONG(0, 0x7FFF));
                     return TRUE;
                 }
+            }
+            if (!margins_fit(m)) {
+                msg_box(dlg, IDS_BADMARGIN, NULL, MB_OK | MB_ICONEXCLAMATION);
+                SetFocus(GetDlgItem(dlg, IDC_LEFT));
+                SendDlgItemMessage(dlg, IDC_LEFT, EM_SETSEL, 0, MAKELONG(0, 0x7FFF));
+                return TRUE;
             }
             GetDlgItemText(dlg, IDC_HEADER, header, sizeof header);
             GetDlgItemText(dlg, IDC_FOOTER, footer, sizeof footer);
@@ -161,9 +191,12 @@ static HDC printer_dc(void)
     if (dev_names) {
         DEVNAMES FAR *dn = (DEVNAMES FAR *)GlobalLock(dev_names);
         LPSTR base = (LPSTR)dn;
-        HDC dc = CreateDC(base + dn->wDriverOffset, base + dn->wDeviceOffset,
-                          base + dn->wOutputOffset,
-                          dev_mode ? GlobalLock(dev_mode) : NULL);
+        HDC dc;
+        if (!dn)                        /* audit M4: as no printer */
+            return NULL;
+        dc = CreateDC(base + dn->wDriverOffset, base + dn->wDeviceOffset,
+                      base + dn->wOutputOffset,
+                      dev_mode ? GlobalLock(dev_mode) : NULL);
         if (dev_mode)
             GlobalUnlock(dev_mode);
         GlobalUnlock(dev_names);
@@ -306,13 +339,41 @@ static void print_hf(HDC dc, const char *spec, int page, int y, int left, int ri
     }
 }
 
+/* How many of the `count` characters at `s` fit in `width` pixels, tabs
+   expanded as TabbedTextOut draws them (audit M2: measured without the
+   tabs, a line with tabs ran past the right margin). The extent of up to
+   twice what fits is asked, so its 16 bits do not wrap (and a line of
+   32768 characters or more is not a negative count, audit H3). */
+static WORD fit(HDC dc, LPSTR s, WORD count, int width)
+{
+    WORD lo = 0, hi = 1, mid;
+    if (width <= 0)
+        return 0;
+    if (count > 0x7FFF)
+        count = 0x7FFF;
+    while (hi <= count && LOWORD(GetTabbedTextExtent(dc, s, hi, 0, NULL)) <= (WORD)width) {
+        lo = hi;
+        if (hi == count)
+            return count;
+        hi = hi > count / 2 ? count : hi * 2;
+    }
+    while (hi - lo > 1) {
+        mid = lo + (hi - lo) / 2;
+        if (LOWORD(GetTabbedTextExtent(dc, s, mid, 0, NULL)) <= (WORD)width)
+            lo = mid;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
 void print_file(void)
 {
     HDC dc;
     WORD len, pos = 0;
     LPSTR text;
     TEXTMETRIC tm;
-    int lh, dpx, dpy, left, right, top, bottom, y, page = 1;
+    int lh, dpx, dpy, left, right, top, bottom, y, page = 1, err = 0;
     FARPROC abortp, dlgp;
     char docname[DOS_PATH];
 
@@ -322,13 +383,12 @@ void print_file(void)
         msg_box(g_main, IDS_CANTPRINT, g_file, MB_OK | MB_ICONEXCLAMATION);
         return;
     }
-    text = mem_alloc((DWORD)(len = (WORD)SendMessage(g_edit, WM_GETTEXTLENGTH, 0, 0)) + 1);
+    text = edit_text(&len);
     if (!text) {
         DeleteDC(dc);
         msg_box(g_main, IDS_PRINTMEM, NULL, MB_OK | MB_ICONEXCLAMATION);
         return;
     }
-    GetWindowText(g_edit, text, len + 1);
     GetTextMetrics(dc, &tm);
     lh = tm.tmHeight + tm.tmExternalLeading;
     dpx = GetDeviceCaps(dc, LOGPIXELSX);
@@ -337,6 +397,15 @@ void print_file(void)
     right = GetDeviceCaps(dc, HORZRES) - MulDiv((int)margin_mils(margin[1]), dpx, 1000);
     top = MulDiv((int)margin_mils(margin[2]), dpy, 1000);
     bottom = GetDeviceCaps(dc, VERTRES) - MulDiv((int)margin_mils(margin[3]), dpy, 1000);
+    /* margins Page Setup took for another printer that leave no line on
+       this one's page: the margin message, nothing printed (a page with
+       no line would come again without end; UNVERIFIED what 3.1 does) */
+    if (right - left <= 0 || top + lh > bottom) {
+        DeleteDC(dc);
+        mem_free(text);
+        msg_box(g_main, IDS_BADMARGIN, NULL, MB_OK | MB_ICONEXCLAMATION);
+        return;
+    }
 
     aborted = FALSE;
     EnableWindow(g_main, FALSE);
@@ -349,14 +418,12 @@ void print_file(void)
         while (!aborted) {
             print_hf(dc, header, page, top - 2 * lh, left, right);
             for (y = top; y + lh <= bottom && pos < len;) {
-                WORD e = pos;
-                int n;
+                WORD e = pos, n;
                 while (e < len && text[e] != '\r' && text[e] != '\n')
                     e++;
-                n = e - pos;
-                /* UNVERIFIED: long lines are cut at the right margin */
-                while (n > 0 && LOWORD(GetTextExtent(dc, text + pos, n)) > right - left)
-                    n--;
+                /* UNVERIFIED: a line wider than the margins goes on on
+                   the next line */
+                n = fit(dc, text + pos, e - pos, right - left);
                 if (n == 0 && e > pos)
                     n = 1;
                 TabbedTextOut(dc, left, y, text + pos, n, 0, NULL, left);
@@ -370,22 +437,43 @@ void print_file(void)
                 }
             }
             print_hf(dc, footer, page, bottom + lh, left, right);
-            if (Escape(dc, NEWFRAME, 0, NULL, NULL) < 0)
-                break;
-            if (pos >= len)
+            err = Escape(dc, NEWFRAME, 0, NULL, NULL);
+            if (err < 0 || pos >= len)
                 break;
             page++;
         }
-        if (!aborted)
-            Escape(dc, ENDDOC, 0, NULL, NULL);
-        else
+        /* a failed page ends the job as a cancel does (SDK, EndDoc:
+           AbortDoc after an error); GDI's errors it has not shown itself
+           (SP_NOTREPORTED, Petzold ch. 15) with the original's strings:
+           IDS_PRINTDISK, IDS_PRINTMEM, otherwise IDS_CANTPRINT (audit M3;
+           UNVERIFIED on 3.1: a full disk was not tried) */
+        if (aborted || err < 0)
             Escape(dc, ABORTDOC, 0, NULL, NULL);
+        else
+            Escape(dc, ENDDOC, 0, NULL, NULL);
     } else {
-        msg_box(g_main, IDS_CANTPRINT, g_file, MB_OK | MB_ICONEXCLAMATION);
+        err = SP_ERROR;
     }
+    /* the Printing dialog goes before a message (audit L1) */
     EnableWindow(g_main, TRUE);
     DestroyWindow(abort_dlg);
     abort_dlg = NULL;
+    if (!aborted && err < 0 && (err & SP_NOTREPORTED)) {
+        switch (err) {
+        case SP_APPABORT:
+        case SP_USERABORT:
+            break;
+        case SP_OUTOFDISK:
+            msg_box(g_main, IDS_PRINTDISK, g_file, MB_OK | MB_ICONEXCLAMATION);
+            break;
+        case SP_OUTOFMEMORY:
+            msg_box(g_main, IDS_PRINTMEM, NULL, MB_OK | MB_ICONEXCLAMATION);
+            break;
+        default:
+            msg_box(g_main, IDS_CANTPRINT, g_file, MB_OK | MB_ICONEXCLAMATION);
+            break;
+        }
+    }
     FreeProcInstance(abortp);
     FreeProcInstance(dlgp);
     DeleteDC(dc);

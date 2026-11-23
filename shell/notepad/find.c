@@ -33,25 +33,26 @@ static BOOL same_at(const char FAR *t, const char *w)
 /* Search from the selection; select the match or say there is none. */
 static void search(HWND owner)
 {
-    WORD len = (WORD)SendMessage(g_edit, WM_GETTEXTLENGTH, 0, 0), n = s_len(what), i;
+    WORD len, n = s_len(what), i;
     DWORD sel = SendMessage(g_edit, EM_GETSEL, 0, 0);
     LPSTR text;
     BOOL found = FALSE;
     if (!n)
         return;
-    text = mem_alloc((DWORD)len + 1);
+    text = edit_text(&len);
     if (!text) {
         msg_box(owner, IDS_NOMEMORY, NULL, MB_OK | MB_ICONEXCLAMATION);
         return;
     }
-    GetWindowText(g_edit, text, len + 1);
     if (down) {
-        for (i = HIWORD(sel); i + n <= len; i++)
+        /* n <= len - i, not i + n <= len: that wraps past 64K near the
+           end of a big text (audit H1) */
+        for (i = HIWORD(sel); i <= len && n <= len - i; i++)
             if (same_at(text + i, what)) {
                 found = TRUE;
                 break;
             }
-    } else if (LOWORD(sel) >= n) {
+    } else if (LOWORD(sel) >= n && LOWORD(sel) <= len) {
         for (i = LOWORD(sel) - n + 1; i-- > 0;)
             if (same_at(text + i, what)) {
                 found = TRUE;
