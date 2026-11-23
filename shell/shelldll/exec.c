@@ -66,9 +66,11 @@ static void enter_dir(CWD *c, LPCSTR dir)
         return;
     if (dir[1] == ':')
         dos_setdrive((sh_upper(dir[0]) - 'A') & 0x1F);
-    if (dos_chdir(dir) && dir[1] == ':' && dir[2] == 0) {
-        /* "C:" alone: the drive only */
-    }
+    /* a directory that is not there changes nothing: the file is looked
+       for and started from the current one (SH15 x: Windows 3.1 started
+       a program with C:\NODIR in C:\WINDOWS); the directory set on
+       another drive stays set there (SH15 x: D:\SUB stayed D:'s) */
+    dos_chdir(dir);
     c->changed = 1;
 }
 
@@ -120,9 +122,16 @@ static int association(JOB *j, LPCSTR op, LPCSTR params, int verbonly)
     lstrcpy(key + 1, j->ext);
     if (!reg_query(HKEY_CLASSES_ROOT, key, cls, &cb) && cls[0]) {
         LONG cb2 = sizeof raw;
+        LPCSTR verb = op && *op ? op : "open";
         j->registered = 1;
-        wsprintf(key, "%s\\shell\\%s\\command", (LPSTR)cls, (LPSTR)(op && *op ? op : "open"));
-        if (!reg_query(HKEY_CLASSES_ROOT, key, raw, &cb2) && raw[0]) {
+        /* a verb too long for the key cannot name one (key names have
+           at most 63 characters): as a verb without a command (SH15 v:
+           27 for verbs of 70 and 100 characters) */
+        if (sh_len(cls) + sh_len(verb) + 16 < sizeof key)
+            wsprintf(key, "%s\\shell\\%s\\command", (LPSTR)cls, (LPSTR)verb);
+        else
+            key[0] = 0;
+        if (key[0] && !reg_query(HKEY_CLASSES_ROOT, key, raw, &cb2) && raw[0]) {
             first_word(j->prog, raw, sizeof j->prog);
             lstrcpy(j->regprog, j->prog);
             for (s = raw; *s; s++) {
@@ -231,10 +240,13 @@ HINSTANCE SHAPI FindExecutable(LPCSTR file, LPCSTR dir, LPSTR result)
 typedef struct {
     char name[80];              /* NAME.EXT of the program */
     char ext[8];                /* the document's extension, upper case */
-    char found[160];            /* the path chosen */
+    char found[200];            /* the path chosen */
 } FINDEXE;
 
-static FINDEXE __far *fe;
+/* each dialog's FINDEXE is in its DWL_USER: two programs may each have
+   the dialog up at once (SHELL's data is shared by every task) */
+#define DWL_USER_31     8
+#define FE(dlg)         ((FINDEXE __far *)GetWindowLong(dlg, DWL_USER_31))
 
 typedef BOOL (FAR PASCAL *GETOPENFN)(void FAR *);
 
@@ -243,6 +255,7 @@ typedef BOOL (FAR PASCAL *GETOPENFN)(void FAR *);
    goes into the edit field. UNVERIFIED: the exact flags and filter. */
 static void locate(HWND dlg)
 {
+    FINDEXE __far *fe = FE(dlg);
     HINSTANCE cd;
     GETOPENFN gofn;
     struct {
@@ -252,7 +265,7 @@ static void locate(HWND dlg)
         LPCSTR lpstrTitle; DWORD Flags; UINT nFileOffset; UINT nFileExtension;
         LPCSTR lpstrDefExt; LPARAM lCustData; void FAR *lpfnHook; LPCSTR lpTemplateName;
     } ofn;
-    char file[160], filter[100], msg[80];
+    char file[160], filter[2 * sizeof fe->name + 2], msg[80];
     WORD n;
     UINT old = SetErrorMode(0x8000);
     cd = LoadLibrary("COMMDLG.DLL");
@@ -287,8 +300,10 @@ static void locate(HWND dlg)
 BOOL SHAPI FindExeDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
     char t[300], f[200];
+    FINDEXE __far *fe;
     switch (msg) {
     case WM_INITDIALOG:
+        SetWindowLong(dlg, DWL_USER_31, lp);
         fe = (FINDEXE __far *)lp;
         GetDlgItemText(dlg, IDC_FE_TEXT, f, sizeof f);
         wsprintf(t, f, (LPSTR)fe->name, (LPSTR)fe->ext);
@@ -303,6 +318,7 @@ BOOL SHAPI FindExeDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         case IDOK: {
             OFSTRUCT of;
             WORD n;
+            fe = FE(dlg);
             GetDlgItemText(dlg, IDC_FE_EDIT, f, sizeof f - 82);
             n = sh_len(f);
             if (n && f[n - 1] != '\\')
@@ -336,18 +352,23 @@ BOOL SHAPI FindExeDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
     return FALSE;
 }
 
-/* replace the command's program (its first word) with path */
+/* replace the command's program (its first word) with path. Commands
+   are cut at 511 characters: WinExec takes no more than 255 (SH15 p:
+   with C:\SH5.EXE and a space, parameters of 244 characters started it,
+   245 gave 0, also from ShellExecute) */
 static void swap_program(JOB *j, const char *path)
 {
-    char rest[512];
+    char rest[sizeof j->cmd];
     const char __far *s = j->cmd;
+    WORD n = 0;
     while (*s == ' ')
         s++;
     while (*s && *s != ' ')
         s++;
     lstrcpy(rest, s);
-    lstrcpy(j->cmd, path);
-    lstrcat(j->cmd, rest);
+    j->cmd[0] = 0;
+    append(j->cmd, &n, path, sizeof j->cmd);
+    append(j->cmd, &n, rest, sizeof j->cmd);
 }
 
 HINSTANCE SHAPI ShellExecute(HWND w, LPCSTR op, LPCSTR file, LPCSTR params, LPCSTR dir, int show)
@@ -363,14 +384,16 @@ HINSTANCE SHAPI ShellExecute(HWND w, LPCSTR op, LPCSTR file, LPCSTR params, LPCS
         return (HINSTANCE)r;
     }
     if (j.is_program) {
+        WORD n = 0;
         if (!same_verb(op)) {
             leave_dir(&c);
             return (HINSTANCE)SE_ERR_NOASSOC;
         }
-        lstrcpy(j.cmd, file);
+        j.cmd[0] = 0;
+        append(j.cmd, &n, file, sizeof j.cmd);
         if (params && *params) {
-            lstrcat(j.cmd, " ");
-            lstrcat(j.cmd, params);
+            append(j.cmd, &n, " ", sizeof j.cmd);
+            append(j.cmd, &n, params, sizeof j.cmd);
         }
     }
     h = WinExec(j.cmd, show);
@@ -381,7 +404,7 @@ HINSTANCE SHAPI ShellExecute(HWND w, LPCSTR op, LPCSTR file, LPCSTR params, LPCS
         for (s = j.regprog; *s; s++)
             if (*s == '\\' || *s == ':')
                 base = s + 1;
-        lstrcpy(f.name, base);
+        lstrcpyn(f.name, base, sizeof f.name - 4);
         if (!sh_ext(f.name))
             lstrcat(f.name, ".exe");
         lstrcpy(f.ext, j.ext);

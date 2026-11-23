@@ -25,6 +25,7 @@ typedef struct {
     int kind;                   /* 0 none, 1 not icons (gives 1), 2 NE, 3 ICO */
     WORD count;                 /* icons */
     DWORD restab;               /* NE: the resource table's file offset */
+    DWORD tabend;               /* and the end of the table */
     WORD shift;
 } ICONFILE;
 
@@ -35,18 +36,27 @@ static int rd(HFILE f, DWORD at, void __far *p, WORD n)
     return _lread(f, (LPSTR)p, n) == n;
 }
 
+/* n bytes at p, all inside the resource table */
+static int rd_tab(ICONFILE *x, DWORD p, void __far *buf, WORD n)
+{
+    return p + n <= x->tabend && rd(x->f, p, buf, n);
+}
+
 /* the n-th resource of a type in the NE table: its offset and length in
-   bytes and its id; returns the number of resources of the type */
+   bytes and its id; returns the number of resources of the type (with
+   off, 0 when the n-th is not there) */
 static WORD ne_find(ICONFILE *x, WORD type, WORD n, DWORD *off, DWORD *len, WORD *id)
 {
     DWORD p = x->restab + 2;
     WORD t[4], r[6];
     for (;;) {
-        if (!rd(x->f, p, t, 8) || !t[0])
+        if (!rd_tab(x, p, t, 8) || !t[0])
             return 0;
         p += 8;
         if (t[0] == (0x8000 | type)) {
-            if (off && n < t[1] && rd(x->f, p + (DWORD)n * 12, r, 12)) {
+            if (off) {
+                if (n >= t[1] || !rd_tab(x, p + (DWORD)n * 12, r, 12))
+                    return 0;
                 *off = (DWORD)r[0] << x->shift;
                 *len = (DWORD)r[1] << x->shift;
                 *id = r[3];
@@ -63,12 +73,12 @@ static int ne_by_id(ICONFILE *x, WORD type, WORD id, DWORD *off, DWORD *len)
     DWORD p = x->restab + 2;
     WORD t[4], r[6], i;
     for (;;) {
-        if (!rd(x->f, p, t, 8) || !t[0])
+        if (!rd_tab(x, p, t, 8) || !t[0])
             return 0;
         p += 8;
         if (t[0] == (0x8000 | type)) {
             for (i = 0; i < t[1]; i++) {
-                if (!rd(x->f, p + (DWORD)i * 12, r, 12))
+                if (!rd_tab(x, p + (DWORD)i * 12, r, 12))
                     return 0;
                 if (r[3] == (0x8000 | id)) {
                     *off = (DWORD)r[0] << x->shift;
@@ -111,11 +121,17 @@ static void open_icons(ICONFILE *x, LPCSTR file)
         return;
     x->kind = 2;
     x->restab = *(DWORD *)&mz[30] + ne[0x24 / 2];
-    if (ne[0x24 / 2] == ne[0x26 / 2])           /* no resource table */
+    x->tabend = *(DWORD *)&mz[30] + ne[0x26 / 2];
+    if (ne[0x24 / 2] >= ne[0x26 / 2])           /* no resource table */
+        return;
+    /* the whole table must be in the file, else no icons (SH15 n: a file
+       ending one byte before the resident-name table gave the count 0,
+       one ending there 46) */
+    if ((DWORD)_llseek(x->f, 0, 2) < x->tabend)
         return;
     {
         WORD s;
-        if (!rd(x->f, x->restab, &s, 2))
+        if (!rd_tab(x, x->restab, &s, 2))
             return;
         x->shift = s;
     }
@@ -143,19 +159,22 @@ static HGLOBAL read_block(HINSTANCE inst, HFILE f, WORD type, DWORD off, DWORD l
 }
 
 /* which image of a group directory (NEWHEADER, then 14-byte entries with
-   the id in the last WORD): USER's choice, or, where USER does not offer
-   GetIconID (w16's own USER, so far), the 32x32 image with the most
-   colours up to 16 (UNVERIFIED: USER's exact rule) */
+   the id in the last WORD): USER's choice; when USER chooses none, the
+   32x32 image with the most colours up to 16 (UNVERIFIED: whether
+   Windows 3.1 then takes one; USER's rule itself is GetIconID's) */
 static WORD pick(HGLOBAL group)
 {
     const BYTE __far *g;
     WORD id = GetIconID(group, RT_ICON_N), n, i, best = 0, bestscore = 0;
+    DWORD size = GlobalSize(group);
     if (id)
         return id;
     g = (const BYTE __far *)GlobalLock(group);
     if (!g)
         return 0;
-    n = *(const WORD __far *)(g + 4);
+    n = size >= 6 ? *(const WORD __far *)(g + 4) : 0;
+    if ((DWORD)n * 14 + 6 > size)               /* no further than the block */
+        n = size >= 6 ? (WORD)((size - 6) / 14) : 0;
     for (i = 0; i < n; i++) {
         const BYTE __far *e = g + 6 + i * 14;
         WORD colors = e[2] ? e[2] : 256, score;
@@ -293,7 +312,7 @@ HICON SHAPI ExtractAssociatedIcon(HINSTANCE inst, LPSTR path, WORD __far *index)
     if ((UINT)h == 1) {
         dos = sh_is_program(path);
         if (!dos && (UINT)find_exec(path, NULL, exe, 0) > 32) {
-            lstrcpy(path, exe);
+            lstrcpyn(path, exe, 128);           /* the caller's buffer (as below) */
             *index = 0;
             h = extract_icon(inst, path, 0);
             if ((UINT)h > 1)
