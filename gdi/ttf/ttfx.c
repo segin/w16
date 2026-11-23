@@ -325,7 +325,14 @@ int ttfx_InitFont(ttfx_font *f, ttfx_readfn read, void *user, void *alloc,
     f->unitsPerEm = ttUSHORT(f->head + 18);
     if (!f->unitsPerEm)
         return 0;
+    f->hint = TTFX_HINT_DEFAULT;
+    f->hint_done = 0;
     return 1;
+}
+
+void ttfx_SetHinting(ttfx_font *f, int flags)
+{
+    f->hint = flags & TTFX_HINT_DEFAULT;
 }
 
 /* ---- characters to glyphs ---- */
@@ -965,6 +972,7 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
     int i, n = 0, pass;
     unsigned start = 0;
     ttfx_i32 ox = shift_x - (ttfx_i32)off_x * 64, oy = shift_y - (ttfx_i32)off_y * 64;
+    ttfx_point TTFX_FAR *hp = 0;        /* the points grid-fitted (ttfhint.c) */
     *pts = 0;
     *counts = 0;
     *ncontours = 0;
@@ -973,9 +981,14 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
             ++n;
     if (!n)
         return 1;
+    if (f->hint & (TTFX_HINT_X | TTFX_HINT_Y))
+        hp = ttfx__HintPoints(f, v, nv, sx, sy, ox, oy);
     *counts = (int TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)n * sizeof(int));
-    if (!*counts)
+    if (!*counts) {
+        if (hp)
+            ttfx_free(f->alloc, hp);
         return 0;
+    }
     fl.points = 0;
     for (pass = 0; pass < 2; ++pass) {
         ttfx_i32 x = 0, y = 0;          /* 26.6 */
@@ -988,7 +1001,14 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
         fl.n = 0;
         fl.overflow = 0;
         for (i = 0; i < nv; ++i) {
-            ttfx_i32 X = ttfx_Scale26(v[i].x, sx) + ox, Y = -ttfx_Scale26(v[i].y, sy) + oy;
+            ttfx_i32 X, Y;
+            if (hp) {
+                X = hp[2 * i].x;
+                Y = hp[2 * i].y;
+            } else {
+                X = ttfx_Scale26(v[i].x, sx) + ox;
+                Y = -ttfx_Scale26(v[i].y, sy) + oy;
+            }
             switch (v[i].type) {
             case TTFX_vmove:
                 if (c >= 0)
@@ -1001,7 +1021,14 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
                 ttfx__add_point(&fl, X, Y);
                 break;
             case TTFX_vcurve: {
-                ttfx_i32 CX = ttfx_Scale26(v[i].cx, sx) + ox, CY = -ttfx_Scale26(v[i].cy, sy) + oy;
+                ttfx_i32 CX, CY;
+                if (hp) {
+                    CX = hp[2 * i + 1].x;
+                    CY = hp[2 * i + 1].y;
+                } else {
+                    CX = ttfx_Scale26(v[i].cx, sx) + ox;
+                    CY = -ttfx_Scale26(v[i].cy, sy) + oy;
+                }
                 ttfx__tesselate(&fl, x << 10, y << 10, CX << 10, CY << 10, X << 10, Y << 10, 0);
                 break;
             }
@@ -1014,12 +1041,16 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
         if (fl.overflow || c < 0)
             goto error;
     }
+    if (hp)
+        ttfx_free(f->alloc, hp);
     *pts = fl.points;
     *ncontours = n;
     return 1;
 error:
     if (fl.points)
         ttfx_free(f->alloc, fl.points);
+    if (hp)
+        ttfx_free(f->alloc, hp);
     ttfx_free(f->alloc, *counts);
     *counts = 0;
     return 0;
@@ -1089,6 +1120,7 @@ static int ttfx__scan(const ttfx_font *f, ttfx_bitmap *bm, const ttfx_point TTFX
     ttfx__edge TTFX_FAR *e;
     ttfx_u16 TTFX_FAR *idx, TTFX_FAR *act;
     unsigned ne = 0, i, k, nact = 0, next = 0, m = 0;
+    int dropout = (f->hint & TTFX_HINT_DROPOUT) != 0;
     int c, row;
     for (c = 0; c < nc; c++)
         ne += counts[c];
@@ -1128,6 +1160,8 @@ static int ttfx__scan(const ttfx_font *f, ttfx_bitmap *bm, const ttfx_point TTFX
         ttfx_i32 ys = (ttfx_i32)row * 64 + 32;
         ttfx_u8 TTFX_FAR *line = bm->pixels + (ttfx_u32)row * bm->stride;
         int w, xs = 0;
+        ttfx_i32 xa = 0;                /* the span's start crossing */
+        int open = 0;                   /* the span goes on past a crossing */
         /* step the active edges to this row; drop those ended */
         for (i = k = 0; i < nact; i++) {
             ttfx__edge TTFX_FAR *d = &e[act[i]];
@@ -1164,15 +1198,27 @@ static int ttfx__scan(const ttfx_font *f, ttfx_bitmap *bm, const ttfx_point TTFX
         if (!nact)
             continue;
         /* in order of x (an insertion sort: the order changes little from
-           row to row); a crossing with a remainder is a little right */
+           row to row); a crossing with a remainder is a little right, and
+           two with remainders in the same 1/64 are in the order of their
+           fractions (rule 3 can tell; rules 1 and 2 cannot) */
         for (i = 1; i < nact; i++) {
             ttfx_u16 t = act[i];
             ttfx_i32 tx = e[t].x;
             int tr = e[t].rem != 0;
             for (k = i; k > 0; k--) {
                 ttfx__edge TTFX_FAR *d = &e[act[k - 1]];
-                if (d->x < tx || (d->x == tx && (d->rem != 0) <= tr))
+                if (d->x < tx || (d->x == tx && (d->rem != 0) < tr))
                     break;
+                if (d->x == tx && (d->rem != 0) == tr) {
+                    ttfx_u32 ah, al, bh, bl;
+                    if (!tr)
+                        break;
+                    /* d->rem / (d->y1 - d->y0) <= rem / (y1 - y0)? */
+                    ttfx__mul64((ttfx_u32)d->rem, (ttfx_u32)(e[t].y1 - e[t].y0), &ah, &al);
+                    ttfx__mul64((ttfx_u32)e[t].rem, (ttfx_u32)(d->y1 - d->y0), &bh, &bl);
+                    if (ah < bh || (ah == bh && al <= bl))
+                        break;
+                }
                 act[k] = act[k - 1];
             }
             act[k] = t;
@@ -1183,15 +1229,29 @@ static int ttfx__scan(const ttfx_font *f, ttfx_bitmap *bm, const ttfx_point TTFX
         w = 0;
         for (i = 0; i < nact; i++) {
             ttfx__edge TTFX_FAR *d = &e[act[i]];
-            if (!w) {
+            if (!w && !open) {
                 /* the first centre at or right of the crossing (the
                    crossing's ceiling in 26.6 is x, plus 1 with a
                    remainder) */
                 xs = ttfx__ceil6(d->x + (d->rem != 0) - 32);
+                xa = d->x;
             }
             w += d->dir;
+            open = 0;
             if (!w) {
-                int xe = ttfx__floor6(d->x - 32);
+                int xe;
+                /* with dropout control, crossings at the same point (a
+                   vertex on the row) are one: no run between them */
+                if (dropout && !d->rem && i + 1 < nact && e[act[i + 1]].x == d->x && !e[act[i + 1]].rem) {
+                    open = 1;
+                    continue;
+                }
+                xe = ttfx__floor6(d->x - 32);
+                /* rule 3, dropout control (TTFX_HINT_DROPOUT): a span
+                   between two centres, holding none, turns on the pixel
+                   its middle is in (the crossings' 26.6 floors) */
+                if (xs > xe && dropout)
+                    xs = xe = ttfx__floor6((xa + d->x) >> 1);
                 if (xs < 0)
                     xs = 0;
                 if (xe >= bm->w)

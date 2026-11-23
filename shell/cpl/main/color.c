@@ -449,7 +449,7 @@ static int fill_schemes(const char *select)
 {
     HWND cb = GetDlgItem(hdlg, IDC_CO_SCHEMES);
     char name[80], item[400];
-    HLOCAL keys;
+    HLOCAL keys, hi;
     int sel = -1, n;
     SendMessage(cb, CB_RESETCONTENT, 0, 0);
     LoadString(g_hinst, IDS_DEFAULT_SCHEME, name, sizeof name);
@@ -462,9 +462,22 @@ static int fill_schemes(const char *select)
         for (k = (const char *)LocalLock(keys); *k; k += lstrlen(k) + 1) {
             if (!lstrcmpi(k, name) || !lstrcmpi(k, s_stock_default))
                 continue;
-            n = wsprintf(item, "%s=", (LPSTR)k);
-            GetPrivateProfileString(s_schemes, k, "", item + n, sizeof item - n, s_cpl_ini);
-            n = (int)SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)item);
+            /* "name=" and the colours (21 of at most 9 characters) in a
+               block as long as the name needs (cpl audit H2: CONTROL.INI's
+               names are not bounded; a 450-character one overflowed item
+               and ended Control Panel; 3.1's dies on it too) */
+            n = lstrlen(k);
+            if ((hi = LocalAlloc(LMEM_FIXED, n + 2 + 256)) == NULL)
+                continue;
+            {
+                char *it = LocalLock(hi);
+                lstrcpy(it, k);
+                it[n] = '=';
+                GetPrivateProfileString(s_schemes, k, "", it + n + 1, 256, s_cpl_ini);
+                n = (int)SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)it);
+                LocalUnlock(hi);
+                LocalFree(hi);
+            }
             if (!lstrcmpi(k, select))
                 sel = n;
         }
@@ -473,15 +486,35 @@ static int fill_schemes(const char *select)
     return sel;
 }
 
-static void scheme_name(int i, char *name, int size)
+/* the name of scheme i (the item's text up to '=') in a local block the
+   caller frees; NULL if none */
+static HLOCAL scheme_name_h(int i)
 {
     HWND cb = GetDlgItem(hdlg, IDC_CO_SCHEMES);
-    char item[400], *p;
-    SendMessage(cb, CB_GETLBTEXT, i, (LPARAM)(LPSTR)item);
-    for (p = item; *p && *p != '='; p++)
+    int n = (int)SendMessage(cb, CB_GETLBTEXTLEN, i, 0);
+    HLOCAL h;
+    char *p;
+    if (n < 0 || (h = LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, n + 1)) == NULL)
+        return NULL;
+    p = LocalLock(h);
+    SendMessage(cb, CB_GETLBTEXT, i, (LPARAM)(LPSTR)p);
+    for (; *p && *p != '='; p++)
         ;
     *p = 0;
-    lstrcpyn(name, item, size);
+    LocalUnlock(h);
+    return h;
+}
+
+/* the same, cut to size (for drawing it and the Save box) */
+static void scheme_name(int i, char *name, int size)
+{
+    HLOCAL h = scheme_name_h(i);
+    name[0] = 0;
+    if (h) {
+        lstrcpyn(name, LocalLock(h), size);
+        LocalUnlock(h);
+        LocalFree(h);
+    }
 }
 
 static void expand(void)
@@ -524,7 +557,8 @@ static void load_custom(void)
 static void apply(void)
 {
     int idx[NCOLORS], i;
-    char v[16], name[80];
+    char v[16];
+    HLOCAL h = NULL;
     for (i = 0; i < NCOLORS; i++) {
         idx[i] = sys_index[i];
         wsprintf(v, "%d %d %d", GetRValue(cur[i]), GetGValue(cur[i]), GetBValue(cur[i]));
@@ -532,11 +566,16 @@ static void apply(void)
     }
     SetSysColors(NCOLORS, idx, cur);
     i = (int)SendDlgItemMessage(hdlg, IDC_CO_SCHEMES, CB_GETCURSEL, 0, 0);
-    if (by_hand || i < 0)
-        name[0] = 0;
-    else
-        scheme_name(i, name, sizeof name);
-    WritePrivateProfileString(s_current, s_schemes, name, s_cpl_ini);
+    if (!by_hand && i >= 0)
+        h = scheme_name_h(i);
+    WritePrivateProfileString(s_current, s_schemes, h ? (LPSTR)LocalLock(h) : "", s_cpl_ini);
+    if (h) {
+        LocalUnlock(h);
+        LocalFree(h);
+    }
+    /* observed (wnchange): SetSysColors' WM_SYSCOLORCHANGE, then
+       WM_WININICHANGE for "colors"; Cancel sends none */
+    SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, (LPARAM)(LPSTR)"colors");
 }
 
 /* ---- Save Scheme ---- */
@@ -618,6 +657,7 @@ static void remove_scheme(void)
     HWND cb = GetDlgItem(hdlg, IDC_CO_SCHEMES);
     int i = (int)SendMessage(cb, CB_GETCURSEL, 0, 0), r, n;
     char name[80];
+    HLOCAL h;
     if (i < 0)
         return;
     scheme_name(i, name, sizeof name);
@@ -628,7 +668,12 @@ static void remove_scheme(void)
     message(hdlg, IDS_SCHEME_REMOVE, name, MB_YESNO | MB_ICONEXCLAMATION, &r);
     if (r != IDYES)
         return;
-    WritePrivateProfileString(s_schemes, name, NULL, s_cpl_ini);
+    /* the whole name (name is cut to 79 characters for the message) */
+    if ((h = scheme_name_h(i)) != NULL) {
+        WritePrivateProfileString(s_schemes, LocalLock(h), NULL, s_cpl_ini);
+        LocalUnlock(h);
+        LocalFree(h);
+    }
     SendMessage(cb, CB_DELETESTRING, i, 0);
     n = (int)SendMessage(cb, CB_GETCOUNT, 0, 0);
     select_scheme(i < n ? i : n - 1);
@@ -783,8 +828,13 @@ static void make_field(HDC dc)
     cc_field = CreateCompatibleBitmap(dc, w, h);
     mem = CreateCompatibleDC(dc);
     if (!cc_field || !mem) {
+        /* nothing kept: the next paint tries again (an undrawn bitmap
+           kept here would be shown from then on) */
         if (mem)
             DeleteDC(mem);
+        if (cc_field)
+            DeleteObject(cc_field);
+        cc_field = NULL;
         return;
     }
     old = SelectObject(mem, cc_field);
@@ -1037,12 +1087,13 @@ BOOL FAR PASCAL __loadds CustomColorProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
         HWND a = (HWND)HIWORD(lp);
         int id = GetDlgCtrlID(a) - (IDC_CC_HUEA - IDC_CC_HUE), max;
         BOOL ok;
-        int v = (int)GetDlgItemInt(dlg, id, &ok, FALSE);
+        /* unsigned, in a long: 32768 and up is not negative (cpl audit L7) */
+        long v = (long)GetDlgItemInt(dlg, id, &ok, FALSE);
         max = id == IDC_CC_HUE ? HLSMAX - 1 : id == IDC_CC_SAT || id == IDC_CC_LUMV ? HLSMAX : 255;
         v += wp == SB_LINEUP ? 1 : -1;
         if (v < 0) v = 0;
         if (v > max) v = max;
-        SetDlgItemInt(dlg, id, v, FALSE);
+        SetDlgItemInt(dlg, id, (UINT)v, FALSE);
         return TRUE;
     }
     case WM_COMMAND:

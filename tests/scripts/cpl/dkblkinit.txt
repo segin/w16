@@ -1,0 +1,23 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! ini WINDOWS/WIN.INI windows:CursorBlinkRate=700
+; Desktop: where the blink bar starts: WIN.INI says 700, the caret blinks
+; at 300 (SetCaretBlinkTime); OK unmoved: CursorBlinkRate written; then
+; with the caret at 65535: 3.1 wrote 530 there (wnchange)
+blinktime 300
+run CONTROL.EXE DESKTOP
+wait 4000
+key 0D
+wait 2000
+caretblink C:\CMP.LOG
+blinktime 65535
+run CONTROL.EXE DESKTOP
+wait 4000
+key 0D
+wait 2000
+caretblink C:\CMP.LOG
+blinktime 1250
+run CONTROL.EXE DESKTOP
+wait 4000
+key 0D
+wait 2000
+caretblink C:\CMP.LOG

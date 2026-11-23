@@ -186,6 +186,9 @@ void font_init(void)
     /* WIN.INI [TrueType] TTEnable (the Fonts applet's TrueType
        Options); UNVERIFIED: what 3.1 does with .FOT files then */
     tt_enabled = GetProfileInt("TrueType", "TTEnable", 1) != 0;
+    /* SYSTEM.INI [w16] TrueTypeHinting: the autohinter's TTFX_HINT_*
+       flags (1 vertical, 2 horizontal, 4 dropout control; 0 none) */
+    tt_hint = (BYTE)GetPrivateProfileInt("w16", "TrueTypeHinting", TT_HINT_DEFAULT, "SYSTEM.INI");
     font_load_boot("FONTS.FON");
     GetPrivateProfileString("boot", "fixedfon.fon", "", buf, sizeof buf, "SYSTEM.INI");
     if (buf[0]) {

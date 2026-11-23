@@ -18,6 +18,11 @@
  *   icon<i>=1..3     icon resource: 1 solid black square, 2 one-pixel
  *                    black frame, 3 white square (default 1)
  *   dblclk=box       on CPL_DBLCLK show a message box naming the applet
+ *   monitor=1        from CPL_INIT to CPL_EXIT keep a hidden top-level
+ *                    window that logs the broadcasts it gets: "bcast"
+ *                    lines for WM_WININICHANGE (lParam's section, or
+ *                    NULL), WM_SYSCOLORCHANGE, WM_DEVMODECHANGE and
+ *                    WM_FONTCHANGE (what an applet tells other programs)
  * Two identical copies (CP1.CPL, CP2.CPL ...) can be told apart by
  * GetModuleFileName in the log.
  */
@@ -39,6 +44,65 @@ static void logs(const char FAR *s)
     _llseek(f, 0, 2);
     _lwrite(f, s, lstrlen(s));
     _lclose(f);
+}
+
+static HWND mon;
+static char mon_class[] = "CP1Mon";
+
+LRESULT FAR PASCAL __loadds MonProc(HWND w, UINT m, WPARAM wp, LPARAM lp)
+{
+    char buf[200];
+    switch (m) {
+    case WM_WININICHANGE:
+    case WM_DEVMODECHANGE:
+        if (lp)
+            wsprintf(buf, "bcast msg=%04X wp=%04X lp=\"%.80s\"\r\n", m, wp, (LPSTR)lp);
+        else
+            wsprintf(buf, "bcast msg=%04X wp=%04X lp=NULL\r\n", m, wp);
+        logs(buf);
+        return 0;
+    case WM_SYSCOLORCHANGE:
+    case WM_FONTCHANGE:
+        wsprintf(buf, "bcast msg=%04X wp=%04X lp=%08lX\r\n", m, wp, lp);
+        logs(buf);
+        return 0;
+    }
+    return DefWindowProc(w, m, wp, lp);
+}
+
+static void mon_start(void)
+{
+    WNDCLASS wc;
+    if (mon || !GetPrivateProfileInt("cp1", "monitor", 0, ini))
+        return;
+    wc.style = 0;
+    wc.lpfnWndProc = MonProc;
+    wc.cbClsExtra = wc.cbWndExtra = 0;
+    wc.hInstance = hinst;
+    wc.hIcon = NULL;
+    wc.hCursor = NULL;
+    wc.hbrBackground = NULL;
+    wc.lpszMenuName = NULL;
+    wc.lpszClassName = mon_class;
+    RegisterClass(&wc);
+    mon = CreateWindow(mon_class, "CP1 monitor", WS_POPUP, 0, 0, 1, 1,
+                       NULL, NULL, hinst, NULL);
+}
+
+static void mon_stop(void)
+{
+    if (mon) {
+        DestroyWindow(mon);
+        mon = NULL;
+        UnregisterClass(mon_class, hinst);
+    }
+}
+
+int FAR PASCAL __loadds WEP(int exit)
+{
+    (void)exit;
+    mon_stop();
+    return 1;
 }
 
 int __cdecl __far cpl_libmain(HINSTANCE h)
@@ -71,6 +135,11 @@ LONG FAR PASCAL __loadds CPlApplet(HWND hwnd, UINT msg, LPARAM l1, LPARAM l2)
     switch (msg) {
     case CPL_INIT:
         r = MAKELONG(geti("init", 1), geti("hiword", 0));
+        if (r)
+            mon_start();
+        break;
+    case CPL_EXIT:
+        mon_stop();
         break;
     case CPL_GETCOUNT:
         r = MAKELONG(geti("count", 1), geti("hiword", 0));

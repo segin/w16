@@ -1,0 +1,19 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! ini WINDOWS/WIN.INI windows:DoubleClickSpeed=1000
+; Mouse with a double-click time over the bar's 900 (cpl audit M4): where
+; the thumb starts, OK unmoved; then one step faster (Right), OK
+blinktime 65535
+run CONTROL.EXE MOUSE
+wait 4000
+snap M0.BMP
+key 0D
+wait 2000
+run CONTROL.EXE MOUSE
+wait 4000
+key 09
+wait 300
+key 27
+wait 300
+snap M1.BMP
+key 0D
+wait 2000

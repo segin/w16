@@ -1,0 +1,48 @@
+;! cp1
+;! file cp1-mon.ini CP1.INI
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; What Color, Desktop, Keyboard and Mouse tell other programs on OK and
+; Cancel: CP1's monitor window logs every WM_WININICHANGE (with its
+; section), WM_SYSCOLORCHANGE, WM_DEVMODECHANGE and WM_FONTCHANGE it gets
+; (cpl audit M5)
+blinktime 65535
+append C:\CP1.LOG ---- Color OK
+run CONTROL.EXE COLOR
+wait 4000
+key 0D
+wait 2500
+append C:\CP1.LOG ---- Color Cancel
+run CONTROL.EXE COLOR
+wait 4000
+key 1B
+wait 2500
+append C:\CP1.LOG ---- Desktop OK
+run CONTROL.EXE DESKTOP
+wait 4000
+key 0D
+wait 2500
+append C:\CP1.LOG ---- Desktop Cancel
+run CONTROL.EXE DESKTOP
+wait 4000
+key 1B
+wait 2500
+append C:\CP1.LOG ---- Keyboard OK
+run CONTROL.EXE KEYBOARD
+wait 4000
+key 0D
+wait 2500
+append C:\CP1.LOG ---- Keyboard Cancel
+run CONTROL.EXE KEYBOARD
+wait 4000
+key 1B
+wait 2500
+append C:\CP1.LOG ---- Mouse OK
+run CONTROL.EXE MOUSE
+wait 4000
+key 0D
+wait 2500
+append C:\CP1.LOG ---- Mouse Cancel
+run CONTROL.EXE MOUSE
+wait 4000
+key 1B
+wait 2500

@@ -21,7 +21,8 @@
  * - the rasteriser is monochrome with the TrueType specification's rules
  *   1 and 2 (a pixel is on when its centre is inside the outline or on
  *   it; non-zero winding), no anti-aliasing and (stage 1) no dropout
- *   control and no hinting;
+ *   control and no TrueType instructions; instead an autohinter of w16's
+ *   own (ttfhint.c) grid-fits the outline at render time;
  * - TrueType outlines only: no CFF/Type 2, SVG, GPOS, SDF, packing or
  *   baking.
  */
@@ -59,6 +60,13 @@ typedef unsigned (*ttfx_readfn)(void *user, ttfx_u32 off, void TTFX_FAR *dst, un
 /* bytes of cache memory for n pages (at least 2) */
 #define TTFX_CACHE_BYTES(n) ((unsigned)(n) * TTFX_SLOT)
 
+/* the autohinter's flags (ttfx_font.hint, ttfx_SetHinting) */
+#define TTFX_HINT_Y 1                   /* vertical: blue zones, horizontal stems */
+#define TTFX_HINT_X 2                   /* horizontal: vertical stems */
+#define TTFX_HINT_DROPOUT 4             /* the scan converter's rule 3, along rows */
+#define TTFX_HINT_DEFAULT (TTFX_HINT_Y | TTFX_HINT_X | TTFX_HINT_DROPOUT)
+#define TTFX_HINT_ZONES 5
+
 typedef struct ttfx_font {
     ttfx_readfn read;
     void *user;                     /* the callback's */
@@ -77,6 +85,14 @@ typedef struct ttfx_font {
     ttfx_u16 index_map_platform, index_map_encoding;
     int indexToLocFormat;
     ttfx_u16 unitsPerEm;
+
+    /* the autohinter (ttfhint.c): TTFX_HINT_* flags, TTFX_HINT_DEFAULT
+       from ttfx_InitFont; then its analysis of the font, made at the
+       first hinted glyph (font units, y up) */
+    int hint;
+    ttfx_u8 hint_done, nzones, hint_up;  /* hint_up: a stem is rounded up from it (1/64 px) */
+    ttfx_i16 zone[TTFX_HINT_ZONES][3];  /* reference, overshoot, 1 top 0 bottom */
+    ttfx_i16 stdw[2];                   /* standard stem widths across x, y (0: none) */
 } ttfx_font;
 
 /* 8.24 fixed-point scale: pixels per font unit */
@@ -148,6 +164,16 @@ ttfx_i32 ttfx_MulDivRound(ttfx_i32 v, ttfx_i32 num, ttfx_i32 den);
 int ttfx_GetGlyphShape(const ttfx_font *f, ttfx_u16 glyph, ttfx_vertex TTFX_FAR **pv);
 void ttfx_FreeShape(const ttfx_font *f, ttfx_vertex TTFX_FAR *v);
 
+/* render-time hinting (ttfhint.c): flags TTFX_HINT_* (0: off). Hinting
+   moves outline points only, within the pixel box ttfx_GetGlyphBitmapBox
+   gives; metrics (advance widths, boxes) never change. X and Y apply to
+   ttfx_Flatten, ttfx_Rasterize and ttfx_RenderGlyph; DROPOUT to the last
+   two: a run of a row between two pixel centres, inside the outline but
+   holding no centre (a stroke thinner than a pixel), turns on the pixel
+   its middle is in (the TrueType specification's rule 3 along rows, as a
+   font's instructions would ask for at small sizes) */
+void ttfx_SetHinting(ttfx_font *f, int flags);
+
 /* the pixel box a glyph's outline can touch, at scale sx, sy and shift
    (26.6), y down (stb_truetype's GetGlyphBitmapBoxSubpixel) */
 void ttfx_GetGlyphBitmapBox(const ttfx_font *f, ttfx_u16 glyph, ttfx_scale sx, ttfx_scale sy,
@@ -169,6 +195,12 @@ typedef struct { ttfx_i32 x, y; } ttfx_point;
 int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx_scale sx, ttfx_scale sy,
                  ttfx_i32 shift_x, ttfx_i32 shift_y, int off_x, int off_y,
                  ttfx_point TTFX_FAR **pts, int TTFX_FAR **counts, int *ncontours);
+
+/* (ttfhint.c, for ttfx_Flatten) the outline's points scaled to 26.6 (y
+   down, +ox, +oy): [2i] vertex i's point, [2i+1] its control point; grid-
+   fitted as f->hint asks. Allocated (TTFX_malloc); 0 if out of memory */
+ttfx_point TTFX_FAR *ttfx__HintPoints(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv,
+                                      ttfx_scale sx, ttfx_scale sy, ttfx_i32 ox, ttfx_i32 oy);
 
 /* a name record (name table): copies at most size bytes of the string
    (UTF-16BE for platform 3 and 0) to buf; returns its whole length, -1 if

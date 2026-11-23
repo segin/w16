@@ -1092,12 +1092,15 @@ $(W386)/VMPOLL.386: $(W386VMPOLL) win386/vxd/vmpoll.lnk
 W386VSD := $(W386)/vxd/vsdddb.o $(W386)/vxd/vsd.o $(W386)/vxd/vxdrt.o
 $(W386)/VSD.386: $(W386VSD) win386/vxd/vsd.lnk
 	$(WLINK) @win386/vxd/vsd.lnk name $@ option map=$(W386)/vsd.map file { $(W386VSD) }
-W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VSD=$(W386)/VSD.386 VMPOLL=$(W386)/VMPOLL.386
-$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VSD.386 $(W386)/VMPOLL.386 tools/mkw3.py
+W386VDMAD := $(W386)/vxd/vdmadddb.o $(W386)/vxd/vdmad.o $(W386)/vxd/vxdrt.o
+$(W386)/VDMAD.386: $(W386VDMAD) win386/vxd/vdmad.lnk
+	$(WLINK) @win386/vxd/vdmad.lnk name $@ option map=$(W386)/vdmad.map file { $(W386VDMAD) }
+W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VSD=$(W386)/VSD.386 VMPOLL=$(W386)/VMPOLL.386 VDMAD=$(W386)/VDMAD.386
+$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VSD.386 $(W386)/VMPOLL.386 $(W386)/VDMAD.386 tools/mkw3.py
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/SBD.COM
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -1144,6 +1147,30 @@ $(DOS)/VXQ.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
 	@mkdir -p $(@D) $(B)/tests
 	$(NASM) -f obj -DBADLINK -o $(B)/tests/vxq.o tests/vxd/vxp.asm
 	$(WLINK) @tests/vxd/vxp.lnk name $@ file $(B)/tests/vxq.o
+# VXM.386, VXMR.386: the Virtual DMA Device's probe VxD (tests/vxd/vxm.c,
+# on w16's VxD runtime; VXMR reserves buffer space)
+$(B)/tests/vxm.o: tests/vxd/vxm.c $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	wcc386 -q -zq -bt=nt -mf -zl -s -ecc -3s -ox -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(B)/tests/vxmr.o: tests/vxd/vxm.c $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	wcc386 -q -zq -bt=nt -mf -zl -s -ecc -3s -ox -dRESERVE -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(B)/tests/vxmddb.o: tests/vxd/vxmddb.asm $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	$(NASM) -f obj -I$(W386INC)/ -o $@ $<
+$(DOS)/VXM.386: $(B)/tests/vxmddb.o $(B)/tests/vxm.o $(W386)/vxd/vxdrt.o tests/vxd/vxm.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/vxd/vxm.lnk name $@ file { $(B)/tests/vxmddb.o $(B)/tests/vxm.o $(W386)/vxd/vxdrt.o }
+	python3 tools/leautodata.py $@
+$(DOS)/VXMR.386: $(B)/tests/vxmddb.o $(B)/tests/vxmr.o $(W386)/vxd/vxdrt.o tests/vxd/vxm.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/vxd/vxm.lnk name $@ file { $(B)/tests/vxmddb.o $(B)/tests/vxmr.o $(W386)/vxd/vxdrt.o }
+	python3 tools/leautodata.py $@
+# SBD.COM: Sound Blaster DMA playback in a DOS box (tests/dos/sbd.asm,
+# tests/vdmadprobe.sh)
+$(DOS)/SBD.COM: tests/dos/sbd.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
 # MEMLOAD.EXE: XMS and EMS workloads for DOS boxes (tests/dos/memload.c,
 # OpenWatcom 16-bit DOS, large model; tests/memloadrun.sh)
 $(B)/tests/memload.o: tests/dos/memload.c
@@ -1580,12 +1607,15 @@ $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
 # segments, marked 2.0 and, in the NE other-flags byte, 02h: a 2.x program
 # that runs in protected mode (SDK vol. 4, the NE header; without it 3.1
 # would not start it as the shell)
-TTV_O := $(B)/ttview/ttview.o $(B)/ttview/ttvpage.o $(B)/ttview/ttfx.o
+TTV_O := $(B)/ttview/ttview.o $(B)/ttview/ttvpage.o $(B)/ttview/ttfx.o $(B)/ttview/ttfhint.o
 dos: $(DOS)/TTVIEW.EXE
 $(B)/ttview/%.o: tests/apps/%.c tests/apps/ttvpage.h gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
 $(B)/ttview/ttfx.o: gdi/ttf/ttfx.c gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/ttview/ttfhint.o: gdi/ttf/ttfhint.c gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
 $(B)/ttview/ttview.res: tests/apps/ttview.rc
@@ -1600,16 +1630,17 @@ $(DOS)/TTVIEW.EXE: $(B)/shell/start.o $(B)/shell/write/i4.o $(TTV_O) $(B)/ttview
 	    file { $(B)/shell/start.o $(B)/shell/write/i4.o $(TTV_O) }
 	python3 tools/nemark.py $@ 2.0 0202 02
 # ... and the same page drawn on the host, to compare with (tests/ttview.sh)
-$(B)/host/ttvhost: tests/ttf/ttvhost.c tests/apps/ttvpage.c tests/apps/ttvpage.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h
+$(B)/host/ttvhost: tests/ttf/ttvhost.c tests/apps/ttvpage.c tests/apps/ttvpage.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h \
+                  gdi/ttf/ttfhint.c
 	@mkdir -p $(@D)
-	$(HOSTCC) -O2 -o $@ tests/ttf/ttvhost.c tests/apps/ttvpage.c gdi/ttf/ttfx.c
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttvhost.c tests/apps/ttvpage.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c
 
 # the fixed-point TrueType code (gdi/ttf/ttfx.c) against the floating-point
 # stb_truetype it was adapted from, on the host (tests/ttf/ttfxtest.c)
 $(B)/host/ttfxtest: tests/ttf/ttfxtest.c tests/ttf/ref.c tests/ttf/ref.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h \
-                    gdi/ttf/stb_truetype.h
+                    gdi/ttf/ttfhint.c gdi/ttf/stb_truetype.h
 	@mkdir -p $(@D)
-	$(HOSTCC) -O2 -o $@ tests/ttf/ttfxtest.c tests/ttf/ref.c gdi/ttf/ttfx.c -lm
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttfxtest.c tests/ttf/ref.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c -lm
 
 test: dos fonts grpcheck $(B)/host/pwtest $(B)/hlpdump $(B)/host/ttfxtest
 	python3 tests/scripts/ss/pwtest.py $(B)/host/pwtest
@@ -1778,9 +1809,12 @@ GCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -wcd=201 -Igdi
 GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/heap.o $(B)/gdi/object.o \
            $(B)/gdi/driver.o $(B)/gdi/dc.o $(B)/gdi/rgn.o $(B)/gdi/bitmap.o \
            $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o $(B)/gdi/draw.o \
-           $(B)/gdi/meta.o $(B)/gdi/ttfont.o $(B)/gdi/ttfx.o
+           $(B)/gdi/meta.o $(B)/gdi/ttfont.o $(B)/gdi/ttfx.o $(B)/gdi/ttfhint.o
 gdi: $(DOS)/GDI.EXE
 $(B)/gdi/ttfx.o: gdi/ttf/ttfx.c gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(WCC) $(GCFLAGS) -fo=$@ $<
+$(B)/gdi/ttfhint.o: gdi/ttf/ttfhint.c gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(GCFLAGS) -fo=$@ $<
 $(B)/gdi/ttfont.o: gdi/ttf/ttfx.h

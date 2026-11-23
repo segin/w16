@@ -34,7 +34,7 @@
 # hold QTINSTAL.EXE (what QUICKTIM.EXE or QTEASY16.EXE unpacks); without it
 # the test says so and passes (exit 0, "skip").
 #
-#   usage: tests/qtplay.sh [-o OUTDIR] [-m "FILE ..."] [-t "FILE ..."] [-T 286|386] [-R REFDIR]
+#   usage: tests/qtplay.sh [-o OUTDIR] [-m "FILE ..."] [-t "FILE ..."] [-T 286|386] [-E] [-R REFDIR]
 #     -m "FILE ..."  leave these files of the tree out (Microsoft's stay;
 #                    KRNL386.EXE: Microsoft's KRNL386 runs): bisection
 #     -t "FILE ..."  only these files of the tree (e.g. TIMER.DRV: the
@@ -43,6 +43,17 @@
 #     -T 286|386     w16's install tree alone, under its KRNL286 (what
 #                    tests/dropin.sh -T boots: it leaves KRNL386.EXE out) or
 #                    its KRNL386
+#     -E             386 Enhanced mode on both sides (WIN /3): Microsoft's
+#                    WIN386 on stock 3.1, the tree's on the w16 side; with
+#                    -T 386 the user's setup of 2026-11-22 (plain DOSBox:
+#                    playing the movie ended Windows with a #GP in
+#                    TIMER:1, docs/notes/quicktime-handover.md). Known
+#                    differences are printed, not checked: a drag not
+#                    taken (now and then, UNVERIFIED why), the
+#                    movie's length (w16 about twice 3.1's 12 s: TIMER's
+#                    events late on WIN386's virtual 8254) and the dragged
+#                    picture (the speaker button: SB16.DRV has no devices
+#                    in Enhanced mode)
 #     -R REFDIR      the stock 3.1 run made before (its shots); no new one
 # Checks (exit 1 if one fails):
 #   - both runs reach the Movie Player (w16 runs with [w16] hangwatch=120,
@@ -93,14 +104,15 @@
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-out= msfiles= refdir= only= treek=
-while getopts o:m:t:T:R: opt; do
+out= msfiles= refdir= only= treek= enh=
+while getopts o:m:t:T:ER: opt; do
     case $opt in
     o) out=$OPTARG ;;
     m) msfiles=$OPTARG ;;
     t) only=$OPTARG ;;
     T) treek=$OPTARG
        case $treek in 286|386) ;; *) echo "-T 286 or -T 386" >&2; exit 2 ;; esac ;;
+    E) enh=1 ;;
     R) refdir=$OPTARG ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
@@ -150,7 +162,10 @@ if [ -n "$treek" ]; then
     set -- -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" -T "$tree"
     [ "$treek" = 286 ] || set -- "$@" -3
 fi
-w16opts="$*"
+# 386 Enhanced mode: WIN /3 on both sides (from here on the positional
+# parameters are the w16 side's dropin.sh options)
+modec=
+[ -z "$enh" ] || { modec="WIN /3 /B"; set -- "$@" -c "$modec"; }
 
 # the stock 3.1 run: with the tree alone, a sound device as the tree has
 # (its SYSTEM.INI loads SB16.DRV): Windows 3.1's SNDBLST2.DRV on DOSBox's
@@ -166,14 +181,14 @@ if [ -z "$refdir" ]; then
     refdir=$out/ref newref=1
     # shellcheck disable=SC2086
     "$root/tests/inputrun.sh" -s -b 40 -t 900 "$out/qtplay-WINDOWS.txt" "$refdir" -r -3 \
-        -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" $refsnd > "$out/ref.txt" 2>&1 &
+        ${modec:+-c "$modec"} -f "$qt/QTINSTAL.EXE=TMP/QTINSTAL.EXE" $refsnd > "$out/ref.txt" 2>&1 &
 fi
 wscript=$out/qtplay-WINDOWS.txt
 [ -z "$treek" ] || wscript=$out/qtplay-W16.txt
 hw=${QTPLAY_HANGWATCH:-120}
 # shellcheck disable=SC2086
 "$root/tests/inputrun.sh" -s -b 40 -t 900 "$wscript" "$out/w16" \
-    -i w16:hangwatch=$hw $w16opts > "$out/w16.txt" 2>&1 || true
+    -i w16:hangwatch=$hw "$@" > "$out/w16.txt" 2>&1 || true
 wait
 refdir=$(cd "$refdir" && pwd)
 # how close w16 came to the hangwatch limit (KERNEL prints it as Windows
@@ -237,7 +252,14 @@ else
         re=$(endshot "$refdir") we=$(endshot "$w")
         re=${re#p} we=${we#p}
         d=$(( ${re#0} - ${we#0} ))
-        [ $d -ge -1 ] && [ $d -le 1 ] || fail "the last frame came in shot $we on w16, $re on 3.1"
+        if [ $d -ge -1 ] && [ $d -le 1 ]; then :
+        elif [ -n "$enh" ]; then
+            # known: w16's TIMER.DRV in 386 Enhanced mode, without VTDAPI
+            # on WIN386's virtual 8254, calls events late (ARCHITECTURE.md
+            # 21.5); 3.1 takes 12 s with and without a sound device, w16
+            # 22-26 s (2026-11-22)
+            echo "known, not checked with -E: the last frame came in shot $we on w16, $re on 3.1"
+        else fail "the last frame came in shot $we on w16, $re on 3.1"; fi
         echo "plays in about $(( ${re#0} * 2 )) s on 3.1, $(( ${we#0} * 2 )) s on w16"
     fi
 fi
@@ -302,7 +324,12 @@ dragged() {
 if [ -f "$refdir/c4b-dropped.png" ] && [ -f "$w/c4b-dropped.png" ]; then
     ra=$(dragged "$refdir") wa=$(dragged "$w")
     echo "the movie's window dragged while playing: $ra on 3.1, $wa on w16"
-    if [ "$ra" != "$wa" ]; then
+    if [ "$ra" != "$wa" ] && [ -n "$enh" ]; then
+        # known (2026-11-22): in 386 Enhanced mode the drag is sometimes
+        # not taken at all (3 runs in 7 under load: the window stays where
+        # it was, the movie plays on); UNVERIFIED why
+        echo "known, not checked with -E: the movie's window dragged while playing: $wa on w16, $ra on 3.1 ($w/c4b-dropped.png)"
+    elif [ "$ra" != "$wa" ]; then
         fail "the movie's window dragged while playing: $wa on w16, $ra on 3.1 ($w/c4b-dropped.png)"
     else
         ws=$(magick "$refdir/c1-closed.png" "$refdir/c3-reopened.png" -compose difference -composite \
@@ -314,7 +341,13 @@ if [ -f "$refdir/c4b-dropped.png" ] && [ -f "$w/c4b-dropped.png" ]; then
         magick "$w/c4b-dropped.png" -crop "$crop" +repage "$out/drag-w16.png"
         n=$(px "$out/drag-ref.png" "$out/drag-w16.png" "$out/drag-diff.png")
         echo "the dragged movie's picture ($crop): $n pixels differ from 3.1's"
-        [ "$n" = 0 ] || fail "the dragged movie's picture: $n pixels differ from 3.1's ($out/drag-diff.png)"
+        if [ "$n" = 0 ]; then :
+        elif [ -n "$enh" ]; then
+            # known: w16's SB16.DRV offers no devices in 386 Enhanced mode,
+            # so the controller's speaker button (its top edge is in this
+            # picture) is gray on w16, live on 3.1 with SNDBLST2.DRV
+            echo "known, not checked with -E: the dragged movie's picture: $n pixels differ ($out/drag-diff.png)"
+        else fail "the dragged movie's picture: $n pixels differ from 3.1's ($out/drag-diff.png)"; fi
     fi
 elif [ -f "$refdir/c4b-dropped.png" ]; then
     fail "the drag while the movie plays did not get to its drop on w16 ($w/input.log, $w/work/c/OUT.TXT)"

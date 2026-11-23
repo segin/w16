@@ -7,3 +7,5 @@ option map
 option modname=CP1
 library windows.lib
 export CPLAPPLET.1
+export WEP resident
+export MONPROC

@@ -111,14 +111,16 @@ Boot-test settings:
 - `BOOTTEST_REFRESH=1`: rerun the Windows 3.1 reference boots instead of using the cache in `build/refcache/` (the cache is keyed on everything a reference depends on, so you rarely need this).
 - Results go to `build/boottest-HHMMSS/`: for a failing case, `CASE-*-diff.png` shows the differing pixels, and the case's `-ref` and `-w16` directories hold both sides' screens and logs. Retries are logged to `build/boottest-retries.log`. A test that fails only sometimes is a bug, not noise: report it.
 
-Other test scripts, each documented at its top: `tests/gd13.sh` (the TrueType probe GD13 as the shell, `-r` on Microsoft's GDI, with the free test font installed through CreateScalableFontResource; `tools/gd13.py REF LOG` compares two logs, `tools/gd11.py tt REF LOG` GD11's TrueType answers), `tests/ttview.sh` (TTVIEW.EXE, the TrueType viewer that rasterises with w16's fixed-point `gdi/ttf/ttfx.c`, on Windows/386 2.11, 3.1 Standard and 386 Enhanced, w16 and an emulated 80286: its page against the host's drawing bit for bit; `make test` runs `tests/ttf/ttfxtest.c`, the rasteriser against floating-point stb_truetype), `tests/npscenarios.sh` (`NP_W16FILES="$PWD/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE"` runs w16's Notepad on w16's edit control too), `tests/npqes.sh` (Notepad when Windows ends: whole-screen captures of its system-modal boxes),
+Other test scripts, each documented at its top: `tests/gd13.sh` (the TrueType probe GD13 as the shell, `-r` on Microsoft's GDI, with the free test font installed through CreateScalableFontResource; `tools/gd13.py REF LOG` compares two logs, `tools/gd11.py tt REF LOG` GD11's TrueType answers), `tests/ttview.sh` (TTVIEW.EXE, the TrueType viewer that rasterises with w16's fixed-point `gdi/ttf/ttfx.c`, on Windows/386 2.11, 3.1 Standard and 386 Enhanced, w16 and an emulated 80286: its page, hinted by w16's autohinter `gdi/ttf/ttfhint.c` and unhinted, against the host's drawing bit for bit; `-2` the 8-24 pixel specimen, `-u` shows the unhinted page, `-g` the specimen as 3.1 draws it with its own rasteriser; `tests/ttf/pg2png.py` makes images of the pages; `make test` runs `tests/ttf/ttfxtest.c`, the rasteriser against floating-point stb_truetype and the hinted bitmaps against the scan-conversion rules on the hinted outline), `tests/npscenarios.sh` (`NP_W16FILES="$PWD/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE"` runs w16's Notepad on w16's edit control too), `tests/npqes.sh` (Notepad when Windows ends: whole-screen captures of its system-modal boxes),
 `tests/wfscenarios.sh` and `tests/wfhelp.sh` (w16's File Manager against
 Microsoft's; `tests/wfobs.sh` for observing the original; scripts with
 `; fmx:` load w16's File Manager extension probe FMX.DLL, `tests/apps/fmx.c`),
 `tests/cplscenarios.sh` (w16's Control Panel and applets against Microsoft's:
 CONTROL.INI, WIN.INI, SYSTEM.INI byte for byte and every screenshot within
 `tests/scripts/cpl.baseline`; `fn*` Fonts, `pt*` Ports, `en*` 386 Enhanced
-in `WIN /3`, `en*w` with w16's WIN386 as well),
+in `WIN /3`, `en*w` with w16's WIN386 as well; C:\CMP.LOG compared too:
+broadcasts in `wnchange`, blink counts in `dkblk*`, keyboard SetSpeed
+calls in `kbspeed*`; `;! survive` scenarios where 3.1's MAIN.CPL dies),
 `tests/rescenarios.sh` and `tests/rehelp.sh` (w16's Registration Info Editor against Microsoft's: screens, REG.DAT, WIN.INI and saved .REG files; its New Style scenarios NS* against w16's approved screens in `tests/scripts/regedit/ns-ref/`, `RE_NSREF=update` to approve; `tests/regobs.sh` for observing the original, `REGOBS_TRACE=1` logging its SHELL calls through XHELL.DLL),
 `tests/pifscenarios.sh` and `tests/pifhelp.sh` (w16's PIF Editor against
 Microsoft's: screens within `tests/scripts/pifedit.baseline`, every saved
@@ -282,7 +284,7 @@ setup. w16's WIN386 writes its trace to COM1 (`serial1=file file:com1.txt`).
 Real mouse motion does not reach the guest in DOSBox-X, so the boot-test
 case `win386input` (mouse, keys, Exit Windows) runs in DOSBox through
 `tests/inputrun.sh` (`-c "WIN /3 /B"`, with KRNL386.EXE put back by `-f`:
-see the case in `tests/boottest.sh`). `tests/vsdprobe.sh ms|w16 [fg bg two hung cadd kbd ...]` runs the Virtual Sound Device's probes with the sound recorded (ARCHITECTURE.md 12.8 VSD). `tests/vxpprobe.sh ms|w16` loads the
+see the case in `tests/boottest.sh`). `tests/vsdprobe.sh ms|w16 [fg bg two hung cadd kbd ...]` runs the Virtual Sound Device's probes with the sound recorded (ARCHITECTURE.md 12.8 VSD). `tests/vdmadprobe.sh [-R] ms|w16` runs the Virtual DMA Device's: SBD.COM's Sound Blaster DMA and VDS calls in a box, the probe VxD VXM.386 (`-R`: VXMR, which reserves buffer space; `VDMADPROBE_INI` adds SYSTEM.INI settings), the sound recorded; `tools/vdmadcmp.py REF W16` compares two runs (the boot-test case vdmad). `tests/vxpprobe.sh ms|w16` loads the
 probe VxD VXP.386 (`make vxprobes`) and prints the control messages and
 service results it saw (ARCHITECTURE.md 12.7). The DPMI host's answers
 are probed by VX11 (`tests/apps/vx11.c`, run as the shell with

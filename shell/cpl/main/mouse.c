@@ -140,9 +140,12 @@ static void show_swap(HWND dlg, BOOL swapped)
     SetDlgItemText(dlg, IDC_MS_R, swapped ? "L" : "R");
 }
 
+/* a time outside 100..900 (WIN.INI, SetDoubleClickTime) at the bar's
+   nearer end: observed, 1000 at Slow, 60 at Fast (msdbl, msdbl2) */
 static void set_dblclk_bar(HWND dlg)
 {
-    SetScrollPos(GetDlgItem(dlg, IDC_MS_DBLCLK), SB_CTL, (DBL_MAX - dblclk) / DBL_STEP, TRUE);
+    UINT v = dblclk < DBL_MIN ? DBL_MIN : dblclk > DBL_MAX ? DBL_MAX : dblclk;
+    SetScrollPos(GetDlgItem(dlg, IDC_MS_DBLCLK), SB_CTL, (DBL_MAX - v) / DBL_STEP, TRUE);
 }
 
 BOOL FAR PASCAL __loadds MouseProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
@@ -274,6 +277,8 @@ BOOL FAR PASCAL __loadds MouseProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             put_int("MouseThreshold1", v[0]);
             put_int("MouseThreshold2", v[1]);
             put_int("MouseSpeed", v[2]);
+            /* observed (wnchange): "Windows", capital W; Cancel sends none */
+            SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, (LPARAM)(LPSTR)"Windows");
             EndDialog(dlg, IDOK);
             return TRUE;
         }

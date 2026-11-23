@@ -378,6 +378,20 @@ static void link_wake(vu32 h)
 
 /* the devices: the VMM's own DDB and the loader's list, by init order
  * (equal orders: as loaded; UNVERIFIED tie-break), then the init messages */
+/* VDMAD's link: a ring-0 linear address's physical one (~0: not
+ * present), and physically contiguous pages for its buffer */
+static u32 link_lin_to_phys(u32 lin)
+{
+    return lin_to_phys_x(lin);
+}
+static u32 link_alloc_run(u32 n, u32 align, u32 max_phys, u32 *phys)
+{
+    u32 p = page_alloc_run(n, align, max_phys);
+    if (!p) return 0;
+    *phys = p;
+    return phys_to_lin(p);
+}
+
 void vxd_init(void)
 {
     u32 n = 1 + NBUILTIN + info->vxd_count, i, j;
@@ -425,6 +439,15 @@ void vxd_init(void)
         fatal("Invalid VxD dynamic link call to device number 0003, service 0001.\n"
               "Your w16 configuration is invalid. Run the w16 Setup program\n"
               "again to correct this problem.\n");
+    for (i = 0; i < ndevs; i++)                     /* VDMAD's link (w16vxd.h) */
+        if (devs[i]->device_id == 4 && devs[i]->ref_data
+            && ((struct vdmad_link *)devs[i]->ref_data)->magic == VDMAD_LINK_MAGIC) {
+            struct vdmad_link *l = (struct vdmad_link *)devs[i]->ref_data;
+            l->lin_to_phys = link_lin_to_phys;
+            l->alloc_run = link_alloc_run;
+            l->buf_kb = info->dma_buf_kb;
+            l->buf_conv = (u32)info->dma_buf_seg << 4;
+        }
     for (i = 0; i < ndevs; i++)                     /* REBOOT's link (w16vxd.h) */
         if (devs[i]->device_id == 9 && devs[i]->ref_data) reboot_link_of(devs[i]->ref_data);
     vpicd->deliver = vmm_deliver;

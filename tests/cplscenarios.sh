@@ -20,7 +20,19 @@
 #                           e.g. win386/WIN386.EXE) to C:\DEST in the w16 run
 #   ;! ini FILE SEC:KEY=VAL set a key in the reference's C:\FILE (both runs;
 #                           tests/scripts/iniset.py)
+#   ;! saver DEST TEXT      w16's SSSTARS.SCR as C:\DEST (both runs), its
+#                           description "SCRNSAVE : TEXT" (at the original's
+#                           length: tests/scripts/scrdesc.py)
+#   ;! kbrec                KBREC.DRV (tests/apps/kbrec.asm) as KEYBOARD in
+#                           front of 3.1's KEYBOARD.DRV (both runs): SNAP's
+#                           kbrlog lists the SetSpeed calls
+#   ;! survive             Windows 3.1 dies in this scenario (its MAIN.CPL
+#                           crashes): the w16 run must still finish (any
+#                           run must when 3.1's did)
 #   ;! mode /3              WIN.COM switch (default /S)
+# C:\CMP.LOG, when a scenario writes one (SNAP's append, blinkrate,
+# caretblink, kbrlog), must match too (tests/scripts/cmplog.py: blink
+# counts within a tolerance).
 # Output: build/ref/cpl/<scenario>/{orig,w16}/
 #   usage: tests/cplscenarios.sh [scenario...]    (default: all)
 set -eu
@@ -43,6 +55,11 @@ normlog() {
         -e '/newinquire in:/d' -e 's/^C:\\WINDOWS\\SYSTEM\\//' "$1" | tr -d '\r'
 }
 
+# the INI files as compared (;! survive: see below)
+inifilter() {
+    if [ -n "$survive" ]; then grep -av '^[XYWH]=' | tr -d '\r'; else cat; fi
+}
+
 for n in $names; do
     s=$dir/$n.txt
     common="" w16="$root/build/dos/CONTROL.EXE=WINDOWS/CONTROL.EXE" mode=/S
@@ -55,6 +72,15 @@ for n in $names; do
         file) common="$common $dir/$b=$c" ;;
         build) common="$common $root/build/dos/$b=$c" ;;
         ref)  common="$common $ref/$b=$c" ;;
+        kbrec)                          # KBREC.DRV in front of 3.1's driver
+            cp "$ref/WINDOWS/SYSTEM/KEYBOARD.DRV" "$pre/KBTARGET.DLL"
+            python3 -I "$root/tools/nerename.py" "$pre/KBTARGET.DLL" --module KBTARGET > /dev/null
+            common="$common $root/build/dos/KBREC.DRV=WINDOWS/SYSTEM/KEYBOARD.DRV"
+            common="$common $pre/KBTARGET.DLL=WINDOWS/SYSTEM/KBTARGET.DLL" ;;
+        saver)                          # w16's SSSTARS.SCR, described as $c
+            python3 -I "$root/tests/scripts/scrdesc.py" "$root/build/dos/SSSTARS.SCR" \
+                "$pre/$(echo "$b" | tr / _)" "$c"
+            common="$common $pre/$(echo "$b" | tr / _)=$b" ;;
         w16)  case $b in                # a path: under build/ (win386/WIN386.EXE)
               */*) w16="$w16 $root/build/$b=$c" ;;
               *)   w16="$w16 $root/build/dos/$b=$c" ;;
@@ -74,23 +100,38 @@ for n in $names; do
         rm -rf "$d"; mkdir -p "$d"
         extra=$common
         [ $who = w16 ] && extra="$extra $w16"
-        CPOBS_FILES="$extra" CPOBS_GET="WINDOWS/CONTROL.INI WINDOWS/WIN.INI WINDOWS/SYSTEM.INI CP1.LOG" \
+        CPOBS_FILES="$extra" CPOBS_GET="WINDOWS/CONTROL.INI WINDOWS/WIN.INI WINDOWS/SYSTEM.INI CP1.LOG CMP.LOG" \
             "$root/tests/cpobs.sh" "$s" "$d" $mode) &
     done
     wait
     result=ok
+    # ;! survive: 3.1's Control Panel never closes, so never writes its
+    # [MMCPL] X=, Y=, W=, H= (CONTROL.EXE, on close): those left out (and
+    # the line ends, which that leaves different)
+    survive=
+    grep -q '^;! survive' "$s" && survive=1
     for f in $inis; do
         # (w16 brands the built-in colour scheme "w16 Default": shell/cpl/main)
         # (both sides through the same sed, which also ends an unended
         # last line: the name aside, the bytes must be the same)
-        a=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/orig/$f" 2>/dev/null; echo .)
-        b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/w16/$f" 2>/dev/null; echo .)
+        a=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/orig/$f" 2>/dev/null | inifilter; echo .)
+        b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/w16/$f" 2>/dev/null | inifilter; echo .)
         { [ -f "$out/$n/orig/$f" ] && [ -f "$out/$n/w16/$f" ] && [ "$a" = "$b" ]; } || { result=FAIL; echo "  $n: $f differs"; }
     done
     if [ -f "$out/$n/orig/CP1.LOG" ] || [ -f "$out/$n/w16/CP1.LOG" ]; then
         normlog "$out/$n/orig/CP1.LOG" > "$out/$n/orig/cp1.norm" 2>/dev/null || :
         normlog "$out/$n/w16/CP1.LOG" > "$out/$n/w16/cp1.norm" 2>/dev/null || :
         cmp -s "$out/$n/orig/cp1.norm" "$out/$n/w16/cp1.norm" || { result=FAIL; echo "  $n: CP1.LOG differs"; }
+    fi
+    if [ -f "$out/$n/orig/CMP.LOG" ] || [ -f "$out/$n/w16/CMP.LOG" ]; then
+        python3 -I "$root/tests/scripts/cmplog.py" "$out/$n/orig/CMP.LOG" "$out/$n/w16/CMP.LOG" \
+            || { result=FAIL; echo "  $n: CMP.LOG differs"; }
+    fi
+    # a run of 3.1 that finished must finish with w16 too; ";! survive":
+    # 3.1 dies in this scenario (w16 may live through it), w16 must finish
+    if grep -aq '^SNAP done' "$out/$n/orig/log.txt" 2>/dev/null || grep -q '^;! survive' "$s"; then
+        grep -aq '^SNAP done' "$out/$n/w16/log.txt" 2>/dev/null \
+            || { result=FAIL; echo "  $n: the w16 run did not finish"; }
     fi
     shots=""
     for f in "$out/$n"/orig/*.BMP; do

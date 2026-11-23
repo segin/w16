@@ -1,0 +1,11 @@
+; KB2 (tests/apps/kb2.c) listening as the shell, its 400 x 300 window
+; active: Print Screen (the whole screen on the clipboard, 640 x 480),
+; then Alt+Print Screen (the active window, 400 x 300); KB2 logs each
+; bitmap's size as "P n cx cy" (boot-test case kbdsnap)
+sleep 3
+key Print
+sleep 3
+key alt+Print
+sleep 3
+key shift+F12
+waitexit 60

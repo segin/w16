@@ -31,6 +31,9 @@
 #include "ttf/ttfx.h"
 
 BYTE tt_enabled = 1;
+/* the autohinter's flags (gdi/ttf/ttfhint.c: TTFX_HINT_*), SYSTEM.INI
+   [w16] TrueTypeHinting (font.c font_init) */
+BYTE tt_hint = TT_HINT_DEFAULT;
 
 long WINAPI _llseek(int, long, int);
 int WINAPI _lcreat(LPCSTR, int);
@@ -48,7 +51,6 @@ typedef struct {
     WORD hdmxn;
     DWORD hdmxsize;
     BYTE symbol;                        /* a Microsoft Symbol cmap */
-    BYTE hint;                          /* hint its glyphs (the hinter to come: always 0 for now) */
 } TTFILE;
 typedef TTFILE __far *LPTTFILE;
 
@@ -103,6 +105,7 @@ static int tt_open(LPTTFILE t)
         t->bad = 1;
         return 0;
     }
+    ttfx_SetHinting(&ttf, tt_hint);
     return 1;
 }
 
