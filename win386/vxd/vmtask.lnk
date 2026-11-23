@@ -1,0 +1,5 @@
+# VMTASK.386: w16's task-manager device (win386/vxd/vmtask.c), device 5716h
+format windows vxd
+option quiet
+option nodefaultlibs
+export VMTASK_DDB.1

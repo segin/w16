@@ -1102,6 +1102,15 @@ $(DOS)/VSBD.386: $(W386VSBD) win386/vxd/vsbd.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @win386/vxd/vsbd.lnk name $@ option map=$(W386)/vsbd.map file { $(W386VSBD) }
 	python3 tools/leautodata.py $@
+# VMTASK.386: the VM Task Manager's device (win386/vxd/vmtask.c), an
+# external VxD of w16's own (SYSTEM.INI [386Enh] device=vmtask.386;
+# ARCHITECTURE.md 15.12)
+W386VMTASK := $(W386)/vxd/vmtaskdd.o $(W386)/vxd/vmtask.o $(W386)/vxd/vxdrt.o
+$(DOS)/VMTASK.386: $(W386VMTASK) win386/vxd/vmtask.lnk tools/leautodata.py
+	@mkdir -p $(@D)
+	$(WLINK) @win386/vxd/vmtask.lnk name $@ option map=$(W386)/vmtask.map file { $(W386VMTASK) }
+	python3 tools/leautodata.py $@
+dos: $(DOS)/VMTASK.386
 W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VSD=$(W386)/VSD.386 VMPOLL=$(W386)/VMPOLL.386 VDMAD=$(W386)/VDMAD.386
 $(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VSD.386 $(W386)/VMPOLL.386 $(W386)/VDMAD.386 tools/mkw3.py
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
@@ -1149,6 +1158,14 @@ $(DOS)/VX17.EXE: $(B)/tests/start.o $(B)/tests/vx17.o $(B)/tests/vx17s.o tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vx17.map file { $(B)/tests/start.o $(B)/tests/vx17.o $(B)/tests/vx17s.o }
+# VMT1.EXE: VMTASK.386's API from a program (tests/apps/vmt1.c;
+# tests/vmtaskrun.sh)
+$(DOS)/VMT1.EXE: $(B)/tests/start.o $(B)/tests/vmt1.o $(B)/tests/vx3s.o $(B)/shell/write/i4.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vmt1.map file { $(B)/tests/start.o $(B)/tests/vmt1.o $(B)/tests/vx3s.o $(B)/shell/write/i4.o }
+vxprobes: $(DOS)/VMT1.EXE
+dos: $(DOS)/VMT1.EXE
 # VXP.386: the probe VxD (tests/vxd/vxp.asm)
 $(DOS)/VXP.386: tests/vxd/vxp.asm tests/vxd/vxp.lnk
 	@mkdir -p $(@D) $(B)/tests
@@ -1592,6 +1609,27 @@ $(DOS)/PIFEDIT.EXE: $(SHELL_PE) $(B)/shell/pifedit/pifedit.res shell/pifedit/pif
 	$(WLINK) @shell/pifedit/pifedit.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/shell/pifedit/pifedit.map \
 	    option resource=$(B)/shell/pifedit/pifedit.res file { $(SHELL_PE) }
+	python3 tools/nemark.py $@ 3.10
+# ---- shell: VMTASK.EXE, the VM Task Manager (shell/vmtask/; a w16
+# extension, ARCHITECTURE.md 15.12; its device is VMTASK.386) ----
+SHELL_VT := $(B)/shell/start.o $(B)/shell/vmtask/vmtask.o $(B)/shell/vmtask/vmtaskhk.o
+shell: $(DOS)/VMTASK.EXE
+$(B)/shell/vmtask/vmtask.o: shell/vmtask/vmtask.c shell/vmtask/vmtask.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/shell/vmtask/vmtaskhk.o: shell/vmtask/vmtaskhk.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -o $@ $<
+$(B)/shell/vmtask/vmtask.ico: tools/mkvmticon.py tools/mkicons.py
+	@mkdir -p $(@D)
+	python3 tools/mkvmticon.py $@
+$(B)/shell/vmtask/vmtask.res: shell/vmtask/vmtask.rc shell/vmtask/vmtask.h $(B)/shell/vmtask/vmtask.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/vmtask -i=$(B)/shell/vmtask -fo=$@ $<
+$(DOS)/VMTASK.EXE: $(SHELL_VT) $(B)/shell/vmtask/vmtask.res shell/vmtask/vmtask.lnk tools/nemark.py
+	@mkdir -p $(@D)
+	$(WLINK) @shell/vmtask/vmtask.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/shell/vmtask/vmtask.map \
+	    option resource=$(B)/shell/vmtask/vmtask.res file { $(SHELL_VT) }
 	python3 tools/nemark.py $@ 3.10
 # ---- shell: WINHELP.EXE, Windows Help (shell/winhelp/; ARCHITECTURE.md
 # 15.10) ----
@@ -2171,6 +2209,12 @@ install-tree: $(W16)/PIFEDIT.EXE
 $(W16)/PIFEDIT.EXE: $(DOS)/PIFEDIT.EXE
 	@mkdir -p $(@D)
 	cp $< $@
+# the VM Task Manager (shell/vmtask/): WINDOWS\VMTASK.EXE, a w16 extension
+W16TREE += $(W16)/VMTASK.EXE
+install-tree: $(W16)/VMTASK.EXE
+$(W16)/VMTASK.EXE: $(DOS)/VMTASK.EXE
+	@mkdir -p $(@D)
+	cp $< $@
 # Windows Help (shell/winhelp/): WINDOWS\WINHELP.EXE, as in 3.1 (USER's
 # WinHelp starts it from the Windows directory)
 W16TREE += $(W16)/WINHELP.EXE
@@ -2213,7 +2257,7 @@ $(GRPS:%=$(W16)/%.GRP): $(W16)/%: assets/progman/%
 	@mkdir -p $(@D)
 	cp $< $@
 GRP_ICONS := $(DOS)/PROGMAN.EXE $(DOS)/CONTROL.EXE $(DOS)/NOTEPAD.EXE $(DOS)/CARDFILE.EXE $(DOS)/CALC.EXE $(DOS)/CLOCK.EXE \
-             $(DOS)/WRITE.EXE $(DOS)/WINFILE.EXE $(DOS)/REGEDIT.EXE $(DOS)/PIFEDIT.EXE
+             $(DOS)/WRITE.EXE $(DOS)/WINFILE.EXE $(DOS)/REGEDIT.EXE $(DOS)/PIFEDIT.EXE $(DOS)/VMTASK.EXE
 groups: $(GRP_ICONS)
 	for g in $(GRPS); do python3 tools/mkgrp.py -d $(DOS) assets/progman/$$g.txt assets/progman/$$g.GRP || exit 1; done
 grpcheck: $(GRP_ICONS)
@@ -3127,6 +3171,12 @@ $(DOS)/SB16.DRV: $(SB16OBJS) $(B)/sb16/sb16.res drivers/sb16/sb16.lnk tools/nema
 	python3 tools/nemark.py $@ 3.10 8309 08
 dos: $(DOS)/SB16.DRV
 install-tree: $(W16SYS)/SB16.DRV
+# VMTASK.386, the VM Task Manager's device (win386/vxd/vmtask.c;
+# ARCHITECTURE.md 15.12): SYSTEM\VMTASK.386, named by the tree's SYSTEM.INI
+install-tree: $(W16SYS)/VMTASK.386
+$(W16SYS)/VMTASK.386: $(DOS)/VMTASK.386
+	@mkdir -p $(@D)
+	cp $< $@
 # (VSBD.386, win386/vxd/vsbd.c: the card in 386 Enhanced mode)
 dos: $(DOS)/VSBD.386
 install-tree: $(W16SYS)/VSBD.386

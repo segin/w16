@@ -1,0 +1,40 @@
+/*
+ * vmtask.rc - VM Task Manager's resources (ARCHITECTURE.md 15.12): a w16
+ * extension with no counterpart in Windows 3.1; its menu follows 3.1's
+ * conventions (Options, Help, About). The icon is w16's own
+ * (tools/mkvmticon.py).
+ */
+#include <windows.h>
+#include "vmtask.h"
+
+IDI_VMTASK ICON "vmtask.ico"
+
+IDM_MENU MENU
+BEGIN
+    POPUP "&Options"
+    BEGIN
+        POPUP "&Update Interval"
+        BEGIN
+            MENUITEM "&0.5 Second", IDM_INT500
+            MENUITEM "&1 Second", IDM_INT1000
+            MENUITEM "&2 Seconds", IDM_INT2000
+            MENUITEM "&5 Seconds", IDM_INT5000
+        END
+        MENUITEM "&Refresh Now\tF5", IDM_REFRESH
+        MENUITEM SEPARATOR
+        MENUITEM "Always on &Top", IDM_ONTOP
+        MENUITEM "Show &Windows Tasks", IDM_TASKS
+        MENUITEM "Show &History", IDM_GRAPH
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", IDM_EXIT
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About VM Task Manager...", IDM_ABOUT
+    END
+END
+
+IDM_MENU ACCELERATORS
+BEGIN
+    VK_F5, IDM_REFRESH, VIRTKEY
+END

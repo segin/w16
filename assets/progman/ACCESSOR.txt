@@ -3,7 +3,9 @@
 # normal window one cascade step (22 pixels) below and right of Main's,
 # its icon at 21,218. The items are w16's own applets, in the order
 # Setup lists them (Write, Notepad, Cardfile, Calculator, Clock), each with the
-# icon of w16's build of that program.
+# icon of w16's build of that program; then w16's own VM Task Manager
+# (VMTASK.EXE, ARCHITECTURE.md 15.12), which 3.1 does not have, last so
+# that the others keep their places.
 file ACCESSOR.GRP
 name Accessories
 show 2
@@ -14,3 +16,4 @@ item Notepad | NOTEPAD.EXE | NOTEPAD.EXE
 item Cardfile | CARDFILE.EXE | CARDFILE.EXE
 item Calculator | CALC.EXE | CALC.EXE
 item Clock | CLOCK.EXE | CLOCK.EXE
+item VM Task Manager | VMTASK.EXE | VMTASK.EXE

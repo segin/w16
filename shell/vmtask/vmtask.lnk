@@ -1,0 +1,13 @@
+# wlink directives for VMTASK.EXE (objects and output come from the Makefile)
+format windows
+option quiet
+option start=start
+option stack=8k
+option heapsize=2k
+option description 'w16 VM Task Manager'
+library windows.lib
+library shell.lib
+library toolhelp.lib
+# the TOOLHELP callback and the INT 2Fh handler (vmtaskhk.asm) run while
+# Windows is in the middle of a task switch or its idle loop: fixed
+segment VMTHOOK_TEXT preload fixed
