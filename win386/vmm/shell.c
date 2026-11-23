@@ -522,12 +522,14 @@ static void destroy(struct vm *v)
     struct shvm **pp, *s;
     if (!v || v == &sysvm) return;
     if (!v->ended) {
-        /* closing a running VM: UNVERIFIED (Windows 3.1's "application
-         * still active" handling comes first) */
+        /* a running VM: its Settings dialog's Terminate (Windows 3.1,
+         * VXSH.386: function 4 with EAX 1; the three devices' focus and
+         * the execution focus to the System VM, VM_Suspend,
+         * VM_Not_Executeable with EDX 2, then Destroy_VM) */
         v->ended = 1;
-        suspend_vm(v);
-        vxd_send(VM_NOT_EXECUTEABLE, v, 0, 0, 0);
         if (vm_focus == v) { focus3(&sysvm, 0, 1); vm_set_focus(&sysvm); }
+        suspend_vm(v);
+        vxd_send(VM_NOT_EXECUTEABLE, v, 2, 0, 0);
     }
     vxd_send(DESTROY_VM, v, 0, 0x0F20, 0);
     vdd_vm_destroy(v);
@@ -727,6 +729,40 @@ void shell_vm_crashed(struct vm *v)
         s->ended_posted = 1;
         post(v, 0x41B, 4);
     }
+}
+
+/* Nuke_VM of a DOS VM (vm.c). Windows 3.1, a device calling Nuke_VM from
+ * the System VM (VMTASK.386 under VXSH.386, tests/vmtaskrun.sh,
+ * ARCHITECTURE.md 15.12): VM_Suspend, VM_Not_Executeable with EDX 2, then
+ * SHELL's event 418h to the VM's WINOA386 (as for a program that ended),
+ * which destroys the VM (function 4) and closes its window. The same
+ * order as its Settings dialog's Terminate (WINOA386 calls function 4
+ * with EAX 1 at once there) */
+void shell_vm_nuked(struct vm *v)
+{
+    struct shvm *s = sh_of(v);
+    if (v->ended) return;
+    v->ended = 1;
+    if (vm_focus == v) {
+        focus3(&sysvm, 0, 1);
+        vm_set_focus(&sysvm);
+    }
+    suspend_vm(v);
+    vxd_send(VM_NOT_EXECUTEABLE, v, 2, 0, 0);
+    if (s && !s->ended_posted) {
+        s->ended_posted = 1;
+        post(v, 0x418, 0);
+    }
+}
+
+/* Close_VM of a DOS VM (vm.c): Close_VM_Notify to the devices, then its
+ * programs end as at Ctrl+Alt+Del's Enter (link_close below; the DDK:
+ * every device may clean up) */
+void shell_vm_closing(struct vm *v)
+{
+    if (v->ended || v->closing) return;
+    vxd_send(CLOSE_VM_NOTIFY, v, 0, 0, 0);
+    vm_close(v);
 }
 
 /* REBOOT's link (w16vxd.h): the title, and closing the VM */

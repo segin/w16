@@ -156,6 +156,15 @@ void v86mm_vm_create(struct vm *v, const u8 *b)
     }
 }
 
+/* the pages a DOS VM has outside its first MB: its XMS blocks, EMS pages
+ * and HMA of its own (_GetVMPgCount, vm.c) */
+u32 v86mm_pages(struct vm *v)
+{
+    struct mmvm *m = v->mm;
+    if (!m) return 0;
+    return (m->xms_used + 3) / 4 + m->ems_used * 4 + (m->hma_pg ? 16 : 0);
+}
+
 static void free_pages(u32 *pg, u32 n)
 {
     u32 i;

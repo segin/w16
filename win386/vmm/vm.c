@@ -599,8 +599,15 @@ void vm_tick(void)
 {
     struct vm *v;
     u32 now = vmm_system_time();
-    for (v = vm_list; v; v = v->next)
+    for (v = vm_list; v; v = v->next) {
         if (v->idle && (s32)(now - v->idle_until) >= 0) v->idle = 0;
+        /* Close_VM's time-out: a VM still running is ended by force */
+        if (v->closing && v->nuke_at && !v->ended && (s32)(now - v->nuke_at) >= 0) {
+            v->nuke_at = 0;
+            shell_vm_nuked(v);
+            resched = 1;
+        }
+    }
     vdd_tick();
     status_all();
     if (cur_vm->slice) cur_vm->slice--;
@@ -1069,6 +1076,24 @@ int vm_service(u32 svc, struct svcregs *s)
         }
         vm_wake(v);
         return 1;
+    case 0x002E:                        /* Nuke_VM: EBX */
+        /* the DDK: ends a VM that has not ended; the System VM's would
+         * end Windows (not done here: traced, UNVERIFIED how) */
+        if ((v = vm_of(s->ebx)) == NULL) return 1;
+        if (v == &sysvm) { trace("VMM: Nuke_VM of the System VM (from %x): ignored\n", *(u32 *)(s + 1)); return 1; }
+        shell_vm_nuked(v);
+        resched = 1;
+        return 1;
+    case 0x00EC:                        /* Close_VM: EAX the time-out (ms), EBX, ECX flags */
+        /* the DDK: Close_VM_Notify to the devices, the VM ends; after
+         * EAX ms it is ended by force (Nuke_VM). UNVERIFIED: the System
+         * VM's, and CVF_Continue_Exec (the caller always goes on here) */
+        if ((v = vm_of(s->ebx)) == NULL || v == &sysvm) return 1;
+        if (v->ended || v->closing) return 1;
+        v->nuke_at = s->eax ? vmm_system_time() + s->eax : 0;
+        if (!v->nuke_at && s->eax) v->nuke_at = 1;
+        shell_vm_closing(v);
+        return 1;
     case 0x0030:                        /* Get_Execution_Focus */
         s->ebx = VMH(vm_focus);
         return 1;
@@ -1179,6 +1204,34 @@ int vm_service(u32 svc, struct svcregs *s)
         v = v && v->next ? v->next : vm_list;
         s->ebx = VMH(v);
         return 1;
+    case 0x005C: {                      /* _GetVMPgCount(VM, flags): C, EAX all, EDX outside the first MB */
+        /* the DDK: the pages allocated to the VM, and those not mapped in
+         * its first MB (0, 0 for a bad handle). A DOS VM: its private
+         * pages of the first MB, its XMS, EMS and HMA (v86mmgr.c). The
+         * System VM: the extended memory in use less the DOS VMs', and
+         * the first MB, which it has as it is (UNVERIFIED what Windows
+         * 3.1 counts there) */
+        u32 *args = (u32 *)(s + 1) + 1, own, out, used;
+        struct vm *w;
+        v = vm_of(args[0]);
+        s->eax = s->edx = 0;
+        if (!v) return 1;
+        if (v != &sysvm) {
+            out = v86mm_pages(v);
+            s->eax = (priv_end - priv_start) / 4096 + out;
+            s->edx = out;
+            return 1;
+        }
+        used = info->xms_size / 4096 > pages_free() ? info->xms_size / 4096 - pages_free() : 0;
+        for (w = vm_list; w; w = w->next)
+            if (w != &sysvm) {
+                own = (priv_end - priv_start) / 4096 + v86mm_pages(w);
+                used = used > own ? used - own : 0;
+            }
+        s->eax = 256 + used;
+        s->edx = used;
+        return 1;
+    }
     case 0x00A7: {                      /* _Allocate_Device_CB_Area(size, flags): C, EAX the offset */
         u32 *args = (u32 *)(s + 1) + 1, n = (args[0] + 3) & ~3u;
         if (args[0] > VM_CB_SIZE || n > VM_CB_SIZE - cb_next) { s->eax = 0; return 1; }

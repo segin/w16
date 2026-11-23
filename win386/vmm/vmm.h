@@ -138,6 +138,7 @@ struct vm {
     u32 susp_count;         /* Suspend_VM's count (the services) */
     u32 gen;                /* which VM this slot holds now (vm_create) */
     int closing;            /* its programs are being ended (vm_close) */
+    u32 nuke_at;            /* Close_VM: ended by force at this system time (0: never) */
     u16 closing_psp;
     int idle;               /* HLT, INT 2Fh 1680h: no time until an interrupt */
     int suspended;          /* Suspend_VM, or not executable any more */
@@ -191,6 +192,7 @@ void kfree(void *p);
 u32 page_alloc(void);               /* a physical page, zeroed; 0 if none */
 u32 page_alloc_run(u32 n, u32 align, u32 max_phys);    /* contiguous pages, or 0 */
 u32 pages_free(void);
+u32 v86mm_pages(struct vm *v);      /* v86mmgr.c: a VM's pages beyond its first MB */
 void page_free(u32 phys);
 u32 phys_to_lin(u32 phys);
 int map_page(u32 lin, u32 phys, u32 flags);
@@ -328,6 +330,8 @@ int shell_service(u32 svc, struct svcregs *r);   /* device 0017h's services */
 void shell_vm_ended(struct vm *v);
 void shell_vm_init(struct vm *v);   /* VM_Init done: VMPOLL from the PIF */
 void shell_vm_crashed(struct vm *v);
+void shell_vm_nuked(struct vm *v);
+void shell_vm_closing(struct vm *v);
 struct reboot_link *reboot_link_of(u32 ref);
 void vm_crashed(struct cregs *r);
 void vm_close(struct vm *v);
