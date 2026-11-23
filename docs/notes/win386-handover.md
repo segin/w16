@@ -31,7 +31,7 @@ Kept current as the work goes, so it survives a context reset. Spec: ARCHITECTUR
 
 ## The outside audit (2026-11-21)
 
-docs/notes/win386-audit-triage.md: every finding with its verdict, the 3.1 facts probe VX11 and VXP.386 found (DPMI 0009h/000Ch/0800h checks, memory reuse, INT 21h 48h from PM, IF in real-mode handlers, the VPICD_Call_When_Hw_Int chain, DDB_Next), the fixes, and what is left open. Boot-test case `win386audit`.
+docs/notes/win386-audit-triage.md (in git history; the audit is complete, nothing was left open): every finding with its verdict, the 3.1 facts probe VX11 and VXP.386 found (DPMI 0009h/000Ch/0800h checks, memory reuse, INT 21h 48h from PM, IF in real-mode handlers, the VPICD_Call_When_Hw_Int chain, DDB_Next), the fixes, and the four rounds. Boot-test cases `win386audit` and `win386hdd`.
 
 ## Observed, not acted on
 

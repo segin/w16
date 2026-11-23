@@ -103,7 +103,7 @@
 #              (DOSBox's own DOS), `WIN /3` (WIN.COM's logo, no /B), the DOS
 #              Prompt full screen must be a text screen, EXIT, then Exit
 #              Windows must bring the DOS prompt back (dosbox386plain.txt)
-#   win386audit  the WIN386 audit's probes (docs/notes/win386-audit-triage.md):
+#   win386audit  the WIN386 audit's probes (its triage file, in git history):
 #              VX11 (tests/apps/vx11.c) as the shell in 386 Enhanced mode
 #              under Windows 3.1's WIN386 and under w16's, the OBS lines
 #              identical (runs main, E, L, M); runs P and S, which 3.1 does

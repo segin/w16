@@ -289,7 +289,8 @@ are probed by VX11 (`tests/apps/vx11.c`, run as the shell with
 `tests/refrun.sh VX11.EXE /3`, under w16's WIN386 with
 `REFRUN_FILES=build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE`); the
 boot-test case `win386audit` compares it with Windows 3.1's
-(docs/notes/win386-audit-triage.md), and `win386hdd` does the same on
+(the audit's triage file, docs/notes/win386-audit-triage.md, is in git
+history), and `win386hdd` does the same on
 MS-DOS 4.00 (`INPUTRUN_HDD=1`), where DOS calls take interrupts while they
 run (DOSBox's own DOS runs none of its INT 21h code in the VM). How much of the processor Windows
 gets beside DOS boxes: `tests/vmpollrun.sh OUTDIR WHAT [w16]` (VX13 and

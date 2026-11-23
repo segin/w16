@@ -292,7 +292,8 @@ void make_user(u32 lin, u32 size)
  * writable when write)? The VMM's own accesses to a client's memory go
  * through this first, so that a bad pointer fails the call instead of
  * faulting in ring 0 (where Windows 3.1 itself ends: probe VX11 runs P
- * and S, docs/notes/win386-audit-triage.md). */
+ * and S; the WIN386 audit's triage file, docs/notes/
+ * win386-audit-triage.md, in git history). */
 int lin_user_ok(u32 lin, u32 len, int write)
 {
     u32 a, end, pde, pte, need = write ? 7 : 5;
