@@ -11,6 +11,11 @@ their own permissive licences, stated with them:
 - tests/gdi/gdi.spec is Wine's gdi.spec, wine-20020228 (X11 licence, in
   the file)
 - tools/readexe/ (its own licence, tools/readexe/LICENSE.md)
+- gdi/ttf/stb_truetype.h is Sean Barrett's stb_truetype v1.28
+  (https://github.com/nothings/stb, commit 6b5799b), dual-licensed public
+  domain (Unlicense) or MIT; w16 uses it under its public-domain
+  dedication (the notice is at the end of the file). gdi/ttf/ttfx.c and
+  ttfx.h are adapted from it (fixed-point arithmetic) and keep its credit
 
 The names "Microsoft", "Windows" and "MS-DOS" are trademarks of Microsoft
 Corporation; w16 uses them only to describe compatibility.
