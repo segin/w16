@@ -1890,7 +1890,8 @@ $(DOS)/WINOA386.MOD: $(WOA3_OBJS) $(B)/winoa386/winoa386.res winoa386/winoa386.l
 # ARCHITECTURE.md 9.9). .COM-format programs (DOS loads any file without an
 # MZ header as one) under the names WIN.COM looks for; DSWAPD.EXE logs to
 # C:\DSWAP.DBG (a debugging build). SW1.COM: the probe they were observed
-# with (tests/dos/sw1.asm, tests/dos/sw1dump.py) ----
+# with (tests/dos/sw1.asm, tests/dos/sw1dump.py); SW2.COM: an MS-DOS 5
+# task switcher client for tests/swap.sh (tests/dos/sw2.asm) ----
 dos: $(DOS)/WSWAP.EXE $(DOS)/DSWAP.EXE
 $(DOS)/WSWAP.EXE: swap/wswap.asm swap/swap.inc
 	@mkdir -p $(@D)
@@ -1901,10 +1902,13 @@ $(DOS)/DSWAP.EXE: swap/dswap.asm swap/swap.inc
 $(DOS)/DSWAPD.EXE: swap/dswap.asm swap/swap.inc
 	@mkdir -p $(@D)
 	$(NASM) -f bin -Iswap/ -dDEBUG -o $@ $<
-SWPROBES := $(DOS)/SW1.COM $(DOS)/DSWAPD.EXE
+SWPROBES := $(DOS)/SW1.COM $(DOS)/SW2.COM $(DOS)/DSWAPD.EXE
 swprobes: $(SWPROBES)
 dos: $(SWPROBES)
 $(DOS)/SW1.COM: tests/dos/sw1.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+$(DOS)/SW2.COM: tests/dos/sw2.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 

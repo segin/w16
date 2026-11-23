@@ -230,14 +230,8 @@ pic0:       dw 0                ; at the start
 exit_code:  db 0
 ; MS-DOS 5 task switcher clients (INT 2Fh 4B01h)
 chain:      dd 0
-; instance data (INT 2Fh 4B05h): up to NINST items
-NINST       equ 16
-INSTBUF     equ 512
-n_inst:     dw 0
-inst_ptr:   times NINST dd 0
-inst_len:   times NINST dw 0
-inst0:      times INSTBUF db 0  ; their contents at the start
-instw:      times INSTBUF db 0  ; and Windows' at a switch
+; instance data (INT 2Fh 4B05h; instx: Windows' at a switch)
+            INST_DATA
 ; EXEC
 exec_path:  times PATHMAX db 0
 exec_tail:  times PATHMAX db 0
@@ -255,9 +249,12 @@ sw_version: dw 3, 0Ah           ; (UNVERIFIED: what Windows 3.1's returns)
 
 ; ---- INT 2Fh: AX=4B80h asks for the switch that the next INT 21h AH=0Bh
 ; AL=80h makes ----
+; (answered here, not passed on, registers as they were: Windows 3.1's
+; WSWAP's, SW1 and SW2 in tests/scripts/swap/client.txt)
 int2f:  cmp ax, 4B80h
         jne .c
         mov byte [cs:sw_req], 1
+        iret
 .c:     jmp far [cs:old2f]
 
 ; ---- INT 21h: AX=0B80h after 4B80h: switch to a DOS program ----
@@ -363,6 +360,7 @@ notify: push bx
 .cli:   cli
 .call:  call far [bp]
         sti
+        cld                             ; (a client may leave DF set)
         add sp, 4
         mov dx, ax
         pop si
@@ -437,8 +435,7 @@ switch_out:
         int 21h
         cmp ax, 0FFFFh
         je .nodisk
-        mul cx                          ; bytes per cluster
-        mul bx                          ; DX:AX = free bytes
+        FREE_BYTES                      ; DX:AX = free bytes
         push dx
         push ax
         call get_blk
@@ -482,7 +479,7 @@ switch_out:
         in al, 21h
         mov [w_pic], ax
         sti
-        mov si, instw
+        mov si, instx
         call inst_save
         ; Windows' memory into WINOLDAP's buffer
         call get_blk
@@ -506,7 +503,6 @@ switch_out:
         mov [r_len + 2], dx
         ; (the copy happens with the switch already decided: T's state
         ; above must be final)
-        mov byte [sw_done], 1
         call xmove
         jc .copyfail
         ; our MCB as it is now, then made to reach the arena's end so that
@@ -531,6 +527,9 @@ switch_out:
         mov cx, STATE_LEN
         mov ah, 40h
         int 21h
+        jc .copyfail                    ; (no state file, no way back:
+        cmp ax, cx                      ; Windows stays)
+        jne .copyfail
         mov ah, 3Eh
         int 21h
         mov dx, r_name
@@ -588,8 +587,8 @@ switch_out:
         int 21h
 
 .copyfail:
-        ; (WINOLDAP's buffer was not there: undo, as for no room)
-        mov byte [sw_done], 0
+        ; (WINOLDAP's buffer was not there, or the state file could not be
+        ; written: undo, as for no room)
         mov bx, [st_h]
         mov ah, 3Eh
         int 21h
@@ -605,7 +604,7 @@ switch_out:
         rep movsw
         pop es
         sti
-        mov si, instw
+        mov si, instx
         call inst_load
 .nodisk:
         ; the switch cannot be made: 172h = 08h for WINOLDAP, DOS's state
@@ -627,11 +626,18 @@ switch_out:
         mov dl, [w_brk]
         mov ax, 3301h
         int 21h
+        ; the MS-DOS 5 clients, told to suspend, are told Windows is
+        ; active again (Windows 3.1's WSWAP: 3 and 4, CX=1; SW2 in
+        ; tests/scripts/swap/nodisk.txt)
+        mov word [n_cx], 1
+        mov ax, 3
+        call notify
+        mov ax, 4
+        call notify
 .refuse:
         ret
 
 st_h:       dw 0
-sw_done:    db 0
 
 ; the state file's name: the swap directory (block D7h), "~WOA", Windows'
 ; swap file number (record 15's bytes 2Ch, 2Bh) in hexadecimal, ".TMP"
@@ -683,47 +689,8 @@ hex2:   push ax
 .s:     stosb
         ret
 
-; instance data: save the items' contents to DS:SI, load them from DS:SI
-inst_save:
-        push es
-        xor bx, bx
-.l:     cmp bx, [n_inst]
-        jae .d
-        push bx
-        shl bx, 2
-        push ds
-        lds di, [inst_ptr + bx]
-        shr bx, 1
-        mov cx, [cs:inst_len + bx]
-        xchg si, di                     ; DS:SI the item, ES:DI ours
-        push cs
-        pop es
-        rep movsb
-        xchg si, di
-        pop ds
-        pop bx
-        inc bx
-        jmp .l
-.d:     pop es
-        ret
-inst_load:
-        push es
-        xor bx, bx
-.l:     cmp bx, [n_inst]
-        jae .d
-        push bx
-        shl bx, 2
-        les di, [inst_ptr + bx]
-        shr bx, 1
-        mov cx, [inst_len + bx]
-        cli
-        rep movsb
-        sti
-        pop bx
-        inc bx
-        jmp .l
-.d:     pop es
-        ret
+; instance data: inst_scan, inst_save, inst_load (swap.inc)
+        INST_CODE
 
 ; ---- back from DOS: R has read the image back (DS = CS, SS:SP in R) ----
 t_resume:
@@ -736,7 +703,6 @@ t_resume:
         push cs
         pop es
         cld
-        mov byte [sw_done], 0
         ; Windows' vectors, PICs, instance data
         xor di, di
         mov es, di
@@ -748,7 +714,7 @@ t_resume:
         mov al, ah
         out 0A1h, al
         sti
-        mov si, instw
+        mov si, instx
         call inst_load
         ; DOS's state as Windows had it
         mov bx, [w_psp]
@@ -899,54 +865,8 @@ fresh:  ; the memory arena's end: our block's, or further when there are
         int 21h
         ; instance data (INT 2Fh AX=4B05h: WIN.COM declares the last system
         ; file table block's link)
-        xor bx, bx
-        mov es, bx
-        mov cx, cs
-        mov dx, sw_entry
-        mov ax, 4B05h
-        int 2Fh
-.si:    mov ax, es
-        or ax, bx
-        jz .sid
-        push es
-        push bx
-        les si, [es:bx + 0Eh]           ; its instance data records
-.sr:    mov ax, [es:si]
-        or ax, [es:si + 2]
-        jz .srd
-        mov di, [n_inst]
-        cmp di, NINST
-        jae .srd
-        shl di, 2
-        mov ax, [es:si]
-        mov [inst_ptr + di], ax
-        mov ax, [es:si + 2]
-        mov [inst_ptr + di + 2], ax
-        shr di, 1
-        mov ax, [es:si + 4]
-        mov [inst_len + di], ax
-        inc word [n_inst]
-        add si, 6
-        jmp .sr
-.srd:   pop bx
-        pop es
-        les bx, [es:bx + 2]             ; the next startup info
-        jmp .si
-.sid:   ; (all items must fit our buffers)
-        xor ax, ax
-        xor bx, bx
-.sz:    cmp bx, [n_inst]
-        jae .szd
-        push bx
-        shl bx, 1
-        add ax, [inst_len + bx]
-        pop bx
-        inc bx
-        jmp .sz
-.szd:   cmp ax, INSTBUF
-        jbe .szok
-        mov word [n_inst], 0
-.szok:  push cs
+        call inst_scan
+        push cs
         pop es
         mov si, inst0
         call inst_save

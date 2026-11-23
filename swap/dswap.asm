@@ -193,7 +193,6 @@ start_dirb: db '\'
 start_dir:  times 68 db 0
 ioctl0:     times 5 dw 0        ; device information of handles 0-4
 brk0:       db 0
-exit_code:  db 0
 pending:    db 0                ; 1 Alt+Tab, 2 Alt+Esc, 3 Ctrl+Esc
 in_switch:  db 0
 in_bios:    db 0
@@ -221,10 +220,10 @@ p_dir:      times 68 db 0
 p_ioctl:    times 5 dw 0
 p_pic:      dw 0
 p_sda:      db 0                ; 1: the SDA was kept
-p_kbflags:  dw 0
+p_i24:      dd 0                ; INT 24h before ours (i24_on)
 pic0:       dw 0
-SDAMAX      equ 2048
-sdabuf:     times SDAMAX db 0
+SDAMAX      equ 8192            ; (sda_len 0 when DOS's is larger)
+sdabuf      equ t_end           ; sda_len bytes, after the image
 ; EXEC
 exec_path:  times PATHMAX db 0
 exec_tail:  times PATHMAX db 0
@@ -241,6 +240,8 @@ sw_version: dw 3, 0Ah
             align 2
 ivt0:       times 1024 db 0     ; at the start (WIN.COM's)
 ivtp:       times 1024 db 0     ; the program's at a switch
+; instance data (INT 2Fh 4B05h; instx: the session's at a switch)
+            INST_DATA
 ; the screen
 VB_LEN      equ 30 + 7 + 768 + 17 + 2
 vbuf:
@@ -306,9 +307,13 @@ int16:  cmp ah, 00h
         call try_switch
 .w2:    pop ax
         push ax
-        inc ah                          ; 01h, 11h: is there one?
-        pushf
+        inc ah                          ; 01h, 11h: is there one? (inside
+        inc byte [cs:in_bios]           ; the BIOS: no switch from the
+        pushf                           ; timer)
         call far [cs:old16]
+        pushf
+        dec byte [cs:in_bios]
+        popf
         jnz .key
         sti
         hlt
@@ -360,25 +365,33 @@ bios_ret:
         iret
 
 ; try_switch: a switch if DOS allows it now (not inside DOS, or inside
-; it but waiting for console input, INT 28h). Keeps all registers. When it
-; returns, the program goes on (after the switch, when it was switched
-; back to).
+; it but waiting for console input, INT 28h, when its swappable data area
+; can be kept; never in a critical error, INT 24h). Keeps all registers
+; and the flags. When it returns, the program goes on (after the switch,
+; when it was switched back to).
 try_switch:
-        cmp byte [cs:in_switch], 0
+        pushf
+        cli                             ; (in_switch tested and set at once:
+        cmp byte [cs:in_switch], 0      ; the timer may call it too)
         jne .r
         push ds
         push bx
         lds bx, [cs:indos]
+        cmp byte [bx - 1], 0            ; DOS's critical error flag (the
+        jne .no                         ; byte before InDOS, DOS 3.1+)
         mov bl, [bx]
         cmp bl, 0
         je .go
         cmp byte [cs:in28], 0
         je .no
         cmp bl, 1
-        je .go
+        jne .no
+        cmp word [cs:sda_len], 0        ; (0: the SDA cannot be kept)
+        jne .go
 .no:    pop bx
         pop ds
-.r:     ret
+.r:     popf
+        ret
 .go:    pop bx
         pop ds
         mov byte [cs:in_switch], 1
@@ -387,7 +400,6 @@ try_switch:
         pusha
         mov [cs:p_ss], ss
         mov [cs:p_sp], sp
-        cli
         push cs
         pop ss
         mov sp, sw_stack_top
@@ -408,6 +420,7 @@ sw_back:                                ; (and here after a resume)
         pop ds
         mov byte [cs:pending], 0
         mov byte [cs:in_switch], 0
+        popf
         ret
 
 %ifdef DEBUG
@@ -562,6 +575,7 @@ notify: push bx
 .cli:   cli
 .call:  call far [bp]
         sti
+        cld                             ; (a client may leave DF set)
         add sp, 4
         mov dx, ax
         pop si
@@ -754,7 +768,8 @@ switch_out:
         call notify
         test ax, ax
         jnz .r
-        ; DOS: the SDA when inside DOS (INT 28h)
+        ; DOS: the SDA when inside DOS (INT 28h; try_switch does not come
+        ; here then unless it can be kept)
         mov byte [p_sda], 0
         push ds
         lds si, [indos]
@@ -762,9 +777,6 @@ switch_out:
         pop ds
         je .nsda
         mov cx, [sda_len]
-        jcxz .nsda
-        cmp cx, SDAMAX
-        ja .nsda
         push ds
         push cs
         pop es
@@ -778,6 +790,7 @@ switch_out:
         mov byte [es:di], 0
         pop es
 .nsda:  call save_dos
+        call i24_on
         call vsave_regs
         ; room for it all? (UNVERIFIED what Windows 3.1's DSWAP does
         ; without: w16's beeps and the program stays)
@@ -803,10 +816,14 @@ switch_out:
         mov ah, 40h
         int 21h
         jc .ferr
+        cmp ax, cx                      ; (all of it: CF when short)
+        jc .ferr
         mov dx, vbuf
         mov cx, VB_LEN
         mov ah, 40h
         int 21h
+        jc .ferr
+        cmp ax, cx
         jc .ferr
         call vmem_write
         jc .ferr
@@ -835,16 +852,14 @@ switch_out:
         DBG 2
         cmp al, [rec]
         je .back
-        ; away: the memory, and end
-        call rec_ptr
-        mov byte [es:di + bx + B_RECS + R_SWAPPED], 1
-        mov si, SW_COUNT
-        call sw_call
-        call get_blk
-        mov al, [rec]
-        mov ah, SESS_HI
-        mov [es:di + B_SID], ax
+        ; away: the memory into the file, then the block, and end
+        call i24_off                    ; (the program's own INT 24h kept)
         call ivt_out
+        call i24_on
+        mov si, instx                   ; instance data: the session's
+        call inst_save                  ; kept, the start's back
+        mov si, inst0
+        call inst_load
         mov dl, [brk0]
         mov ax, 3301h
         int 21h
@@ -869,16 +884,22 @@ switch_out:
         xor dx, dx
         mov ax, 4200h
         int 21h
+        jc .undo
         mov dx, r_hdr
         mov cx, HDR_LEN
         mov ah, 40h
         int 21h
+        jc .undo
+        cmp ax, cx
+        jc .undo
         xor cx, cx
         xor dx, dx
         mov ax, 4202h
         int 21h
+        jc .undo
         mov byte [cw_write], 1
         call chunks_walk
+        jc .undo
         mov word [r_chunk], 0
         mov word [r_chunk + 2], 0
         mov bx, [t_fh]
@@ -886,12 +907,24 @@ switch_out:
         mov cx, 4
         mov ah, 40h
         int 21h
+        jc .undo
+        cmp ax, cx
+        jc .undo
         mov ah, 3Eh
         int 21h
         mov dx, r_name
         mov ax, 4301h
         mov cx, 3                       ; hidden, read-only (as 3.1's)
         int 21h
+        ; the block: our record swapped out, our session the one to run
+        call rec_ptr
+        mov byte [es:di + bx + B_RECS + R_SWAPPED], 1
+        mov si, SW_COUNT
+        call sw_call
+        call get_blk
+        mov al, [rec]
+        mov ah, SESS_HI
+        mov [es:di + B_SID], ax
         push es
         mov ax, [psp]
         dec ax
@@ -904,6 +937,14 @@ switch_out:
         pop es
         mov ax, 4C00h
         int 21h
+.undo:  ; (the memory could not be written: no switch after all; the
+        ; program's vectors back, then as for Esc in Alt+Tab)
+        call i24_off
+        call ivt_in
+        call i24_on
+        mov si, instx
+        call inst_load
+        jmp .back
 .ferr:  mov bx, [t_fh]
         mov ah, 3Eh
         int 21h
@@ -931,7 +972,8 @@ switch_out:
         mov dx, r_name
         mov ah, 41h
         int 21h
-.dos:   call restore_dos
+.dos:   call i24_off
+        call restore_dos
         call sda_back
         mov word [n_cx], 1
         mov ax, 3
@@ -949,6 +991,41 @@ rec_ptr:
         mul ah
         mov bx, ax
         ret
+
+; INT 24h while DSWAP does its own file I/O for a switch: the call fails
+; (AL=3, DOS 3.1+), so a disk error ends in DSWAP's error path, not in the
+; program's handler or COMMAND.COM's "Abort, Retry, Fail" (whose Abort
+; would end DSWAP with its hooks in place)
+i24_on: push es
+        xor ax, ax
+        mov es, ax
+        cli
+        mov ax, [es:24h * 4]
+        mov [p_i24], ax
+        mov ax, [es:24h * 4 + 2]
+        mov [p_i24 + 2], ax
+        mov word [es:24h * 4], int24
+        mov [es:24h * 4 + 2], cs
+        sti
+        pop es
+        ret
+i24_off:
+        push es
+        xor ax, ax
+        mov es, ax
+        cli
+        mov ax, [p_i24]
+        mov [es:24h * 4], ax
+        mov ax, [p_i24 + 2]
+        mov [es:24h * 4 + 2], ax
+        sti
+        pop es
+        ret
+int24:  mov al, 3
+        iret
+
+; instance data: inst_scan, inst_save, inst_load (swap.inc)
+        INST_CODE
 
 sda_back:
         cmp byte [p_sda], 0
@@ -1052,8 +1129,9 @@ at_unhook:
         ; (the BIOS never saw Alt let go)
         mov ax, 40h
         mov es, ax
-        and byte [es:17h], 0F7h
-        and byte [es:18h], 0FDh
+        and byte [es:17h], 0F7h         ; Alt, left Alt, right Alt (101
+        and byte [es:18h], 0FDh         ; keys) up
+        and byte [es:96h], 0F7h
         pop es
         sti
         ret
@@ -1234,12 +1312,26 @@ vmem_write:
         mov ah, 40h
         int 21h
         pop ds
-        ret
+        jc .r0
+        cmp ax, cx                      ; (all of it: CF when short)
+.r0:    ret
 .ok:    clc
         ret
 .planar:
-        mov dx, 3CEh                    ; read mode 0
-        mov ax, 0005h
+        mov dx, 3CEh                    ; the graphics controller's mode
+        mov al, 5                       ; and read map select as the
+        out dx, al                      ; program had them (back at the
+        inc dx                          ; end, also after an error)
+        in al, dx
+        mov [vw_gc], al
+        dec dx
+        mov al, 4
+        out dx, al
+        inc dx
+        in al, dx
+        mov [vw_gc + 1], al
+        dec dx
+        mov ax, 0005h                   ; read mode 0
         out dx, ax
         xor di, di
 .p:     mov dx, 3CEh                    ; read map select
@@ -1255,11 +1347,23 @@ vmem_write:
         int 21h
         pop ds
         jc .r
+        cmp ax, cx
+        jc .r
         inc di
         cmp di, 4
         jb .p
         clc
-.r:     ret
+.r:     pushf
+        mov dx, 3CEh
+        mov al, 5
+        mov ah, [vw_gc]
+        out dx, ax
+        mov al, 4
+        mov ah, [vw_gc + 1]
+        out dx, ax
+        popf
+        ret
+vw_gc:  db 0, 0                         ; GC mode, read map select
 
 ; the mode, palette and BIOS fields from vbuf
 vrestore_regs:
@@ -1374,11 +1478,13 @@ vmem_read:
         inc si
         cmp si, vr_planes + 4
         jb .p
-        mov dx, 3C4h
+        clc
+.r:     pushf                           ; (every plane writable again, also
+        mov dx, 3C4h                    ; after an error)
         mov ax, 0F02h
         out dx, ax
-        clc
-.r:     ret
+        popf
+        ret
 vr_planes: db 1, 2, 4, 8
 
 ; ---- the swap file ----
@@ -1456,8 +1562,7 @@ disk_room:
         int 21h
         cmp ax, 0FFFFh
         je .no2
-        mul cx
-        mul bx                          ; DX:AX free
+        FREE_BYTES                      ; DX:AX free
         pop bx
         pop cx                          ; CX:BX wanted
         cmp dx, cx
@@ -1539,7 +1644,9 @@ chunk:  push ax
         mov cx, 4
         mov ah, 40h
         int 21h
-        pop cx
+        jc .e0
+        cmp ax, cx                      ; (short: CF)
+.e0:    pop cx
         jc .r
         mov ax, [r_chunk]
 .l:     jcxz .ok
@@ -1559,7 +1666,9 @@ chunk:  push ax
         mov ah, 40h
         int 21h
         pop ds
-        pop ax
+        jc .e1
+        cmp ax, cx                      ; (short: CF)
+.e1:    pop ax
         pop dx
         pop cx
         jc .r
@@ -1608,8 +1717,10 @@ t_resume:
         mov dx, r_name
         mov ah, 41h
         int 21h
-        ; the program's vectors and DOS state
+        ; the program's vectors, instance data and DOS state
         call ivt_in
+        mov si, instx
+        call inst_load
         call restore_dos
         call sda_back
         mov ax, 0C00h
@@ -1690,6 +1801,8 @@ fresh:  ; the arena's end (as WSWAP)
         jc .nsda
         mov [sda], si
         mov [sda + 2], ax
+        cmp cx, SDAMAX                  ; (kept after the image, its room
+        ja .nsda                        ; added to ours below)
         mov [sda_len], cx
 .nsda:  push es
         mov ah, 34h
@@ -1742,8 +1855,16 @@ fresh:  ; the arena's end (as WSWAP)
         in al, 21h
         mov [pic0], ax
         sti
-        ; keep T only
+        ; instance data: the session's own from here (Windows 3.1's DSWAP
+        ; asks at a session's start too)
+        call inst_scan
+        push cs
+        pop es
+        mov si, inst0
+        call inst_save
+        ; keep T only, and room for the SDA
         mov bx, t_end
+        add bx, [sda_len]
         add bx, 15
         mov cl, 4
         shr bx, cl
@@ -1881,7 +2002,13 @@ fresh:  ; the arena's end (as WSWAP)
         mov cx, 512
         rep movsw
         pop es
+        mov ax, [pic0]                  ; (and the PICs' masks as at the
+        out 21h, al                     ; start)
+        mov al, ah
+        out 0A1h, al
         sti
+        mov si, inst0                   ; (and the instance data)
+        call inst_load
         mov dl, [brk0]
         mov ax, 3301h
         int 21h

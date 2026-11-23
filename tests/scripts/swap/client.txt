@@ -1,0 +1,55 @@
+# an MS-DOS 5 task switcher client loaded before WIN (SW2.COM): the
+# notifications it is sent, its instance data byte (a startup-info
+# structure without instance data comes first) as the MS-DOS Prompt sees
+# it before and after Alt+Tab to Windows and back; then right Alt+Tab to
+# Windows and Alt+Tab back, the BIOS keyboard flags, a left Alt tap, the
+# flags again; EXIT, Exit Windows
+# opts: sw2
+sleep 32
+shot pm
+key Right Right Right Right
+sleep 1
+key Return
+sleep 10
+type C:\SW2 L
+key Return
+sleep 2
+type C:\SW2 S
+key Return
+sleep 2
+shot dos1
+key alt+Tab
+sleep 10
+shot win1
+key alt+Tab
+sleep 10
+type C:\SW2 L
+key Return
+sleep 2
+keydown Alt_R
+sleep 0.5
+key Tab
+sleep 0.5
+keyup Alt_R
+sleep 10
+shot win2
+key alt+Tab
+sleep 10
+type C:\SW2 K
+key Return
+sleep 2
+key Alt_L
+sleep 1
+type C:\SW2 K
+key Return
+sleep 2
+shot dos2
+type exit
+key Return
+sleep 10
+shot back
+key alt+F4
+sleep 3
+key Return
+sleep 12
+shot end
