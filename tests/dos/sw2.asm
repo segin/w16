@@ -1,5 +1,6 @@
 ; sw2.asm - SW2.COM: an MS-DOS 5 task switcher client, resident, for the
-; WSWAP/DSWAP audit (docs/notes/swap-audit-triage.md, ARCHITECTURE.md 9.9).
+; WSWAP/DSWAP audit (ARCHITECTURE.md 9.9; its triage file is in git
+; history).
 ; Black-box: it sees only the public task switcher interface (INT 2Fh
 ; 4B01h, 4B05h; RBIL, MS-DOS Programmer's Reference) and the BIOS data
 ; area, and logs what happens into a buffer of its own.
