@@ -11,6 +11,7 @@ msg_v86         db 13, 10, '  Standard Mode: the processor is already in protect
 msg_nokrnl      db 13, 10, '  Standard Mode: cannot run KRNL286.EXE.', 13, 10, '$'
 msg_clientfault db 13, 10, '  Standard Mode: Fault outside of MS-DOS Extender.', 13, 10, 0
 msg_hostfault   db 13, 10, '  Standard Mode: Fault in MS-DOS Extender.', 13, 10, 0
+msg_dpmiret     db 'Standard Mode: Invalid DPMI return from ', 0  ; (DX9 24)
 ; the register line (1 = the next value in fx_vals as 4 hex digits)
 fx_names        db 'EC=', 1, ' CS=', 1, ' IP=', 1, ' AX=', 1, ' BX=', 1, ' CX=', 1
                 db ' DX=', 1, 13, 10, 'SI=', 1, ' DI=', 1, ' BP=', 1, ' DS=', 1
@@ -98,6 +99,8 @@ x_i             dw 0
 x_cs            dw 0
 x_ss            dw 0
 x_sp            dw 0
+rm_fsv          dw 0                    ; real mode's FS and GS (to_rm)
+rm_gsv          dw 0
 cb_off          dw 0
 cb_seg          dw 0
 cb_max          dw 0
@@ -107,6 +110,8 @@ cb_lin          dd 0
 cb_newcap       dw 0
 cb_newlin       dd 0
 ldt_head        dw 0
+la_lo           dw 0                    ; ldt_alloc's ruled-out candidates
+la_hi           dw 0
 seg_next        dw 0
 a_hdr           dd 0
 a_new           dd 0
@@ -117,14 +122,11 @@ lc_n            dw 0
 exit_ax         dw 0
 pending_msg     dw 0
 did1605         db 0
-bios_vec        db 0
-                db 0
-abs_pkt         dw 0
-abs_sel         dw 0
-abs_off         dw 0
-abs_len         dw 0
-abs_tb          dw 0
 exc_sp          dw 0
+exc_ctx         dw 0                    ; the context of the exception being handled
+exc_rfr         dd 0                    ; where its handler's RETF found the frame
+exc_rip         dw 0                    ; and that RETF's address
+exc_rcs         dw 0
 rmx_depth       dw 0                    ; real-mode callbacks/hooks active
 fx_vals:
 fx_ec           dw 0
@@ -141,15 +143,40 @@ fx_ds           dw 0
 fx_es           dw 0
 fx_ss           dw 0
 fx_sp           dw 0
+m48_hdr         dd 0
+m48_sel         dw 0
+st_ret          dw 0
+clamp_l         dw 0
+; the INT 21h and BIOS handlers' state between their real-mode calls,
+; saved and restored around each call (st_save, st_restore)
+                align 2
+st_start:
 fcb_tb          dw 0
 p29_src         dw 0
 rw_buf          dw 0
 rw_size         dw 0
 rw_done         dw 0
 rw_n            dw 0
+rw_lin          dd 0
 io_n            dw 0
-m48_hdr         dd 0
-m48_sel         dw 0
+io_buf          dw 0
 p5f_si          dw 0
 p5f_di          dw 0
 p4b_blk         times 14 db 0
+bios_vec        db 0
+                db 0
+abs_pkt         dw 0
+abs_sel         dw 0
+abs_off         dw 0
+abs_n           dw 0
+abs_sec         dd 0
+abs_ss          dw 0
+abs_tb          dw 0
+abs_k           dw 0
+abs_big         dw 0
+c13_spt         dw 0
+c13_sec         dw 0
+c13_cyl         dw 0
+c13_head        db 0
+c13_hmax        db 0
+st_end:

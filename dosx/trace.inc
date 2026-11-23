@@ -170,6 +170,7 @@ trc_flush:
         pop si
         pop es
         jne .ret
+.all:   ; (r0_terminate: every record, whatever the frame)
         pusha
         push es
         mov ax, [trc_n]
@@ -311,6 +312,7 @@ trc_x           dw 0, 0, 0, 0
 trc_h           dw 0
 trc_done        dd 0
 trc_batch       dw TRC_BATCH
+trc_fin         db 0
 trc_wlen        dw 0
 trc_stage       times 32 * 32 db 0
 %endif

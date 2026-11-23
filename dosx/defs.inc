@@ -43,6 +43,8 @@ LDT_RES_END     equ 5Ah         ; 02D7h: the first free descriptor
 LDT_COUNT       equ 1FFEh       ; descriptors in the LDT (limit 0FFEFh)
 
 LDT_EXC         equ 58h         ; 02C7h: the exception handlers' stack
+EXC_RETIP       equ 140Ch       ; their return address: G_HC0B:140Ch, as
+                                ; Microsoft's 00E0:140C (DX5 F00D)
 
 ; selectors with RPL 3
 S_SCRA  equ LDT_SCRA * 8 + 7

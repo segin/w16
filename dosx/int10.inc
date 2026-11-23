@@ -12,6 +12,12 @@
 ;   11h/30h           returns ES:BP (a font in the BIOS): a selector
 ;   13h               ES:BP, CX characters (* 2 with attributes)
 ;   1Bh               ES:DI, 64 bytes back (functionality and state)
+; Sizes that do not fit in 16 bits (CX of 5556h or more DAC registers,
+; ...) are refused (nothing called): they wrapped, the BIOS then writing
+; past the transfer buffer. 1Ch (save and restore the video state, ES:BX)
+; and 4Fh (VESA: 00h, 01h, 09h ES:DI, 04h ES:BX) get an empty buffer
+; (bios_scr): Microsoft's DOSX passes them on as they are, the client's
+; buffer untouched (DX9 13); w16's gave the BIOS DOSX's own image.
 
 op_int10:
         sub sp, R_SIZE
@@ -35,7 +41,35 @@ op_int10:
         je .str
         cmp ah, 1Bh
         je .state
+        cmp ah, 1Ch
+        je .vstate
+        cmp ah, 4Fh
+        je .vesa
 .plain: call v10
+        jmp .done
+.vstate:
+        mov dl, 1               ; ES:BX: 01h, 02h (00h gives the size in BX)
+        cmp al, 1
+        je .scr
+        cmp al, 2
+        je .scr
+        jmp .plain
+.vesa:  mov dl, 4               ; ES:DI
+        cmp al, 0
+        je .scr
+        cmp al, 1
+        je .scr
+        cmp al, 9
+        je .scr
+        mov dl, 1               ; ES:BX: 04h's 01h and 02h (00h gives the
+        cmp al, 4               ; size in BX)
+        jne .plain
+        cmp byte [bp+F_DX], 0
+        je .plain
+.scr:   push word [bios_vec]    ; (an INT 13h, 25h or 33h may be under way)
+        mov byte [bios_vec], 10h
+        call bios_scr
+        pop word [bios_vec]
         jmp .done
 .pal:   cmp al, 2
         je .p17in
@@ -57,19 +91,21 @@ op_int10:
         mov si, F_DX
         call v_out
         jmp .done
-.dacin: mov cx, [bp+F_CX]
-        mov ax, cx
-        shl cx, 1
-        add cx, ax
+.dacin: mov ax, 3
+        mul word [bp+F_CX]
+        or dx, dx
+        jnz .done
+        mov cx, ax
         mov dx, R_EDX
         mov si, F_DX
         call v_in
         jmp .done
 .dacout:
-        mov cx, [bp+F_CX]
-        mov ax, cx
-        shl cx, 1
-        add cx, ax
+        mov ax, 3
+        mul word [bp+F_CX]
+        or dx, dx
+        jnz .done
+        mov cx, ax
         mov dx, R_EDX
         mov si, F_DX
         call v_out
@@ -81,6 +117,8 @@ op_int10:
         mov al, [bp+F_BX+1]
         xor ah, ah
         mul word [bp+F_CX]
+        or dx, dx
+        jnz .done
         mov cx, ax
         mov dx, R_EBP
         mov si, F_BP
@@ -96,27 +134,34 @@ op_int10:
         test byte [bp+F_AX], 2
         jz .s1
         shl cx, 1
+        jc .done
 .s1:    mov dx, R_EBP
         mov si, F_BP
         call v_in
         jmp .done
 .state: mov cx, 64
-        mov dx, R_EDI
-        mov si, F_DI
-        call v_out
+        call tb_alloc
+        jc .done
+        mov [bx+R_EDI], di
+        push di
+        call v10
+        pop si
+        mov ax, [bp+F_DI]
+        mov [bx+R_EDI], ax
         ; the table starts with a far pointer to the static
         ; functionality table: its segment becomes a selector (DX8 v1b:
-        ; Microsoft's does so)
-        push es
-        mov es, [bp+F_ES]
-        mov di, [bp+F_DI]
-        mov ax, [es:di+2]
-        pop es
+        ; Microsoft's does so), in the transfer buffer before the copy
+        ; (w16's patched the client's buffer at ring 0, unchecked)
+        cmp byte [bx+R_EAX], 1Bh        ; the BIOS has the function
+        jne .st1
+        mov ax, [si+2]
         call segmap
-        push es
-        mov es, [bp+F_ES]
-        mov [es:di+2], ax
-        pop es
+        jc .st1
+        mov [si+2], ax
+.st1:   mov cx, 64
+        mov ax, [bp+F_ES]
+        mov di, [bp+F_DI]
+        call cpout
 .done:  call rs_to_frame
         call ring3sp
         mov ax, [bx+R_FL]
@@ -145,6 +190,7 @@ v_in:   push si
         mov ax, [bp+F_ES]
         mov si, [bp+si]
         call cpin
+        jc .bad
         pop dx
         push dx
         mov si, dx
@@ -156,6 +202,9 @@ v_in:   push si
         mov di, dx
         mov [bx+di], ax
 .r:     ret
+.bad:   pop dx                  ; a buffer that cannot be read: no call
+        pop si
+        ret
 
 ; v_out: INT 10h with the structure's register at DX pointing to CX
 ; bytes of the transfer buffer, which then go to the client's ES:[frame
@@ -220,10 +269,6 @@ op_int15:
         mov ax, [bp+F_BX]
         or ax, [bp+F_ES]
         jz .call
-        mov ax, [bp+F_BX]
-        mov [ps2_pm], ax
-        mov ax, [bp+F_ES]
-        mov [ps2_pm+2], ax
         mov word [bx+R_EBX], ps2_entry
         mov ax, [imgseg]
         mov [bx+R_ES], ax
@@ -236,6 +281,13 @@ op_int15:
         jne .nb
         mov ax, [bp+F_BX]               ; the client's BX back
         mov [bx+R_EBX], ax
+        ; the client's handler, once the BIOS has taken ps2_entry (one
+        ; it refused leaves the one before)
+        test word [bx+R_FL], FL_CF
+        jnz .nb
+        mov [ps2_pm], ax
+        mov ax, [bp+F_ES]
+        mov [ps2_pm+2], ax
 .nb:    cmp byte [bp+F_AX+1], 0C0h
         jne .d
         test word [bx+R_FL], FL_CF

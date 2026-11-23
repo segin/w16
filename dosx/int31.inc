@@ -213,9 +213,14 @@ d_alias:
         mov [es:di+6], ax
         clc
 .r:     ret
-; 000Bh/000Ch: copy a descriptor out or in, unchecked (DX2)
+; 000Bh/000Ch: copy a descriptor out or in; any descriptor by its LDT
+; index (DX2). A buffer ES:DI ring 0 cannot reach fails (CF) instead of
+; ending Windows (uchk).
 d_getdesc:
         call ldtp
+        jc .r
+        mov dl, 1
+        call desc_buf
         jc .r
         push ds
         push es
@@ -233,6 +238,9 @@ d_getdesc:
 d_setdesc:
         call ldtp
         jc .r
+        xor dl, dl
+        call desc_buf
+        jc .r
         push ds
         mov ds, [bp+F_ES]
         mov si, [bp+F_DI]
@@ -243,6 +251,21 @@ d_setdesc:
         pop ds
         clc
 .r:     ret
+; desc_buf: is the client's ES:DI good for 8 bytes (DL = 1 to write)?
+; CF if not; ES and DI (the descriptor) kept
+desc_buf:
+        push ax
+        push cx
+        push si
+        mov ax, [bp+F_ES]
+        mov si, [bp+F_DI]
+        mov cx, 8
+        call uchk
+        pop si
+        pop cx
+        pop ax
+        ret
+
 ; 000Dh: a specific descriptor among the first 16. UNVERIFIED beyond
 ; BX=0 succeeding (DX5).
 d_specific:
@@ -452,18 +475,44 @@ d_rmiret:
 rmcall: sub sp, R_SIZE
         mov bx, sp
         push ax
-        push ds
-        mov ds, [bp+F_ES]
+        ; the client's structure (read now, written back afterwards) and
+        ; the stack words: what ring 0 cannot reach fails (CF), and so do
+        ; more words than the real-mode stack has room for (on DOSX's own
+        ; stack, SS:SP = 0, RM_RESERVE less 100h for the code's own use;
+        ; on the client's, its SP); they overran DOSX's stacks or wrapped
+        mov ax, [bp+F_ES]
         mov si, [bp+F_DI]
+        mov cx, R_SIZE
+        mov dl, 1
+        call uchk
+        jc .bad
+        push ds
+        mov ds, ax
         push ss
         pop es
         mov di, bx
         mov cx, R_SIZE / 2
         rep movsw
         pop ds
-        pop ax
-        call ring3sp
+        mov cx, [bp+F_CX]
+        cmp cx, 8000h
+        jae .bad
+        shl cx, 1
+        mov ax, [bx+R_SS]
+        or ax, [bx+R_SP]
+        jnz .own
+        cmp cx, RM_RESERVE - 100h
+        ja .bad
+        jmp .src
+.own:   cmp cx, [bx+R_SP]
+        ja .bad
+.src:   call ring3sp
         add si, K_FL + 2
+        mov ax, es
+        xor dl, dl
+        call uchk
+        jc .bad
+        pop ax
         mov cx, [bp+F_CX]
         call r0_rmcall
         ; back to the client's structure: everything up to and
@@ -484,6 +533,10 @@ rmcall: sub sp, R_SIZE
         add sp, R_SIZE
         clc
         ret
+.bad:   pop ax
+        add sp, R_SIZE
+        stc
+        ret
 
 ; 0303h: a real-mode callback for the procedure DS:SI with the
 ; structure ES:DI -> CX:DX. Callback c = 16 i + e gets the address
@@ -495,6 +548,9 @@ rmcall: sub sp, R_SIZE
 ; all extended memory before COMM.DRV asks for its callback), further
 ; ones live in extended memory.
 d_cballoc:
+        ; a procedure selector of 0 marks a free record: refused
+        cmp word [bp+F_DS], 0
+        je .no
         xor ax, ax
 .f:     cmp ax, [cb_cap]
         jae .grow
@@ -525,6 +581,8 @@ d_cballoc:
         mov [bp+F_DX], ax
         clc
 .r:     ret
+.no:    stc
+        ret
 ; 0304h: CX:DX = a callback's address
 d_cbfree:
         mov ax, [bp+F_DX]       ; i = (DX - cb_off) / 16
@@ -586,9 +644,10 @@ cb_grow:
         push ax
         mov ax, [cb_cap]
         add ax, 64
+        jc .max                 ; (past FFFFh: wrapped to a 0-byte block)
         cmp ax, [cb_max]
         jbe .ok
-        mov ax, [cb_max]
+.max:   mov ax, [cb_max]
         cmp ax, [cb_cap]
         jbe .f
 .ok:    mov [cb_newcap], ax
@@ -672,6 +731,12 @@ d_version:
 ; 0500h: the largest free block; the page counts at 14h and 1Ch are it
 ; in 4 KB pages, 20h is 0, the rest -1 (DX1)
 d_meminfo:
+        mov ax, [bp+F_ES]
+        mov si, [bp+F_DI]
+        mov cx, 30h
+        mov dl, 1
+        call uchk
+        jc .r
         call arena_largest
         mov es, [bp+F_ES]
         mov di, [bp+F_DI]
@@ -698,7 +763,7 @@ d_meminfo:
         mov word [es:di+20h], 0
         mov word [es:di+22h], 0
         clc
-        ret
+.r:     ret
 
 ; 0501h: BX:CX bytes -> BX:CX = linear address, SI:DI = handle (the
 ; header's address). Failure leaves AX alone (DX2 m501_huge).

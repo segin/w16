@@ -27,15 +27,26 @@
 ; IDT vectors 00h-1Fh: excstub_tab (32 x "call exc_entry", ring 0)
 ;
 ; Vectors 08h-0Fh are IRQ 0-7 as well as exceptions (Microsoft's DOSX
-; leaves the PIC at 08h/70h: INT 31h 0400h DX = 0870h). An interrupt
-; whose bit is set in the master PIC's in-service register is an IRQ; a
-; software INT (from ring 3, through the DPL-3 gate) is recognised by
-; the CD nn instruction before the return address (DX5 F00E: INT 0Dh
-; reaches the protected-mode handler under Microsoft's DOSX, a general
-; protection fault does not, F00F). Vectors 10h-1Fh are software
-; interrupts. IRQs and software interrupts go to the protected-mode
-; interrupt handler (INT 31h 0205h); exceptions to the exception handler
-; (0203h).
+; leaves the PIC at 08h/70h: INT 31h 0400h DX = 0870h), and every vector
+; can be a software INT from ring 3 (the gates have DPL 3). Whether the
+; processor pushed an error code shows in the frame's depth: from ring 3
+; it switched to the TSS's ring-0 stack and pushed SS, SP, FLAGS, CS and
+; IP, and an error code for exceptions 08h and 0Ah-0Eh only (Intel 80286
+; and 80386 Programmer's Reference, interrupts and exceptions); an IRQ or
+; a software INT never pushes one. Without an error code it is an IRQ if
+; its bit is set in the master PIC's in-service register, a software INT
+; if CD nn is before the return address (DX5 F00E: INT 0Dh reaches the
+; protected-mode handler under Microsoft's DOSX, a general protection
+; fault does not, F00F; DX9 0C: INT 09h does too), else an exception.
+; (w16 used to guess the error code from the bytes before the return
+; address: a fault whose IP happened to be a code selector's value read
+; through that selector at ring 0, and ended Windows when it was not
+; present (DX9 0B), and one whose bytes there were CD 0D went to the
+; interrupt handler with the error code still on the stack (DX9 0A);
+; Windows 3.1 gives both to the exception handler.) Vectors 10h-1Fh are
+; software interrupts. IRQs and software interrupts go to the
+; protected-mode interrupt handler (INT 31h 0205h), exceptions to the
+; exception handler (0203h).
 exc_entry:
         PUSH_FSGS
         push ds
@@ -52,6 +63,13 @@ exc_entry:
         div dl
         xor ah, ah
         mov bx, ax              ; BX = vector
+        lea ax, [bp+E_ERR+14]
+        cmp ax, [tss+2]
+        je .drop                ; from ring 3, with an error code
+        lea ax, [bp+E_ERR+12]
+        cmp ax, [tss+2]
+        jne .ring0
+        ; from ring 3 without an error code
         cmp bx, 10h
         jae .soft
         cmp bx, 8
@@ -68,14 +86,18 @@ exc_entry:
         shr ah, cl
         test ah, 1
         jnz .soft
-        cmp bx, 9
-        je .noerr
-        cmp bx, 0Fh
-        je .noerr
-        ; 08h, 0Ah-0Eh: an error code, unless it is a software INT
         call is_softint
         jnc .soft
-        ; drop the error code: move the saved registers and the stub's
+        jmp .noerr
+.ring0: ; DOSX's own code (no stack switch): an error code for 08h and
+        ; 0Ah-0Eh
+        cmp bx, 8
+        jb .noerr
+        cmp bx, 9
+        je .noerr
+        cmp bx, 0Eh
+        ja .noerr
+.drop:  ; drop the error code: move the saved registers and the stub's
         ; return address up by one word, the error code into the slot
         mov dx, [bp+E_ERR+2]
         mov si, bp
@@ -96,7 +118,12 @@ exc_entry:
 %endif
         test byte [bp+E_CS], 3
         jz near host_fault
-        jmp exc_deliver
+        cmp bx, 0Dh
+        jne .dlv
+        cmp word [bp+E_ERR], G_HC0B
+        jne .dlv
+        call dpmi_ret           ; an exception handler's return?
+.dlv:   jmp exc_deliver
 .soft:
 %ifdef TRACE
         mov word [bp+E_ERR], 0FFFFh
@@ -104,8 +131,19 @@ exc_entry:
 %endif
         test byte [bp+E_CS], 3
         jz near host_fault
-        ; deliver as an interrupt to pmvec[n] on the interrupted stack
-        les di, [bp+E_SP]
+        ; deliver as an interrupt to pmvec[n] on the interrupted stack; a
+        ; stack the frame does not fit on gets a stack fault instead
+        mov ax, [bp+E_SS]
+        mov si, [bp+E_SP]
+        sub si, 6
+        mov cx, 6
+        mov dl, 1
+        call uchk
+        jnc .fits
+        mov bx, 0Ch
+        mov word [bp+E_ERR], 0
+        jmp exc_deliver
+.fits:  les di, [bp+E_SP]
         sub di, 6
         mov ax, [bp+E_IP]
         mov [es:di], ax
@@ -121,6 +159,7 @@ exc_entry:
         mov [bp+E_CS], ax
         and word [bp+E_FL], ~(FL_IF | FL_TF)
 exc_exit:
+        call dses_fix
         popa
         pop es
         pop ds
@@ -146,49 +185,85 @@ trc_exc:
         ret
 %endif
 
-; is_softint: BX = vector; the frame (without an error code) would have
-; IP at [bp+E_ERR+2], CS at [bp+E_ERR+4]: is the instruction before
-; CS:IP "INT BL"? CF clear if so.
+; is_softint: BX = vector; the frame has no error code: is the instruction
+; before CS:IP "INT BL"? CF clear if so.
 is_softint:
-        mov ax, [bp+E_ERR+4]
-        test al, 3
-        jz .no
-        verr ax
-        jnz .no
-        lar dx, ax
-        jnz .no
-        test dh, 8              ; code
-        jz .no
-        mov si, [bp+E_ERR+2]
+        mov ax, [bp+E_CS]
+        mov si, [bp+E_IP]
         cmp si, 2
         jb .no
+        sub si, 2
+        mov cx, 2
+        xor dl, dl
+        call uchk               ; (a code segment readable and present)
+        jc .no
         push ds
         mov ds, ax
-        cmp byte [si-2], 0CDh
+        cmp byte [si], 0CDh
         jne .no1
-        cmp [si-1], bl
+        cmp [si+1], bl
         jne .no1
         pop ds
-        ; the frame has no error code: the stub's return address is
-        ; already where exc_entry expects it
         clc
         ret
 .no1:   pop ds
 .no:    stc
         ret
 
+; dses_fix: the DS and ES saved in the frame at BP become 0 when the
+; processor would not load them any more (a selector freed or made not
+; present while the client had it there). Microsoft's DOSX gives 0 in the
+; register that held a selector INT 31h 0001h freed (DX9 01, 02); after
+; 0502h, 0009h, 000Ch or INT 21h 49h it ends Windows ("Fault in MS-DOS
+; Extender": DX9 03-06), where w16's goes on with 0 (the user's ruling
+; in the DOSX audit, ARCHITECTURE.md 9.6).
+dses_fix:
+        mov ax, [bp+F_DS]
+        call seg_ok
+        jnc .es
+        mov word [bp+F_DS], 0
+.es:    mov ax, [bp+F_ES]
+        call seg_ok
+        jnc .r
+        mov word [bp+F_ES], 0
+.r:     ret
+; seg_ok: may ring 0 load AX into DS or ES? (null, or present and
+; readable at its RPL) CF if not
+seg_ok: test ax, 0FFFCh
+        jz .ok
+        push dx
+        verr ax
+        jnz .no
+        lar dx, ax
+        jnz .no
+        test dh, 80h
+        jz .no
+        pop dx
+.ok:    clc
+        ret
+.no:    pop dx
+        stc
+        ret
+
 ; exc_deliver: an exception from ring 3. BX = vector; the frame has the
 ; error code at E_ERR. Calls the exception handler (excvec[n]) at ring 3
-; on the host's ring-3 stack with the DPMI 0.9 frame: return address
-; (ret3_stub), error code, IP, CS, FLAGS, SP, SS. When it returns with
-; RETF, the client continues as the frame then says, with the registers
-; the handler left (DX5 F00D under Microsoft's DOSX).
+; on the exception stack with the DPMI 0.9 frame: return address, error
+; code, IP, CS, FLAGS, SP, SS. The return address is 00E0:140C, a ring-0
+; selector, as Microsoft's (DX5 F00D): the handler's RETF to it faults,
+; and that fault is its return (dpmi_ret). The client then continues as
+; the frame says, with the registers the handler left (DX5 F00D under
+; Microsoft's DOSX). A frame whose CS or SS a ring-3 program could not
+; have ends Windows with "Standard Mode: Invalid DPMI return from
+; cccc:iiii", the address of the handler's RETF, as Microsoft's DOSX does
+; (DX9 24).
 exc_deliver:
-        sub sp, C_SIZE
-        mov si, sp              ; the context
         ; the frame on the exception stack (EXC_SEL, 4 KB), as Microsoft's
         ; DOSX: SS = 02C7h, SP = 0FECh for the first one (DX5 F00D).
-        ; Nested exceptions get the room below.
+        ; Nested exceptions get the room below, 15 of them.
+        cmp word [exc_sp], 110h
+        jb near host_fault0
+        sub sp, C_SIZE
+        mov si, sp              ; the context
         mov ax, [exc_sp]
         push ax
         sub ax, 16
@@ -197,8 +272,8 @@ exc_deliver:
         push es
         mov ax, EXC_SEL
         mov es, ax
-        mov word [es:di], ret3_stub
-        mov word [es:di+2], G_HC3 | 3
+        mov word [es:di], EXC_RETIP
+        mov word [es:di+2], G_HC0B
         mov ax, [bp+E_ERR]
         mov [es:di+4], ax
         mov ax, [bp+E_IP]
@@ -212,7 +287,6 @@ exc_deliver:
         mov ax, [bp+E_SS]
         mov [es:di+14], ax
         pop es
-        push di
         mov [si+C_SP], di
         mov word [si+C_SS], EXC_SEL
         shl bx, 2
@@ -224,25 +298,132 @@ exc_deliver:
         and ax, ~(FL_IF | FL_TF)
         mov [si+C_FL], ax
         call ctx_from_frame
+        push word [exc_ctx]
+        mov [exc_ctx], si
         mov bx, si
         call r0_call3
-        pop di
+        pop word [exc_ctx]
         pop word [exc_sp]
         call ctx_to_frame
-        mov ax, EXC_SEL
-        mov es, ax
+        ; the frame where the handler's RETF found it
+        les di, [exc_rfr]
+        mov ax, [es:di+8]       ; CS: ring-3 code
+        call cs3_ok
+        jc .inval
+        mov [bp+E_CS], ax
+        mov ax, [es:di+14]      ; SS: ring-3 writable data
+        call ss3_ok
+        jc .inval
+        mov [bp+E_SS], ax
         mov ax, [es:di+6]
         mov [bp+E_IP], ax
-        mov ax, [es:di+8]
-        mov [bp+E_CS], ax
         mov ax, [es:di+10]
+        or ax, FL_IOPL          ; as r0_call3 gives ring 3 its flags
+        and ax, ~FL_NT
         mov [bp+E_FL], ax
         mov ax, [es:di+12]
         mov [bp+E_SP], ax
-        mov ax, [es:di+14]
-        mov [bp+E_SS], ax
         mov sp, bp
         jmp exc_exit
+.inval: push ss
+        pop es
+        mov si, msg_dpmiret
+        mov di, msgbuf
+.cp:    lodsb
+        stosb
+        or al, al
+        jnz .cp
+        dec di
+        mov ax, [exc_rcs]
+        call hex4
+        mov al, ':'
+        stosb
+        mov ax, [exc_rip]
+        call hex4
+        mov ax, 0A0Dh
+        stosw
+        mov al, '$'
+        stosb
+        mov word [pending_msg], msgbuf
+        mov al, 0FFh
+        jmp r0_terminate
+
+; cs3_ok / ss3_ok: AX = a selector ring 3 can run in / use as its stack
+; (RPL 3, present, DPL 3; code / writable data). CF if not.
+cs3_ok: push dx
+        mov dh, 18h             ; a code segment
+        jmp sel3_ok
+ss3_ok: push dx
+        mov dh, 12h             ; writable data
+sel3_ok:
+        push cx
+        mov cx, ax
+        and cx, 3
+        cmp cx, 3
+        jne .no
+        lar cx, ax
+        jnz .no
+        test ch, 80h            ; present
+        jz .no
+        mov dl, ch
+        and dl, 60h             ; DPL 3
+        cmp dl, 60h
+        jne .no
+        mov dl, ch
+        and dl, dh
+        cmp dl, dh
+        jne .no
+        cmp dh, 12h             ; data: not code
+        jne .yes
+        test ch, 08h
+        jnz .no
+.yes:   pop cx
+        pop dx
+        clc
+        ret
+.no:    pop cx
+        pop dx
+        stc
+        ret
+
+; dpmi_ret (from exc_entry: a general protection fault with error code
+; 00E0h at ring 3): if it is an exception handler's RETF to the return
+; address exc_deliver gave it, finish that exception: the handler's
+; registers into exc_deliver's context, as ret3_entry does, and back into
+; r0_call3's caller. Else return (an ordinary fault).
+dpmi_ret:
+        cmp word [exc_ctx], 0
+        je .no
+        mov ax, [bp+E_SS]
+        mov si, [bp+E_SP]
+        mov cx, 16
+        xor dl, dl
+        call uchk
+        jc .no
+        push ds
+        mov ds, ax
+        cmp word [si], EXC_RETIP
+        jne .no1
+        cmp word [si+2], G_HC0B
+        jne .no1
+        pop ds
+        mov bx, [tss+2]         ; r0_call3's: [context] [old SP0] ...
+        mov si, [ss:bx]
+        cmp si, [exc_ctx]
+        jne .no
+        call ctx_from_frame
+        mov ax, [bp+E_SP]
+        mov [exc_rfr], ax
+        mov ax, [bp+E_SS]
+        mov [exc_rfr+2], ax
+        mov ax, [bp+E_IP]
+        mov [exc_rip], ax
+        mov ax, [bp+E_CS]
+        mov [exc_rcs], ax
+        mov sp, bx
+        jmp ret3_entry.back
+.no1:   pop ds
+.no:    ret
 
 ; ctx_from_frame: context SI <- the registers saved at BP (pusha, ES, DS)
 ctx_from_frame:
@@ -317,6 +498,11 @@ gate_entry:
         mov ax, G_HD0
         mov ds, ax
         cld
+        pushf                   ; NT as ring 3 left it (a call gate keeps
+        pop ax                  ; it): r0_call3's IRET must not be a task
+        and ax, ~FL_NT          ; return
+        push ax
+        popf
         les si, [bp+F_SP3]
         mov bx, [es:si+K_OP]
         cmp bx, OP_COUNT
@@ -327,6 +513,7 @@ gate_entry:
         TRACE_RESULT
 gate_exit:
         add word [bp+F_SP3], 4  ; the operation and argument words
+        call dses_fix
         popa
         pop es
         pop ds
@@ -540,7 +727,27 @@ op_excdef:
         jb .refl
         cmp bx, 0Eh
         jbe .fatal
-.refl:  push es
+.refl:  ; the frame, and room for an interrupt frame on the client's stack
+        ; (a stack it does not fit on: the client's fault, as 06h)
+        push dx
+        push cx
+        mov ax, es
+        mov cx, 20
+        xor dl, dl
+        call uchk
+        jc .bad
+        mov ax, [es:si+18]
+        push si
+        mov si, [es:si+16]
+        sub si, 6
+        mov cx, 6
+        mov dl, 1
+        call uchk
+        pop si
+.bad:   pop cx
+        pop dx
+        jc .fatal
+        push es
         les di, [es:si+16]      ; the client's SS:SP
         sub di, 6
         pop ds
@@ -596,7 +803,7 @@ fault_report:
         mov [fx_ds], ax
         mov ax, [bp+F_ES]
         mov [fx_es], ax
-        push ss
+.fmt:   push ss
         pop es
         mov di, msgbuf
 .cp:    lodsb
@@ -622,6 +829,82 @@ fault_report:
         mov word [pending_msg], msgbuf
         mov al, 0FFh
         jmp r0_terminate
+
+; client_fault0: end the client with message SI when DOSX meets something
+; it cannot go on with away from a frame of the client's registers (a
+; client structure or stack it cannot reach, its host stacks used up):
+; the message and a register line of zeros, exit code 0FFh. Where Windows
+; 3.1's DOSX would end with a fault of its own, w16's ends the client
+; cleanly (the user's ruling in the DOSX audit, ARCHITECTURE.md 9.6).
+client_fault0:
+        mov ax, G_HD0
+        mov ds, ax
+        mov es, ax
+        mov di, fx_vals
+        mov cx, 14
+        xor ax, ax
+        rep stosw
+        jmp fault_report.fmt
+host_fault0:
+        mov si, msg_hostfault
+        jmp client_fault0
+
+; uchk: may ring 0 use the client's AX:SI for CX bytes (CX of 0 is
+; always good)? DL = 0 to read, 1 to write. The selector must be present
+; and readable (writable data to write), and every byte within its limit
+; and the 64 KB a 16-bit offset reaches (above the limit for an
+; expand-down segment). CF if not; registers kept.
+uchk:   push ax
+        push bx
+        push cx
+        push dx
+        jcxz .ok
+        verr ax
+        jnz .f
+        or dl, dl
+        jz .rd
+        verw ax
+        jnz .f
+.rd:    lar bx, ax
+        jnz .f
+        test bh, 80h            ; present
+        jz .f
+        dec cx
+        add cx, si              ; the last byte
+        jc .f
+        cmp byte [cs:is386], 0
+        je .l16
+        cpu 386
+        push edx
+        lsl edx, ax
+        cmp edx, 0FFFFh
+        jb .l32
+        mov dx, 0FFFFh
+.l32:   mov ax, dx
+        pop edx
+        cpu 286
+        jmp .lim
+.l16:   lsl ax, ax
+.lim:   mov dl, bh
+        and dl, 0Ch             ; data, expand-down?
+        cmp dl, 04h
+        je .xd
+        cmp cx, ax
+        ja .f
+.ok:    pop dx
+        pop cx
+        pop bx
+        pop ax
+        clc
+        ret
+.xd:    cmp si, ax              ; expand-down: offsets above the limit
+        ja .ok
+.f:     pop dx
+        pop cx
+        pop bx
+        pop ax
+        stc
+        ret
 
 ; hex4: AX as 4 hex digits at ES:DI
 hex4:   push cx
@@ -685,14 +968,12 @@ fatal_nomem:
 r0_terminate:
         cli
         mov ah, 4Ch
-        mov [exit_ax], ax
-%ifdef TRACE
-        mov word [rmx_depth], 0
-        mov word [trc_batch], 1
-        call trc_flush
-%endif
+        push ax
         mov ax, G_HD0
         mov ds, ax
+        pop ax
+        mov [exit_ax], ax
+        mov ax, G_HD0
         mov es, ax
         mov ss, ax
         mov sp, hs_stack_top
@@ -700,6 +981,18 @@ r0_terminate:
         mov word [h3_top], H3_SIZE
         mov word [tss+2], hs_stack_top
         mov word [tb_top], tbuf + TB_SIZE
+        mov word [exc_ctx], 0
+%ifdef TRACE
+        ; the trace's last records, on the fresh stacks; once only (a
+        ; fault in the flush itself comes back here)
+        mov word [rmx_depth], 0
+        cmp byte [trc_fin], 0
+        jne .nf
+        mov byte [trc_fin], 1
+        mov word [trc_batch], 1
+        call trc_flush.all
+.nf:
+%endif
         call to_rm
         call client_rm_reset
         ; the client's own PSP current again: KERNEL makes its tasks' PDBs
@@ -732,6 +1025,7 @@ r0_client_start:
         mov cx, 0FFFh
         call desc_lin
         mov word [exc_sp], 0FFCh
+        mov word [exc_ctx], 0
         call vectors_init
         mov word [cb_cap], CB_STATIC
         mov word [cb_depth], 0
@@ -808,7 +1102,15 @@ r0_client_start:
         mov si, [c_si]
         mov di, [c_di]
         mov bp, [c_bp]
-        mov ds, [c_dssel]
+        cmp byte [is386], 0     ; FS and GS null for the client (the
+        je .nfs                 ; IRET would null them anyway: DPL 0)
+        cpu 386
+        push word 0
+        pop fs
+        push word 0
+        pop gs
+        cpu 286
+.nfs:   mov ds, [c_dssel]
         iret
 
 ; vectors_init: the default protected-mode interrupt handlers (the
@@ -908,16 +1210,49 @@ idt_from_pmvec:
 r0_rmx:
         mov bp, sp
         cld
+        ; the host stacks: the real-mode/ring-0 one (hs_stack) and the
+        ; ring-3 one (G_HD3, H3_CHUNK per nesting level) must have room
+        ; for another level, else DOSX ends the client (once overrun they
+        ; spilled into the transfer buffer and the client's memory)
+        cmp sp, hs_stack + 200h
+        jb near host_fault0
+        cmp word [h3_top], H3_CHUNK
+        jb near host_fault0
 %ifdef TRACE
-        push ax
+        ; the record: the real-mode registers in a gate frame's layout,
+        ; and the real-mode CS:IP, SS:SP
+        pusha
+        push word [bp+R_DS]
+        push word [bp+R_ES]
+        push word [bp+R_EAX]
+        push word [bp+R_ECX]
+        push word [bp+R_EDX]
+        push word [bp+R_EBX]
+        push word 0
+        push word [bp+R_EBP]
+        push word [bp+R_ESI]
+        push word [bp+R_EDI]
+        mov ax, [bp+R_IP]
+        mov [trc_x], ax
+        mov ax, [bp+R_CS]
+        mov [trc_x+2], ax
+        mov ax, [bp+R_SS]
+        mov [trc_x+4], ax
+        mov ax, [bp+R_SP]
+        mov [trc_x+6], ax
         mov ax, [bp+R_SIZE+2]
         and ax, 0FFh
         or ax, 0200h
         cmp byte [bp+R_SIZE], 0
         je .tk
         add ax, 0100h           ; 03nnh: hook of vector nn
-.tk:    call trc
-        pop ax
+.tk:    push bp
+        mov bp, sp
+        add bp, 2
+        call trc
+        pop bp
+        add sp, 20
+        popa
 %endif
         inc word [rmx_depth]
         cmp byte [bp+R_SIZE], 0
@@ -940,10 +1275,16 @@ r0_rmx:
         mov [si+C_DI], ax
         mov ax, [es:di+6]
         mov [si+C_ES], ax
-        ; copy the real-mode registers to the client's structure
+        ; copy the real-mode registers to the client's structure (one
+        ; ring 0 cannot write: the client's fault)
         push si
+        mov si, [si+C_DI]
+        mov cx, R_SIZE
+        mov dl, 1
+        call uchk
+        jc near .badcb
         mov es, ax
-        mov di, [si+C_DI]
+        mov di, si
         mov si, bp
         mov cx, R_SIZE / 2
         rep movsw
@@ -951,6 +1292,7 @@ r0_rmx:
         ; DS:SI = the real-mode SS:SP, through a selector of this
         ; nesting level
         call cb_stacksel
+        jc near host_fault0
         mov [si+C_DS], ax
         mov ax, [bp+R_SP]
         mov [si+C_SI], ax
@@ -965,8 +1307,11 @@ r0_rmx:
         mov es, cx
         mov word [es:di], ret3_stub
         mov word [es:di+2], G_HC3 | 3
+        ; the real-mode caller's flags, but DF clear: Microsoft's DOSX
+        ; starts the procedure with DF clear when real mode called with DF
+        ; set (DX9 0D)
         mov cx, [bp+R_FL]
-        and cx, ~(FL_IF | FL_TF | FL_NT)
+        and cx, ~(FL_IF | FL_TF | FL_NT | FL_DF)
         or cx, FL_IOPL
         mov [es:di+4], cx
         pop es
@@ -985,17 +1330,24 @@ r0_rmx:
         dec word [cb_depth]
         pop word [h3_top]
         ; ES:DI = the structure to continue with
+        mov ax, [si+C_ES]
+        mov si, [si+C_DI]
+        mov cx, R_SIZE
+        xor dl, dl
+        call uchk
+        jc .badcb
         push ds
-        mov ds, [si+C_ES]
+        mov ds, ax
         push ss
         pop es
         mov di, bp
-        mov si, [ss:si+C_DI]
         mov cx, R_SIZE / 2
         rep movsw
         pop ds
         mov sp, bp
         jmp .back
+.badcb: mov si, msg_clientfault
+        jmp client_fault0
 .hook:  ; a real-mode interrupt the client handles in protected mode
         cmp byte [bp+R_SIZE], 2
         je near .ps2
@@ -1093,6 +1445,7 @@ r0_rmx:
         push ds
         push es
         call cb_stacksel        ; AX = a selector for the real-mode stack
+        jc near host_fault0
         mov cx, G_HD3
         mov es, cx
         mov word [es:di], ret3_stub
@@ -1143,7 +1496,8 @@ r0_rmx:
         jmp rmx_resume
 
 ; cb_stacksel: AX = a selector for the real-mode stack segment [bp+R_SS],
-; one per callback nesting level (allocated when first needed)
+; one per callback nesting level (allocated when first needed); CF if the
+; LDT has none left
 cb_stacksel:
         push bx
         push cx
@@ -1167,6 +1521,7 @@ cb_stacksel:
         mov dl, 0F2h
         call desc_seg
         mov ax, bx
+        clc
 .fail:  pop dx
         pop cx
         pop bx

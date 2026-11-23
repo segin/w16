@@ -80,3 +80,8 @@ bss_start:
 %include "dosx/bss.inc"
 bss_end:
 bss_len equ bss_end - bss_start
+
+; one segment: the image and its data within 64 KB
+%if img_file_len + bss_len > 10000h
+%error "DOSX's image and data are larger than 64 KB"
+%endif

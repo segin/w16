@@ -8,6 +8,15 @@
 # Manager as the shell, the screen taken after SECS seconds):
 #   kernel     w16's KRNL286                       must be 0 pixels off
 #   dosx       w16's KRNL286 on w16's DOSX         must be 0
+#   dosxaudit  the DOSX audit's probes (ARCHITECTURE.md 9.6):
+#              DX9 (tests/dos/dx9.asm, in the KERNEL slot, tests/dosxtest.sh)
+#              under Microsoft's DOSX and w16's: the OBS lines and any
+#              "Standard Mode:" message the same (runs 01, 02, 08-16, 23,
+#              24; 17 and 0E under DOSBox-X too); runs 03-07, 20 and 21,
+#              which Windows 3.1's DOSX does not survive or does not check,
+#              must end under w16's without a fault; DX10 (INT 21h AH=00h
+#              from a Windows program: Windows 3.1 hangs) on w16's KRNL386
+#              and KRNL286 and DOSX: the task ends, Windows goes on
 #   odstring   TK56 as the shell calls OutputDebugString: with dropin.sh's
 #              stock DebugToAux=1 the screen against 3.1's (which shows the
 #              text: handle 3 is DOSBox's console), must be 0; with w16's
@@ -920,7 +929,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms vsd bigmem filecdr}
+cases=${*:-kernel dosx dosxaudit k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados comm commdlg mdimax uaudit lbclip lbdraw combo editwrap commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms vsd bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1219,6 +1228,68 @@ runcase() {
     case $c in
     kernel) ref; boot kernel; check kernel kernel ref ;;
     dosx)   ref; boot dosx -x; check dosx dosx ref ;;
+    dosxaudit)
+        # DX9 runs: under Windows 3.1's DOSX through the reference cache,
+        # under w16's every time, in four lanes
+        da=$out/dosxaudit
+        mkdir -p "$da"
+        dx9=$root/build/dos/DX9.COM
+        dxa_ms() {      # dxa_ms RUN [CPU]: Windows 3.1's log -> $da/RUN.CPU.ms
+            _dc=${2:-386}
+            refrun "dosxaudit-ms$_dc-$1" dosxaudit sh -c '"$@"' "$dx9" \
+                "$root/tests/dosxtest.sh" -m ms -c "$_dc" -t 120 -a "$1" \
+                -o "$da/ms$_dc-$1" DX9
+            tr -d '\r' < "$out/dosxaudit-ms$_dc-$1.txt" > "$da/$1.$_dc.ms" 2>/dev/null || :
+        }
+        dxa_w16() {     # dxa_w16 RUN [CPU]: w16's log -> $da/RUN.w16
+            _dc=${2:-386}
+            "$root/tests/dosxtest.sh" -m w16 -q -c "$_dc" -t 120 -a "$1" \
+                -o "$da/w16$_dc-$1" DX9 > /dev/null 2>&1 || :
+            tr -d '\r' < "$da/w16$_dc-$1/DX9.w16.log" > "$da/$1.$_dc.w16" 2>/dev/null || :
+        }
+        dxa_same="1 2 8 9 a b c d e f 10 11 12 13 14 15 16 23 24"
+        dxa_surv="3 4 5 6 7 20 21"
+        (for t in 1 9 d 11 15 24 3 7; do dxa_ms "$t" 2>/dev/null; dxa_w16 "$t"; done) &
+        (for t in 2 a e 12 16 4 20; do dxa_ms "$t" 2>/dev/null; dxa_w16 "$t"; done) &
+        (for t in 8 b f 13 23 5 21; do dxa_ms "$t" 2>/dev/null; dxa_w16 "$t"; done) &
+        (for t in c 10 14 6; do dxa_ms "$t" 2>/dev/null; dxa_w16 "$t"; done
+         for t in 17 e; do dxa_ms "$t" 386x 2>/dev/null; dxa_w16 "$t" 386x; done) &
+        wait
+        r=ok
+        # what is compared: OBS lines but the informational ones (OBS ~),
+        # the "Standard Mode:" message's first line, the errorlevel line
+        dxa_f() { grep -E '^OBS [^~]|Standard Mode:|ERRORLEVEL|^DX9 end' "$1" 2>/dev/null | sed 's/^ *//'; }
+        for t in $dxa_same 17:386x e:386x; do
+            c=${t#*:}; [ "$c" = "$t" ] && c=386; t=${t%:*}
+            dxa_f "$da/$t.$c.ms" > "$da/$t.$c.ms.obs"
+            dxa_f "$da/$t.$c.w16" > "$da/$t.$c.w16.obs"
+            grep -q '^DX9 end\|Standard Mode' "$da/$t.$c.ms.obs" ||
+                [ "$r" != ok ] || r="DX9 $t ($c): no reference log ($da/$t.$c.ms)"
+            cmp -s "$da/$t.$c.ms.obs" "$da/$t.$c.w16.obs" || [ "$r" != ok ] ||
+                r="DX9 $t ($c): $(diff "$da/$t.$c.ms.obs" "$da/$t.$c.w16.obs" | grep -c '^[<>]') line(s) differ from Windows 3.1's ($da/$t.$c.ms.obs, $t.$c.w16.obs)"
+        done
+        for t in $dxa_surv; do
+            if ! grep -q '^WINEXIT' "$da/$t.386.w16" 2>/dev/null ||
+                grep -q 'Standard Mode' "$da/$t.386.w16"; then
+                [ "$r" != ok ] || r="DX9 $t did not end cleanly under w16's DOSX ($da/$t.386.w16)"
+            fi
+            case $t in 7) ;; *)
+                grep -q '^DX9 end' "$da/$t.386.w16" 2>/dev/null || [ "$r" != ok ] ||
+                    r="DX9 $t did not finish under w16's DOSX ($da/$t.386.w16)" ;;
+            esac
+        done
+        # DX10: a task's INT 21h AH=00h, on w16's KRNL386 and KRNL286
+        for k in 386 286; do
+            if [ $k = 286 ]; then kv=REFRUN_KRNL286=1 kf=KRNL286; else kv=DX10K=386 kf=KRNL386; fi
+            env $kv REFRUN_FILES="$root/build/dos/$kf.EXE=WINDOWS/SYSTEM/$kf.EXE $root/build/dos/DOSX.EXE=WINDOWS/SYSTEM/DOSX.EXE" \
+                "$root/tests/refrun.sh" "$root/build/dos/DX10.EXE" > "$da/dx10-$k.txt" 2>&1 || :
+            tr -d '\r' < "$da/dx10-$k.txt" | grep -q '^OBS child_ended=0001' &&
+                tr -d '\r' < "$da/dx10-$k.txt" | grep -q '^OBS child_after=0000' &&
+                tr -d '\r' < "$da/dx10-$k.txt" | grep -q '^DX10 done' ||
+                [ "$r" != ok ] || r="DX10 on w16's KRNL$k: the task did not end cleanly ($da/dx10-$k.txt)"
+        done
+        if [ "$r" = ok ]; then echo "ok   dosxaudit: DX9 as under Windows 3.1's DOSX, its runs 03-07, 20, 21 survived; DX10's AH=00h ended its task on both KERNELs"
+        else echo "FAIL dosxaudit: $r"; fails=$((fails + 1)); fi ;;
     odstring)
         # TK56 as the shell calls OutputDebugString and waits. Windows
         # 3.1's retail KERNEL writes the text to DOS handle 3 (AUX), which

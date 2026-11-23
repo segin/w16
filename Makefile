@@ -42,7 +42,7 @@ TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK
            TK67P1 TK67P2 TK67P3 TK67P4 TK67P5 TK67P6 TK67P7 TK67P8 TK67P9 TK67P10 TK67P11 TK67P12 TK67P13
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
-DXPROBES := DX1 DX2 DX4 DX5 DX8
+DXPROBES := DX1 DX2 DX4 DX5 DX8 DX9
 DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63
 # TK65's import DLLs (TK65IMP below)
 TK65I   := TK65I1.DLL TK65I2.DLL TK65I3.DLL TK65I4.DLL TK65I5.DLL TK65I6.DLL TK65I7.DLL TK65I8.DLL TK65I9.DLL
@@ -76,7 +76,7 @@ dos: $(DOS)/KRNL286.EXE $(DOS)/KRNL386.EXE $(DOS)/WIN87EM.DLL $(TESTS:%=$(DOS)/%
      $(WINTOOLS:%=$(DOS)/%.EXE) \
      $(DOS)/KEYFEED.COM $(DOS)/POWEROFF.COM $(DOS)/WINENV.COM $(B)/hdd/MBR.BIN \
      $(DOS)/TK18.COM $(DROPIN:%=$(DOS)/%.EXE) $(DOS)/PENWIN.DLL $(DOS)/MS1.COM \
-     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/XM1.COM $(DOS)/DX6.EXE $(DOS)/DX7.EXE $(DOS)/DXD.COM
+     $(DOS)/DOSX.EXE $(DOS)/DOSXT.EXE $(DXPROBES:%=$(DOS)/%.COM) $(DOS)/XM1.COM $(DOS)/DX6.EXE $(DOS)/DX7.EXE $(DOS)/DX10.EXE $(DOS)/DXD.COM
 
 # ---- host tools ----
 $(B)/host/nedump: tools/nedump.c include/w16/ne.h include/w16/types.h
@@ -946,6 +946,14 @@ $(DOS)/DX6.EXE: $(B)/tests/start.o $(B)/tests/dx6.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/dx6.map file { $(B)/tests/start.o $(B)/tests/dx6.o }
+
+# DX10.EXE: INT 21h AH=00h from a Windows program (the DOSX audit, run as
+# the shell: boot-test case dosxaudit)
+$(B)/tests/dx10.o: tests/apps/dx10ref.h tests/apps/tklog.h
+$(DOS)/DX10.EXE: $(B)/tests/start.o $(B)/tests/dx10.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/dx10.map file { $(B)/tests/start.o $(B)/tests/dx10.o }
 
 # DX7.EXE + DXD.COM: a DOS program started from Standard mode (tests/dosapp.sh)
 $(DOS)/DX7.EXE: $(B)/tests/start.o $(B)/tests/dx7.o tests/apps/app.lnk tests/apps/dx7.lnk
