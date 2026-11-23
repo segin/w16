@@ -785,7 +785,7 @@ static u32 tk_count[TK_N];
 static void software_int(struct cregs *r, int vec)
 {
     tk_count[(vec & 0xFF) + ((r->eflags & EFL_VM) ? 0 : 256)]++;
-    if (vm_trace && cur_vm != &sysvm) trace("[%d:%x/%x %x:%x]", cur_vm->id, vec, r->eax & 0xFFFF, r->cs, r->eip);
+    if (vm_trace && cur_vm != &sysvm) trace("[%d:%x/%x b%x %x:%x]", cur_vm->id, vec, r->eax & 0xFFFF, r->ebx & 0xFFFF, r->cs, r->eip);
     if ((r->eflags & EFL_VM) && vxd_v86_int_hooks(r, vec)) return;  /* a device serviced it */
     if (r->eflags & EFL_VM) {
         if (vec == 0x2F && int2f_v86(r)) return;
@@ -935,6 +935,13 @@ static void heartbeat(struct cregs *r)
         trace(", ss:sp %x:%x", r->ss, r->esp & 0xFFFF);
         for (i = 0; i < 8; i++) trace(" %04x", sp[i]);
         trace(", ax %x bx %x cx %x dx %x ds %x es %x", r->eax, r->ebx, r->ecx, r->edx, r->ds, r->es);
+    }
+    {   /* each VM: idle, suspended (count), ended, closing, DOS calls, critical, priority boost, at */
+        struct vm *v;
+        trace(", VMs");
+        for (v = vm_list; v; v = v->next)
+            trace(" %d:i%d s%d/%d e%d c%d d%d/%d/%d p%d %x:%x", v->id, v->idle, v->suspended, v->susp_count,
+                  v->ended, v->closing, v->ndos, v->indos, v->crit, v->exec_prio, v->r.cs, v->r.eip);
     }
     trace("\n");
 }

@@ -13,7 +13,7 @@
 #   f: two boxes, B waiting (INT 2Fh 1680h between tries) for a file A
 #        makes after a while: does a box see another's new file?
 # Environment: MEMLOAD_PIF more tools/mkpif.py settings; MEMLOAD_ROUNDS;
-# MEMLOAD_DOSBOX=x for DOSBox-X; MEMLOAD_COM1=1 COM1 (w16's VMM trace) in
+# MEMLOAD_INI="S:K=V ..." SYSTEM.INI settings; MEMLOAD_DOSBOX=x for DOSBox-X; MEMLOAD_COM1=1 COM1 (w16's VMM trace) in
 # OUTDIR/com1.txt (DOSBox-X); MEMLOAD_PLAINCONF more dosbox.conf lines
 # (e.g. a nullmodem serial port for plain DOSBox); DROPIN_CYCLES (default fixed 30000).
 # Prints the logs (OUTDIR/MLA.LOG ...). (A third argument other than w16
@@ -58,6 +58,7 @@ if [ -n "${MEMLOAD_COM1:-}" ]; then
     conf="[serial]
 serial1=file file:$o/com1.txt"
 fi
+for i in ${MEMLOAD_INI:-}; do set -- "$@" -i "$i"; done
 [ "${MEMLOAD_DOSBOX:-}" = x ] && set -- "$@" -p 386
 [ "$w" = w16 ] && set -- "$@" -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE"
 DROPIN_CONF=$conf DROPIN_NOREDIR=1 DROPIN_CPUTYPE=${DROPIN_CPUTYPE:-386} DROPIN_CYCLES=${DROPIN_CYCLES:-fixed 30000} \
