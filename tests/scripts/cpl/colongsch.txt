@@ -1,0 +1,16 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! survive
+;! ini WINDOWS/CONTROL.INI color schemes:Schemeyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy=C0C0C0,FFFFFF,FFFFFF,0,FFFFFF,0,800000,FFFFFF,FFFFFF,C0C0C0,C0C0C0,0,C0C0C0,C0C0C0,808080,0,C0C0C0,800000,FFFFFF,0,FFFFFF
+; A colour scheme name of 450 characters (a hand-edited CONTROL.INI; cpl
+; audit H2): 3.1's Color applet dies as it opens, w16's lists it; chosen
+; (the last), then Cancel (nothing written)
+blinktime 65535
+run CONTROL.EXE COLOR
+wait 4000
+alt s
+wait 300
+key 23
+wait 500
+snap C0.BMP
+key 1B
+wait 2000

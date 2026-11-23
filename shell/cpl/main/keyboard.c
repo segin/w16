@@ -76,6 +76,8 @@ BOOL FAR PASCAL __loadds KeyboardProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             WriteProfileString("windows", "KeyboardSpeed", b);
             SystemParametersInfo(SPI_SETKEYBOARDDELAY, delay, NULL, 0);
             SystemParametersInfo(SPI_SETKEYBOARDSPEED, speed, NULL, 0);
+            /* observed (wnchange): "windows", lower case; Cancel sends none */
+            SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, (LPARAM)(LPSTR)"windows");
             EndDialog(dlg, IDOK);
             return TRUE;
         }

@@ -55,6 +55,11 @@ normlog() {
         -e '/newinquire in:/d' -e 's/^C:\\WINDOWS\\SYSTEM\\//' "$1" | tr -d '\r'
 }
 
+# the INI files as compared (;! survive: see below)
+inifilter() {
+    if [ -n "$survive" ]; then grep -av '^[XYWH]=' | tr -d '\r'; else cat; fi
+}
+
 for n in $names; do
     s=$dir/$n.txt
     common="" w16="$root/build/dos/CONTROL.EXE=WINDOWS/CONTROL.EXE" mode=/S
@@ -100,12 +105,17 @@ for n in $names; do
     done
     wait
     result=ok
+    # ;! survive: 3.1's Control Panel never closes, so never writes its
+    # [MMCPL] X=, Y=, W=, H= (CONTROL.EXE, on close): those left out (and
+    # the line ends, which that leaves different)
+    survive=
+    grep -q '^;! survive' "$s" && survive=1
     for f in $inis; do
         # (w16 brands the built-in colour scheme "w16 Default": shell/cpl/main)
         # (both sides through the same sed, which also ends an unended
         # last line: the name aside, the bytes must be the same)
-        a=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/orig/$f" 2>/dev/null; echo .)
-        b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/w16/$f" 2>/dev/null; echo .)
+        a=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/orig/$f" 2>/dev/null | inifilter; echo .)
+        b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$out/$n/w16/$f" 2>/dev/null | inifilter; echo .)
         { [ -f "$out/$n/orig/$f" ] && [ -f "$out/$n/w16/$f" ] && [ "$a" = "$b" ]; } || { result=FAIL; echo "  $n: $f differs"; }
     done
     if [ -f "$out/$n/orig/CP1.LOG" ] || [ -f "$out/$n/w16/CP1.LOG" ]; then

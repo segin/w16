@@ -1,0 +1,26 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Desktop's arrows on typed values out of range (cpl audit L7): -32768
+; and down, 99999 and down, 600 and down in Border Width
+blinktime 65535
+run CONTROL.EXE DESKTOP
+wait 4000
+alt b
+type -32768
+wait 300
+clickid 3BB
+wait 500
+snap D0.BMP
+alt b
+type 99999
+wait 300
+clickid 3BB
+wait 500
+snap D1.BMP
+alt b
+type 600
+wait 300
+clickid 3BB
+wait 500
+snap D2.BMP
+key 1B
+wait 2000

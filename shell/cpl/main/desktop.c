@@ -36,6 +36,7 @@
  * are appended; the saver's Test and Setup command lines (/s, /c).
  */
 #include "maincpl.h"
+#include "cplutil.h"
 
 static char s_win[] = "windows";
 static char s_desk[] = "Desktop";
@@ -64,75 +65,13 @@ static void lower(char *s)
             *s += 'a' - 'A';
 }
 
-extern void FAR PASCAL DOS3Call(void);
-
-static struct {
-    char reserved[21];
-    char attr;
-    WORD time, date;
-    DWORD size;
-    char name[13];
-} dta;
-
-static BOOL dos_find(const char FAR *spec, BOOL first)
-{
-    BOOL ok = FALSE;
-    WORD dseg = SELECTOROF(spec), doff = OFFSETOF(spec);
-    void FAR *pd = &dta;
-    WORD tseg = SELECTOROF(pd), toff = OFFSETOF(pd);
-    _asm {
-        push ds
-        mov dx, toff
-        mov ds, tseg
-        mov ah, 1Ah
-        call DOS3Call
-        pop ds
-        push ds
-        mov dx, doff
-        mov ds, dseg
-        xor cx, cx
-        mov ah, 4Eh
-        cmp first, 0
-        jne go
-        mov ah, 4Fh
-    go:
-        call DOS3Call
-        pop ds
-        mov ax, 1
-        jnc done
-        xor ax, ax
-    done:
-        mov ok, ax
-    }
-    return ok;
-}
-
 /* a screen saver's name: its NE module description after "SCRNSAVE :"
-   (the non-resident name table's first entry) */
+   (cpl_ne_desc: the non-resident name table's first entry) */
 static BOOL saver_name(const char *path, char *name, int size)
 {
-    HFILE f;
-    OFSTRUCT of;
-    BYTE hdr[64], len;
-    DWORD ne, nonres;
     char desc[80], *p;
-    f = OpenFile(path, &of, OF_READ);
-    if (f == HFILE_ERROR)
+    if (!cpl_ne_desc(path, desc, sizeof desc))
         return FALSE;
-    if (_lread(f, hdr, 64) != 64 || hdr[0] != 'M' || hdr[1] != 'Z')
-        goto fail;
-    ne = *(DWORD *)(hdr + 0x3C);
-    _llseek(f, ne, 0);
-    if (_lread(f, hdr, 64) != 64 || hdr[0] != 'N' || hdr[1] != 'E')
-        goto fail;
-    nonres = *(DWORD *)(hdr + 0x2C);
-    _llseek(f, nonres, 0);
-    if (_lread(f, &len, 1) != 1 || len == 0 || len >= sizeof desc)
-        goto fail;
-    if (_lread(f, desc, len) != len)
-        goto fail;
-    desc[len] = 0;
-    _lclose(f);
     for (p = desc; *p && *p != ':'; p++)
         ;
     if (!*p)
@@ -141,9 +80,6 @@ static BOOL saver_name(const char *path, char *name, int size)
         ;
     lstrcpyn(name, p, size);
     return TRUE;
-fail:
-    _lclose(f);
-    return FALSE;
 }
 
 /* ---- the lists ---- */
@@ -165,11 +101,54 @@ static HLOCAL section_keys(const char *sec)
     }
 }
 
+/* the text of a window, or of item i of a combo box, in a local block
+   (LMEM_FIXED) the caller frees; NULL if there is none. CONTROL.INI's
+   pattern names have no length limit (cpl audit H1: a 124-character name
+   is listed, chosen and edited on 3.1). */
+static HLOCAL win_text(HWND w)
+{
+    int n = GetWindowTextLength(w);
+    HLOCAL h = LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, n + 1);
+    if (h) {
+        GetWindowText(w, LocalLock(h), n + 1);
+        LocalUnlock(h);
+    }
+    return h;
+}
+
+static HLOCAL item_text(HWND cb, int i)
+{
+    int n = (int)SendMessage(cb, CB_GETLBTEXTLEN, i, 0);
+    HLOCAL h;
+    if (n < 0)
+        return NULL;
+    h = LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, n + 1);
+    if (h) {
+        SendMessage(cb, CB_GETLBTEXT, i, (LPARAM)(LPSTR)LocalLock(h));
+        LocalUnlock(h);
+    }
+    return h;
+}
+
+/* a pattern's bits from CONTROL.INI, "(None)" for item "(None)" or none */
+static void pattern_bits(HWND cb, int i, char *bits, int size)
+{
+    HLOCAL h = i >= 0 ? item_text(cb, i) : NULL;
+    lstrcpy(bits, s_none);
+    if (h) {
+        const char *name = LocalLock(h);
+        if (lstrcmpi(name, s_none))
+            GetPrivateProfileString(s_patterns, name, s_none, bits, size, s_cpl_ini);
+        LocalUnlock(h);
+        LocalFree(h);
+    }
+}
+
 static void fill_patterns(HWND cb, const char *current)
 {
     HLOCAL keys;
     char bits[64], v[64];
-    int sel = -1;
+    int sel = -1, none;
     SendMessage(cb, CB_RESETCONTENT, 0, 0);
     SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)s_none);
     if ((keys = section_keys(s_patterns)) != NULL) {
@@ -181,23 +160,26 @@ static void fill_patterns(HWND cb, const char *current)
         }
         LocalFree(keys);
     }
+    /* "(None)" where the sorting put it (a name may sort before it) */
+    none = (int)SendMessage(cb, CB_FINDSTRINGEXACT, (WPARAM)-1, (LPARAM)(LPSTR)s_none);
     /* the current pattern: WIN.INI holds its bits; find the name */
     GetProfileString(s_desk, "Pattern", s_none, bits, sizeof bits);
-    if (current)
-        sel = (int)SendMessage(cb, CB_FINDSTRINGEXACT, (WPARAM)-1, (LPARAM)(LPSTR)current);
-    else if (!lstrcmpi(bits, s_none))
-        sel = 0;
+    if (current) {
+        if (*current)
+            sel = (int)SendMessage(cb, CB_FINDSTRINGEXACT, (WPARAM)-1, (LPARAM)(LPSTR)current);
+    } else if (!lstrcmpi(bits, s_none))
+        sel = none;
     else {
         int i, n = (int)SendMessage(cb, CB_GETCOUNT, 0, 0);
-        char name[64];
-        for (i = 1; i < n && sel < 0; i++) {
-            SendMessage(cb, CB_GETLBTEXT, i, (LPARAM)(LPSTR)name);
-            GetPrivateProfileString(s_patterns, name, "", v, sizeof v, s_cpl_ini);
+        for (i = 0; i < n && sel < 0; i++) {
+            if (i == none)
+                continue;
+            pattern_bits(cb, i, v, sizeof v);
             if (!lstrcmp(v, bits))
                 sel = i;
         }
     }
-    SendMessage(cb, CB_SETCURSEL, sel >= 0 ? sel : 0, 0);
+    SendMessage(cb, CB_SETCURSEL, sel >= 0 ? sel : none, 0);
 }
 
 static void fill_savers(HWND dlg)
@@ -206,19 +188,21 @@ static void fill_savers(HWND dlg)
     char path[160], cur[160], name[60];
     int n = windir(path, sizeof path), sel = 0, i;
     BOOL more;
+    CPLFIND fd;
     SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)s_none);
     GetPrivateProfileString("boot", "SCRNSAVE.EXE", "", cur, sizeof cur, "SYSTEM.INI");
     lstrcpy(path + n, "*.SCR");
-    /* collect the names first: reading a file moves no DTA, but keep it
-       simple: one pass, files read as found (OpenFile does not use it) */
-    for (more = dos_find(path, TRUE); more; more = dos_find(path, FALSE)) {
+    /* one pass, each file read as found: cpl_find keeps its own DTA and
+       puts Control Panel's back after every call */
+    for (more = cpl_find(path, 0, &fd, TRUE); more; more = cpl_find(path, 0, &fd, FALSE)) {
         char full[160];
         lstrcpy(full, path);
-        lstrcpy(full + n, dta.name);
+        lstrcpy(full + n, fd.name);
         if (saver_name(full, name, sizeof name)) {
             i = (int)SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)name);
-            /* the item data: an atom-free copy of the path */
-            {
+            /* the item data: an atom-free copy of the path (none when the
+               list is full: CB_ERR, CB_ERRSPACE) */
+            if (i >= 0) {
                 HLOCAL h = LocalAlloc(LMEM_FIXED, lstrlen(full) + 1);
                 if (h) {
                     lstrcpy(LocalLock(h), full);
@@ -229,9 +213,15 @@ static void fill_savers(HWND dlg)
         }
         lstrcpy(path + n, "*.SCR");
     }
+    /* "(None)" where the sorting put it: a saver's name may sort before
+       it (observed with "!Starfield Simulatio": the list starts with that
+       saver, "(None)" second and chosen; dksvorder.txt) */
+    sel = (int)SendMessage(cb, CB_FINDSTRINGEXACT, (WPARAM)-1, (LPARAM)(LPSTR)s_none);
+    if (sel < 0)
+        sel = 0;
     if (GetProfileInt(s_win, "ScreenSaveActive", 0) && cur[0]) {
         int k, m = (int)SendMessage(cb, CB_GETCOUNT, 0, 0);
-        for (k = 1; k < m; k++) {
+        for (k = 0; k < m; k++) {
             HLOCAL h = (HLOCAL)LOWORD(SendMessage(cb, CB_GETITEMDATA, k, 0));
             if (h && !lstrcmpi(LocalLock(h), cur))
                 sel = k;
@@ -240,6 +230,9 @@ static void fill_savers(HWND dlg)
         }
     }
     SendMessage(cb, CB_SETCURSEL, sel, 0);
+    /* 3.1's: Test and Setup by the position, not the name: off for the
+       first entry even when that is a saver, on for "(None)" second
+       (dksvorder.txt, dksvorder2.txt) */
     EnableWindow(GetDlgItem(dlg, IDC_DK_TEST), sel > 0);
     EnableWindow(GetDlgItem(dlg, IDC_DK_SETUP), sel > 0);
 }
@@ -248,7 +241,7 @@ static void free_savers(HWND dlg)
 {
     HWND cb = GetDlgItem(dlg, IDC_DK_SAVER);
     int k, m = (int)SendMessage(cb, CB_GETCOUNT, 0, 0);
-    for (k = 1; k < m; k++) {
+    for (k = 0; k < m; k++) {       /* "(None)"'s data is 0 */
         HLOCAL h = (HLOCAL)LOWORD(SendMessage(cb, CB_GETITEMDATA, k, 0));
         if (h)
             LocalFree(h);
@@ -261,11 +254,12 @@ static void fill_wallpapers(HWND dlg)
     char path[160], cur[160];
     int n = windir(path, sizeof path), i;
     BOOL more;
+    CPLFIND fd;
     SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)s_none);
     lstrcpy(path + n, "*.BMP");
-    for (more = dos_find(path, TRUE); more; more = dos_find(path, FALSE)) {
+    for (more = cpl_find(path, 0, &fd, TRUE); more; more = cpl_find(path, 0, &fd, FALSE)) {
         char name[16];
-        lstrcpy(name, dta.name);
+        lstrcpy(name, fd.name);
         lower(name);
         SendMessage(cb, CB_ADDSTRING, 0, (LPARAM)(LPSTR)name);
     }
@@ -337,7 +331,7 @@ static void put_int(const char *file, const char *sec, const char *key, int v)
 static BOOL apply(HWND dlg)
 {
     int border, spacing, gran, delay, i;
-    char s[160], name[64], bits[64];
+    char s[160], bits[64];
     BOOL wrap = IsDlgButtonChecked(dlg, IDC_DK_WRAP);
     BOOL tile = IsDlgButtonChecked(dlg, IDC_DK_TILE);
     BOOL cool = IsDlgButtonChecked(dlg, IDC_DK_COOLSWITCH);
@@ -352,22 +346,20 @@ static BOOL apply(HWND dlg)
     SystemParametersInfo(SPI_SETFASTTASKSWITCH, cool, NULL, 0);
     /* pattern */
     i = (int)SendDlgItemMessage(dlg, IDC_DK_PATTERN, CB_GETCURSEL, 0, 0);
-    if (i > 0) {
-        SendDlgItemMessage(dlg, IDC_DK_PATTERN, CB_GETLBTEXT, i, (LPARAM)(LPSTR)name);
-        GetPrivateProfileString(s_patterns, name, s_none, bits, sizeof bits, s_cpl_ini);
-    } else
-        lstrcpy(bits, s_none);
+    pattern_bits(GetDlgItem(dlg, IDC_DK_PATTERN), i, bits, sizeof bits);
     WriteProfileString(s_desk, "Pattern", bits);
-    SystemParametersInfo(SPI_SETDESKPATTERN, (UINT)-1, NULL, 0);
     /* screen saver */
+    /* observed: SCRNSAVE.EXE is the chosen entry's path ("(None)" for
+       "(None)"), ScreenSaveActive whether it is not the first entry: the
+       first a saver sorting before "(None)" gives its path and 0, "(None)"
+       second gives (None) and 1 (dksvorder.txt, dksvorder2.txt) */
     i = (int)SendMessage(sv, CB_GETCURSEL, 0, 0);
-    if (i > 0) {
-        HLOCAL h = (HLOCAL)LOWORD(SendMessage(sv, CB_GETITEMDATA, i, 0));
+    {
+        HLOCAL h = i >= 0 ? (HLOCAL)LOWORD(SendMessage(sv, CB_GETITEMDATA, i, 0)) : NULL;
         lstrcpy(s, h ? (char *)LocalLock(h) : s_none);
         if (h)
             LocalUnlock(h);
-    } else
-        lstrcpy(s, s_none);
+    }
     WritePrivateProfileString("boot", "SCRNSAVE.EXE", s, "SYSTEM.INI");
     put_int(NULL, s_win, "ScreenSaveActive", i > 0);
     put_int(NULL, s_win, "ScreenSaveTimeOut", delay * 60);
@@ -386,7 +378,6 @@ static BOOL apply(HWND dlg)
         SystemParametersInfo(SPI_SETICONTITLEWRAP, wrap, NULL, 0);
     }
     put_int(NULL, s_desk, "TileWallPaper", tile);
-    SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, (LPVOID)(LPSTR)s, 0);
     /* sizing grid, border, cursor */
     put_int(NULL, s_desk, "GridGranularity", gran);
     SystemParametersInfo(SPI_SETGRIDGRANULARITY, gran, NULL, 0);
@@ -394,6 +385,13 @@ static BOOL apply(HWND dlg)
     SystemParametersInfo(SPI_SETBORDER, border, NULL, 0);
     put_int(NULL, s_win, "CursorBlinkRate", blink);
     SetCaretBlinkTime(blink);
+    /* observed (wnchange): WM_WININICHANGE for "Desktop", then for
+       "Windows", then the WM_SYSCOLORCHANGE that 3.1's USER sends when
+       the desktop is set: pattern and wallpaper last */
+    SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, (LPARAM)(LPSTR)s_desk);
+    SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, (LPARAM)(LPSTR)"Windows");
+    SystemParametersInfo(SPI_SETDESKPATTERN, (UINT)-1, NULL, 0);
+    SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, (LPVOID)(LPSTR)s, 0);
     return TRUE;
 }
 
@@ -402,16 +400,34 @@ static BOOL apply(HWND dlg)
 static void spin(HWND dlg, int id, int delta, int lo, int hi)
 {
     BOOL ok;
-    int v = (int)GetDlgItemInt(dlg, id, &ok, TRUE) + delta;
+    /* in a long: 32767 and up is not -32768 (cpl audit L7) */
+    long v = (long)(int)GetDlgItemInt(dlg, id, &ok, TRUE) + delta;
     if (v < lo) v = lo;
     if (v > hi) v = hi;
-    SetDlgItemInt(dlg, id, v, TRUE);
+    SetDlgItemInt(dlg, id, (int)v, TRUE);
+    /* observed (dkspin): the new value selected */
+    SendDlgItemMessage(dlg, id, EM_SETSEL, 0, MAKELPARAM(0, -1));
 }
 
 /* ---- the Edit Pattern dialog ---- */
 
 static BYTE pat[8];
-static char pat_name[64];
+static HLOCAL pat_name;     /* the name chosen (win_text, item_text) */
+
+static void set_pat_name(HLOCAL h)
+{
+    if (pat_name)
+        LocalFree(pat_name);
+    pat_name = h;
+}
+
+/* the patterns again, pat_name's chosen (NULL: by WIN.INI's bits) */
+static void fill_patterns_named(HWND cb)
+{
+    fill_patterns(cb, pat_name ? (const char *)LocalLock(pat_name) : NULL);
+    if (pat_name)
+        LocalUnlock(pat_name);
+}
 
 static void pat_parse(const char *s)
 {
@@ -440,17 +456,27 @@ static void pat_paint(HWND dlg, HDC dc)
     HBITMAP bm;
     HBRUSH br;
     WORD bits[8];
+    /* observed (dkcolors.txt): the set bits in the window text colour,
+       the others in the desktop's, in the grid and in the sample */
+    HBRUSH fg = CreateSolidBrush(GetSysColor(COLOR_WINDOWTEXT));
+    HBRUSH bg = CreateSolidBrush(GetSysColor(COLOR_BACKGROUND));
     GetWindowRect(GetDlgItem(dlg, IDC_EP_GRID), &g);
     ScreenToClient(dlg, (POINT FAR *)&g.left);
     ScreenToClient(dlg, (POINT FAR *)&g.right);
     InflateRect(&g, -1, -1);
-    cw = (g.right - g.left) / 8;
-    ch = (g.bottom - g.top) / 8;
+    /* observed: the cells share the whole frame, cell k from k/8 of it
+       to (k+1)/8 (156 pixels wide on VGA: 19 and 20 in turn), as the
+       clicks are mapped (WM_LBUTTONDOWN) */
+    cw = g.right - g.left;
+    ch = g.bottom - g.top;
     for (y = 0; y < 8; y++)
         for (x = 0; x < 8; x++) {
-            SetRect(&r, g.left + x * cw, g.top + y * ch, g.left + (x + 1) * cw, g.top + (y + 1) * ch);
-            FillRect(dc, &r, GetStockObject(pat[y] & (0x80 >> x) ? BLACK_BRUSH : WHITE_BRUSH));
+            SetRect(&r, g.left + x * cw / 8, g.top + y * ch / 8,
+                    g.left + (x + 1) * cw / 8, g.top + (y + 1) * ch / 8);
+            FillRect(dc, &r, pat[y] & (0x80 >> x) ? fg : bg);
         }
+    DeleteObject(fg);
+    DeleteObject(bg);
     for (y = 0; y < 8; y++)
         bits[y] = (WORD)(BYTE)~pat[y];
     bm = CreateBitmap(8, 8, 1, 1, bits);
@@ -459,8 +485,9 @@ static void pat_paint(HWND dlg, HDC dc)
     ScreenToClient(dlg, (POINT FAR *)&r.left);
     ScreenToClient(dlg, (POINT FAR *)&r.right);
     InflateRect(&r, -1, -1);
-    SetTextColor(dc, GetSysColor(COLOR_BACKGROUND));
-    SetBkColor(dc, RGB(0, 0, 0));
+    /* the brush's 0 bits (pat's 1 bits) in the text colour */
+    SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+    SetBkColor(dc, GetSysColor(COLOR_BACKGROUND));
     FillRect(dc, &r, br);
     DeleteObject(br);
     DeleteObject(bm);
@@ -468,9 +495,14 @@ static void pat_paint(HWND dlg, HDC dc)
 
 static void pat_load(HWND dlg)
 {
-    char name[64], v[64];
-    GetDlgItemText(dlg, IDC_EP_NAME, name, sizeof name);
-    GetPrivateProfileString(s_patterns, name, "0 0 0 0 0 0 0 0", v, sizeof v, s_cpl_ini);
+    char v[64];
+    HLOCAL h = win_text(GetDlgItem(dlg, IDC_EP_NAME));
+    lstrcpy(v, "0 0 0 0 0 0 0 0");
+    if (h) {
+        GetPrivateProfileString(s_patterns, LocalLock(h), v, v, sizeof v, s_cpl_ini);
+        LocalUnlock(h);
+        LocalFree(h);
+    }
     pat_parse(v);
     InvalidateRect(dlg, NULL, FALSE);
 }
@@ -481,10 +513,22 @@ BOOL FAR PASCAL __loadds EditPatternProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
     case WM_INITDIALOG: {
         HWND cb = GetDlgItem(dlg, IDC_EP_NAME);
         int i;
-        fill_patterns(cb, pat_name);
-        i = (int)SendMessage(cb, CB_GETCURSEL, 0, 0);
-        if (i == 0)
-            SendMessage(cb, CB_DELETESTRING, 0, 0);    /* UNVERIFIED */
+        fill_patterns_named(cb);
+        /* observed (zzdisc, dkcolors): "(None)" is never listed here;
+           opened on (None), the name is empty */
+        i = (int)SendMessage(cb, CB_FINDSTRINGEXACT, (WPARAM)-1, (LPARAM)(LPSTR)s_none);
+        if (i >= 0) {
+            BOOL none = SendMessage(cb, CB_GETCURSEL, 0, 0) == i;
+            SendMessage(cb, CB_DELETESTRING, i, 0);
+            if (none)
+                SendMessage(cb, CB_SETCURSEL, (WPARAM)-1, 0);
+        }
+        /* observed: Add and Change disabled at first, Remove with a
+           pattern chosen (zzdisc, dkcolors) */
+        EnableWindow(GetDlgItem(dlg, IDC_EP_ADD), FALSE);
+        EnableWindow(GetDlgItem(dlg, IDC_EP_CHANGE), FALSE);
+        EnableWindow(GetDlgItem(dlg, IDC_EP_REMOVE),
+                     SendMessage(cb, CB_GETCURSEL, 0, 0) >= 0);
         pat_load(dlg);
         return TRUE;
     }
@@ -505,6 +549,7 @@ BOOL FAR PASCAL __loadds EditPatternProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
         pt.x = LOWORD(lp);
         pt.y = HIWORD(lp);
         if (PtInRect(&g, pt)) {
+            /* the cells as pat_paint draws them */
             int x = (pt.x - g.left) * 8 / (g.right - g.left);
             int y = (pt.y - g.top) * 8 / (g.bottom - g.top);
             pat[y] ^= (BYTE)(0x80 >> x);
@@ -516,46 +561,78 @@ BOOL FAR PASCAL __loadds EditPatternProc(HWND dlg, UINT msg, WPARAM wp, LPARAM l
     case WM_COMMAND:
         switch (wp) {
         case IDC_EP_NAME:
+            /* a name typed: Add (UNVERIFIED: when 3.1 enables it) */
+            if (HIWORD(lp) == CBN_EDITCHANGE)
+                EnableWindow(GetDlgItem(dlg, IDC_EP_ADD),
+                             GetWindowTextLength(GetDlgItem(dlg, IDC_EP_NAME)) > 0);
             if (HIWORD(lp) == CBN_SELCHANGE) {
                 int i = (int)SendDlgItemMessage(dlg, IDC_EP_NAME, CB_GETCURSEL, 0, 0);
-                char name[64];
-                SendDlgItemMessage(dlg, IDC_EP_NAME, CB_GETLBTEXT, i, (LPARAM)(LPSTR)name);
-                SetDlgItemText(dlg, IDC_EP_NAME, name);
+                HLOCAL h = item_text(GetDlgItem(dlg, IDC_EP_NAME), i);
+                if (h) {
+                    SetDlgItemText(dlg, IDC_EP_NAME, LocalLock(h));
+                    LocalUnlock(h);
+                    LocalFree(h);
+                }
                 pat_load(dlg);
                 EnableWindow(GetDlgItem(dlg, IDC_EP_REMOVE), TRUE);
             }
             return TRUE;
         case IDC_EP_ADD:
         case IDC_EP_CHANGE: {
-            char name[64], v[64];
-            GetDlgItemText(dlg, IDC_EP_NAME, name, sizeof name);
-            if (!name[0])
+            char v[64];
+            HLOCAL h = win_text(GetDlgItem(dlg, IDC_EP_NAME));
+            const char *name;
+            if (!h)
                 return TRUE;
-            pat_format(v);
-            WritePrivateProfileString(s_patterns, name, v, s_cpl_ini);
-            if (SendDlgItemMessage(dlg, IDC_EP_NAME, CB_FINDSTRINGEXACT, (WPARAM)-1,
-                                   (LPARAM)(LPSTR)name) < 0)
-                SendDlgItemMessage(dlg, IDC_EP_NAME, CB_ADDSTRING, 0, (LPARAM)(LPSTR)name);
-            lstrcpy(pat_name, name);
-            return TRUE;
-        }
-        case IDC_EP_REMOVE: {
-            char name[64], t[40], f[100], m[160];
-            GetDlgItemText(dlg, IDC_EP_NAME, name, sizeof name);
-            LoadString(g_hinst, IDS_CONTROLPANEL, t, sizeof t);
-            LoadString(g_hinst, IDS_DK_REMOVEPAT, f, sizeof f);
-            wsprintf(m, f, (LPSTR)name);
-            if (MessageBox(dlg, m, t, MB_YESNO | MB_ICONEXCLAMATION) == IDYES) {
-                int i = (int)SendDlgItemMessage(dlg, IDC_EP_NAME, CB_FINDSTRINGEXACT, (WPARAM)-1,
-                                                (LPARAM)(LPSTR)name);
-                WritePrivateProfileString(s_patterns, name, NULL, s_cpl_ini);
-                if (i >= 0)
-                    SendDlgItemMessage(dlg, IDC_EP_NAME, CB_DELETESTRING, i, 0);
+            name = LocalLock(h);
+            if (name[0]) {
+                pat_format(v);
+                WritePrivateProfileString(s_patterns, name, v, s_cpl_ini);
+                if (SendDlgItemMessage(dlg, IDC_EP_NAME, CB_FINDSTRINGEXACT, (WPARAM)-1,
+                                       (LPARAM)(LPSTR)name) < 0)
+                    SendDlgItemMessage(dlg, IDC_EP_NAME, CB_ADDSTRING, 0, (LPARAM)(LPSTR)name);
+                LocalUnlock(h);
+                set_pat_name(h);
+            } else {
+                LocalUnlock(h);
+                LocalFree(h);
             }
             return TRUE;
         }
+        case IDC_EP_REMOVE: {
+            char t[40], f[100];
+            HLOCAL h = win_text(GetDlgItem(dlg, IDC_EP_NAME)), hm;
+            const char *name;
+            if (!h)
+                return TRUE;
+            name = LocalLock(h);
+            LoadString(g_hinst, IDS_CONTROLPANEL, t, sizeof t);
+            LoadString(g_hinst, IDS_DK_REMOVEPAT, f, sizeof f);
+            /* the message as long as the name needs (wsprintf's own
+               limit is 1024 bytes) */
+            hm = LocalAlloc(LMEM_FIXED, lstrlen(f) + lstrlen(name) + 1);
+            if (hm) {
+                char *m = LocalLock(hm);
+                if (lstrlen(f) + lstrlen(name) < 1000)
+                    wsprintf(m, f, (LPSTR)name);
+                else
+                    lstrcpy(m, name);
+                if (MessageBox(dlg, m, t, MB_YESNO | MB_ICONEXCLAMATION) == IDYES) {
+                    int i = (int)SendDlgItemMessage(dlg, IDC_EP_NAME, CB_FINDSTRINGEXACT,
+                                                    (WPARAM)-1, (LPARAM)(LPSTR)name);
+                    WritePrivateProfileString(s_patterns, name, NULL, s_cpl_ini);
+                    if (i >= 0)
+                        SendDlgItemMessage(dlg, IDC_EP_NAME, CB_DELETESTRING, i, 0);
+                }
+                LocalUnlock(hm);
+                LocalFree(hm);
+            }
+            LocalUnlock(h);
+            LocalFree(h);
+            return TRUE;
+        }
         case IDOK:
-            GetDlgItemText(dlg, IDC_EP_NAME, pat_name, sizeof pat_name);
+            set_pat_name(win_text(GetDlgItem(dlg, IDC_EP_NAME)));
             EndDialog(dlg, IDOK);
             return TRUE;
         case IDCANCEL:
@@ -658,11 +735,10 @@ BOOL FAR PASCAL __loadds DesktopProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             return TRUE;
         case IDC_DK_EDITPAT: {
             int i = (int)SendDlgItemMessage(dlg, IDC_DK_PATTERN, CB_GETCURSEL, 0, 0);
-            pat_name[0] = 0;
-            if (i > 0)
-                SendDlgItemMessage(dlg, IDC_DK_PATTERN, CB_GETLBTEXT, i, (LPARAM)(LPSTR)pat_name);
+            set_pat_name(item_text(GetDlgItem(dlg, IDC_DK_PATTERN), i));
             if (DialogBox(g_hinst, MAKEINTRESOURCE(DLG_EDITPATTERN), dlg, EditPatternProc) == IDOK)
-                fill_patterns(GetDlgItem(dlg, IDC_DK_PATTERN), pat_name);
+                fill_patterns_named(GetDlgItem(dlg, IDC_DK_PATTERN));
+            set_pat_name(NULL);
             return TRUE;
         }
         case IDOK:

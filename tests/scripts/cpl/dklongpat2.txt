@@ -1,0 +1,17 @@
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+;! survive
+;! ini WINDOWS/CONTROL.INI Patterns:Longxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=1 2 4 8 16 32 64 128
+;! ini WINDOWS/WIN.INI Desktop:Pattern=1 2 4 8 16 32 64 128
+; Edit Pattern on a pattern name of 124 characters (cpl audit H1): 3.1
+; shows its bits, then dies when the dialog is cancelled; w16 lives on
+; (Cancel twice: nothing written)
+blinktime 65535
+run CONTROL.EXE DESKTOP
+wait 4000
+alt p
+wait 1500
+snap D1.BMP
+key 1B
+wait 800
+key 1B
+wait 2000
