@@ -1,0 +1,30 @@
+; the install tree's Main group: its first item, "Command Prompt" (CMD.PIF:
+; COMMAND.COM, windowed in 386 Enhanced mode, full screen in Standard
+; mode), VER and EXIT typed slowly (plain DOSBox; boot-test case
+; cmdprompt, WIN /3 and WIN /S). No /B: the boot is waited for by Program
+; Manager's active caption
+waitcount 0000aa 0 0 0 0 500 200
+sleep 6
+key Return
+sleep 15
+shot 01-start
+key v
+sleep 2
+key e
+sleep 2
+key r
+sleep 2
+key Return
+sleep 8
+shot 02-ver
+key e
+sleep 2
+key x
+sleep 2
+key i
+sleep 2
+key t
+sleep 2
+key Return
+sleep 15
+shot 03-back

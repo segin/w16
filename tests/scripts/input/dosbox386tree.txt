@@ -1,7 +1,14 @@
-; the install tree's Main group: its first item, the MS-DOS Prompt
-; (COMMAND.COM), full screen in 386 Enhanced mode; Alt+Enter to a window
-; and back to full screen; EXIT back to Windows (the screen repainted)
+; the install tree: COMMAND.COM from Program Manager's File > Run (no PIF:
+; full screen; Main's first item, "Command Prompt", runs CMD.PIF, which
+; starts windowed), full screen in 386 Enhanced mode; Alt+Enter to a
+; window and back to full screen; EXIT back to Windows (the screen
+; repainted)
 sleep 4
+key alt+f
+sleep 1
+key r
+sleep 2
+type command.com
 key Return
 sleep 15
 shot 01-full
