@@ -16,6 +16,9 @@ their own permissive licences, stated with them:
   domain (Unlicense) or MIT; w16 uses it under its public-domain
   dedication (the notice is at the end of the file). gdi/ttf/ttfx.c and
   ttfx.h are adapted from it (fixed-point arithmetic) and keep its credit
+- tests/fixtures/fonts/LiberationSans-Regular.ttf is Liberation Sans
+  2.1.5 (Red Hat, digitized data Google), under the SIL Open Font License
+  1.1 (tests/fixtures/fonts/LICENSE-Liberation.txt); a test input only
 
 The names "Microsoft", "Windows" and "MS-DOS" are trademarks of Microsoft
 Corporation; w16 uses them only to describe compatibility.

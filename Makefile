@@ -1568,8 +1568,16 @@ $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
 	    option map=$(B)/tests/wrmet.map file { $(B)/tests/start.o $(B)/tests/wrmet.o }
 
 
-test: dos fonts grpcheck $(B)/host/pwtest $(B)/hlpdump
+# the fixed-point TrueType code (gdi/ttf/ttfx.c) against the floating-point
+# stb_truetype it was adapted from, on the host (tests/ttf/ttfxtest.c)
+$(B)/host/ttfxtest: tests/ttf/ttfxtest.c tests/ttf/ref.c tests/ttf/ref.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h \
+                    gdi/ttf/stb_truetype.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttfxtest.c tests/ttf/ref.c gdi/ttf/ttfx.c -lm
+
+test: dos fonts grpcheck $(B)/host/pwtest $(B)/hlpdump $(B)/host/ttfxtest
 	python3 tests/scripts/ss/pwtest.py $(B)/host/pwtest
+	$(B)/host/ttfxtest tests/fixtures/fonts/LiberationSans-Regular.ttf
 	WATCOM=$(WATCOM) tests/winhelp/hlpcheck.sh $(B)/hlpdump
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
