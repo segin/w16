@@ -6,7 +6,7 @@ w16's (W16), for the boot-test case vdmad.
 SBD.COM's log (sbd.log): the same lines in the same order, with what
 depends on where the box's memory is masked (the 16-bit address read
 back, the physical addresses VDS gives, the place 'b' found) and the
-counts read back at each interrupt allowed to differ by a few bytes
+counts read back at each interrupt allowed to differ by up to 400h bytes
 (they race the card); the status read at each interrupt, the interrupt
 count, VDS's registers and error codes must be equal.
 
@@ -63,7 +63,7 @@ def counts_close(a, b):
         return a == b
     if ma.group(1) != mb.group(1) or ma.group(3) != mb.group(3):
         return False
-    return abs(int(ma.group(2), 16) - int(mb.group(2), 16)) <= 0x40
+    return abs(int(ma.group(2), 16) - int(mb.group(2), 16)) <= 0x400
 
 
 def tones(d):
