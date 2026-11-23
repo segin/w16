@@ -24,9 +24,12 @@
 #        31, 95, 0, 96: the typematic rate and delay SetSpeed gives the
 #        keyboard, as the number of repeats (within 3 of Windows 3.1's:
 #        the host's timing)
+#   repini  the same held 'a' with WIN.INI KeyboardDelay,KeyboardSpeed =
+#        2,31 3,0 0,16 1,24 and no kb2speed: USER gives them to the driver
+#        at start-up (w16's USER and KEYBOARD.DRV against Windows 3.1's)
 # The logs, without the layout-dependent lines and fields ("~"), must be
 # identical.
-#   usage: tests/kbprobe.sh [-o DIR] [-m] [kb1] [kb2] [rep]   (default: all)
+#   usage: tests/kbprobe.sh [-o DIR] [-m] [kb1] [kb2] [rep] [repini]   (default: all)
 #     -m   Microsoft's driver only (to look at its logs)
 # Exit status 0 when every comparison made agrees.
 set -eu
@@ -41,7 +44,7 @@ while getopts o:m opt; do
     esac
 done
 shift $((OPTIND - 1))
-probes=${*:-kb1 kb2 rep}
+probes=${*:-kb1 kb2 rep repini}
 [ -n "$out" ] || out=$root/build/kbprobe-$(date +%H%M%S)
 [ -e "$out" ] && { echo "$out exists; choose a new directory" >&2; exit 2; }
 mkdir -p "$out"
@@ -114,6 +117,29 @@ for p in $probes; do
                 echo "ok   rep $n: $rep_w16 repeats (Windows 3.1's driver: $rep_ms)"
             else
                 echo "FAIL rep $n: $rep_w16 repeats, Windows 3.1's driver $rep_ms"; fails=$((fails + 1))
+            fi
+        done ;;
+    repini)
+        # the whole chain from WIN.INI: USER reads KeyboardDelay and
+        # KeyboardSpeed at start-up and hands them to KEYBOARD.SetSpeed;
+        # Windows 3.1 against w16's USER and KEYBOARD.DRV together
+        for ds in 2:31 3:0 0:16 1:24; do
+            d=${ds%:*} sp=${ds#*:}
+            for s in $sides; do
+                if [ $s = ms ]; then set --
+                else set -- -f "$w16=WINDOWS/SYSTEM/KEYBOARD.DRV" -f "$dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE"; fi
+                "$root/tests/inputrun.sh" -b 30 -t 100 "$root/tests/scripts/input/kbrepeat.txt" "$out/ri$d-$sp-$s" -r \
+                    -f "$dos/KB2.EXE=KB2.EXE" -i 'boot:shell=C:\KB2.EXE' \
+                    -i "WIN.INI:windows:KeyboardDelay=$d" -i "WIN.INI:windows:KeyboardSpeed=$sp" "$@" \
+                    > "$out/ri$d-$sp-$s.txt" 2>&1 || true
+                c=$(tr -d '\r' < "$out/ri$d-$sp-$s/work/c/WINDOWS/TK.LOG" 2>/dev/null | grep -c '^M 0100 0041 401E' || true)
+                eval "rep_$s=\${c:-0}"
+            done
+            if [ -n "$msonly" ]; then echo "     repini $d,$sp: $rep_ms repeats"
+            elif [ "$rep_ms" -gt 0 ] && [ $((rep_ms - rep_w16)) -le 3 ] && [ $((rep_w16 - rep_ms)) -le 3 ]; then
+                echo "ok   repini $d,$sp: $rep_w16 repeats (Windows 3.1: $rep_ms)"
+            else
+                echo "FAIL repini $d,$sp: $rep_w16 repeats, Windows 3.1 $rep_ms"; fails=$((fails + 1))
             fi
         done ;;
     *) echo "unknown probe $p" >&2; exit 2 ;;

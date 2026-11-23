@@ -7,6 +7,12 @@
  * scroll bar's position is KeyboardSpeed. OK writes both; Cancel writes
  * nothing. The settings reach the keyboard driver through
  * SystemParametersInfo as the bars move, so the Test box shows them.
+ * The calls, as KEYBOARD.SetSpeed sees them through USER (KBREC.DRV,
+ * tests/scripts/cpl/kbspeed*.txt): every message of the delay bar
+ * (SB_TOP, then SB_ENDSCROLL ...) sets the delay the bar had before it,
+ * so the new one arrives with SB_ENDSCROLL; the rate bar's set the new
+ * rate each time; OK sets both again; Cancel puts back the rate, then the
+ * delay.
  */
 #include "maincpl.h"
 
@@ -50,9 +56,9 @@ BOOL FAR PASCAL __loadds KeyboardProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
     case WM_HSCROLL: {
         HWND sb = (HWND)HIWORD(lp);
         if (sb == GetDlgItem(dlg, IDC_KB_DELAY)) {
+            SystemParametersInfo(SPI_SETKEYBOARDDELAY, delay, NULL, 0);
             delay = 3 - scroll(3 - delay, 3, wp, LOWORD(lp));
             SetScrollPos(sb, SB_CTL, 3 - delay, TRUE);
-            SystemParametersInfo(SPI_SETKEYBOARDDELAY, delay, NULL, 0);
         } else if (sb == GetDlgItem(dlg, IDC_KB_SPEED)) {
             speed = scroll(speed, 31, wp, LOWORD(lp));
             SetScrollPos(sb, SB_CTL, speed, TRUE);
@@ -68,12 +74,14 @@ BOOL FAR PASCAL __loadds KeyboardProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             WriteProfileString("windows", "KeyboardDelay", b);
             wsprintf(b, "%d", speed);
             WriteProfileString("windows", "KeyboardSpeed", b);
+            SystemParametersInfo(SPI_SETKEYBOARDDELAY, delay, NULL, 0);
+            SystemParametersInfo(SPI_SETKEYBOARDSPEED, speed, NULL, 0);
             EndDialog(dlg, IDOK);
             return TRUE;
         }
         case IDCANCEL:
-            SystemParametersInfo(SPI_SETKEYBOARDDELAY, delay0, NULL, 0);
             SystemParametersInfo(SPI_SETKEYBOARDSPEED, speed0, NULL, 0);
+            SystemParametersInfo(SPI_SETKEYBOARDDELAY, delay0, NULL, 0);
             EndDialog(dlg, IDCANCEL);
             return TRUE;
         case IDC_HELP:

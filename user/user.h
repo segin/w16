@@ -267,6 +267,7 @@ extern volatile DWORD __far tickcount;   /* interrupt-time data: fixed segment *
 /* ---- input (input.c) ---- */
 void input_init(void);
 void input_enable(void);
+void keyboard_speed_init(void);     /* misc.c: the typematic rate */
 void input_disable(void);
 BOOL input_message(HQUEUE hq, HWND hfilter, UINT lo, UINT hi, BOOL remove, MSG __far *m);
 extern BYTE __far keystate[256];

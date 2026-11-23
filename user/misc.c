@@ -408,6 +408,43 @@ static void write_int(LPCSTR key, UINT v)
     WriteProfileString("windows", key, b);
 }
 
+/* ---- the keyboard's typematic delay and rate ----
+   Observed on 3.1 with KBREC.DRV in front of its KEYBOARD.DRV
+   (tests/scripts/cpl/kbspeed*.txt): at start-up USER asks SetSpeed(-1)
+   (0: the driver can) and then gives it WIN.INI [windows] KeyboardDelay
+   (0..3, default 2) in bits 5-6 and KeyboardSpeed (0..31, default 31) in
+   bits 0-4: 005Fh by default, 0034h for 1 and 20. Each
+   SPI_SETKEYBOARDDELAY or SPI_SETKEYBOARDSPEED gives it both again, the
+   new value with the other's current one. The driver programs the
+   keyboard (command F3h, drivers/keyboard). */
+static int kb_delay = -1, kb_speed, kb_can;
+
+static void kb_load(void)
+{
+    if (kb_delay >= 0)
+        return;
+    kb_delay = GetProfileInt("windows", "KeyboardDelay", 2);
+    kb_speed = GetProfileInt("windows", "KeyboardSpeed", 31);
+    if (kb_delay < 0) kb_delay = 0;
+    if (kb_delay > 3) kb_delay = 3;
+    if (kb_speed < 0) kb_speed = 0;
+    if (kb_speed > 31) kb_speed = 31;
+}
+
+static void kb_apply(void)
+{
+    if (kb_can)
+        KB_SETSPEED(kb_delay << 5 | kb_speed);
+}
+
+/* input_enable, after KEYBOARD.Enable */
+void keyboard_speed_init(void)
+{
+    kb_load();
+    kb_can = KB_SETSPEED(-1) == 0;
+    kb_apply();
+}
+
 void __far __pascal __loadds ss_timer_proc(HWND h, UINT msg, UINT id, DWORD time)
 {
     HWND act = hwndActive;
@@ -492,7 +529,21 @@ BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
         }
         return TRUE;
     case SPI_GETBORDER: *w = sysmet[SM_CXFRAME] - 1; return TRUE;
-    case SPI_GETKEYBOARDSPEED: *w = GetProfileInt("windows", "KeyboardSpeed", 31); return TRUE;
+    case SPI_GETKEYBOARDSPEED: kb_load(); *w = kb_speed; return TRUE;
+    case SPI_SETKEYBOARDSPEED:          /* 0..31 (3.1 SDK) */
+        kb_load();
+        kb_speed = ui > 31 ? 31 : ui;
+        kb_apply();
+        if (ini & SPIF_UPDATEINIFILE)
+            write_int("KeyboardSpeed", kb_speed);
+        return TRUE;
+    case SPI_SETKEYBOARDDELAY:          /* 0..3 (3.1 SDK) */
+        kb_load();
+        kb_delay = ui > 3 ? 3 : ui;
+        kb_apply();
+        if (ini & SPIF_UPDATEINIFILE)
+            write_int("KeyboardDelay", kb_delay);
+        return TRUE;
     case SPI_GETSCREENSAVETIMEOUT: ss_load(); *w = ss_timeout; return TRUE;
     case SPI_GETSCREENSAVEACTIVE: ss_load(); *w = ss_active; return TRUE;
     case SPI_SETSCREENSAVETIMEOUT:      /* seconds (3.1 SDK) */
@@ -508,7 +559,7 @@ BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
             write_int("ScreenSaveActive", ss_active);
         return TRUE;
     case SPI_GETGRIDGRANULARITY: *w = GetProfileInt("desktop", "GridGranularity", 0); return TRUE;
-    case SPI_GETKEYBOARDDELAY: *w = GetProfileInt("windows", "KeyboardDelay", 2); return TRUE;
+    case SPI_GETKEYBOARDDELAY: kb_load(); *w = kb_delay; return TRUE;
     case SPI_ICONHORIZONTALSPACING: *w = sysmet[SM_CXICONSPACING]; return TRUE;
     case SPI_ICONVERTICALSPACING: *w = sysmet[SM_CYICONSPACING]; return TRUE;
     case SPI_GETICONTITLEWRAP: *w = GetProfileInt("desktop", "IconTitleWrap", 1); return TRUE;

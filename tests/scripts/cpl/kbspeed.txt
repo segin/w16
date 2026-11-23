@@ -1,0 +1,37 @@
+;! kbrec
+;! w16 MAIN.CPL WINDOWS/SYSTEM/MAIN.CPL
+; Keyboard: what reaches the keyboard driver (KEYBOARD.SetSpeed, through
+; KBREC.DRV): at start-up (WIN.INI KeyboardDelay/KeyboardSpeed), as the
+; bars move, on OK and on Cancel (the user's report: "the settings do
+; nothing")
+kbrlog C:\CMP.LOG
+append C:\CMP.LOG ---- Keyboard: Delay Home (Long), Rate Home (Slow)
+run CONTROL.EXE KEYBOARD
+wait 4000
+key 24
+wait 500
+kbrlog C:\CMP.LOG
+append C:\CMP.LOG ---- Rate
+key 09
+wait 300
+key 24
+wait 500
+kbrlog C:\CMP.LOG
+append C:\CMP.LOG ---- OK
+key 0D
+wait 2000
+kbrlog C:\CMP.LOG
+append C:\CMP.LOG ---- Keyboard: Delay End (Short), Rate one page; Cancel
+run CONTROL.EXE KEYBOARD
+wait 4000
+key 23
+wait 300
+key 09
+wait 300
+key 22
+wait 500
+kbrlog C:\CMP.LOG
+append C:\CMP.LOG ---- Cancel
+key 1B
+wait 2000
+kbrlog C:\CMP.LOG
