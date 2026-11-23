@@ -254,7 +254,7 @@ static void put_row_scr(int y, int x0, int x1, int bx0)
         if (i == b1)
             m &= rm;
         if (m) {
-            (void)l[i];
+            vga_latch(l + i);
             l[i] = m;
         }
     }

@@ -73,7 +73,7 @@ void scr_fill_solid(int x0, int y0, int x1, int y1, int idx)
         outw(0x3CE, (WORD)(lmask << 8) | 0x08);
         vl = (volatile BYTE __far *)MK_FP(vga_sel, (WORD)y0 * 80 + b0);
         for (y = y0; y < y1; y++, vl += 80) {
-            (void)*vl;
+            vga_latch(vl);
             *vl = 0xFF;
         }
     }
@@ -90,7 +90,7 @@ void scr_fill_solid(int x0, int y0, int x1, int y1, int idx)
         outw(0x3CE, (WORD)(rmask << 8) | 0x08);
         vl = (volatile BYTE __far *)MK_FP(vga_sel, (WORD)y0 * 80 + b1);
         for (y = y0; y < y1; y++, vl += 80) {
-            (void)*vl;
+            vga_latch(vl);
             *vl = 0xFF;
         }
     }

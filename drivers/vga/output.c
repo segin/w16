@@ -29,7 +29,7 @@ static void put_pixel(int x, int y, BYTE rop, int idx)
         outw(0x3CE, 0x0003);
         outw(0x3CE, 0x0305);
         outw(0x3CE, 0xFF08);
-        (void)*vl;
+        vga_latch(vl);
         *vl = m;
         scr_reset();
         return;
@@ -154,7 +154,7 @@ static void line(int x0, int y0, int x1, int y1, BYTE rop, int fg, BYTE bgrop, i
                 outw(0x3CE, 0x0005);
                 outw(0x3CE, (WORD)(m << 8) | 0x08);
                 for (yy = vy0; yy < vy1; yy++, vl += 80) {
-                    (void)*vl;
+                    vga_latch(vl);
                     *vl = 0xFF;
                 }
                 scr_reset();
@@ -231,7 +231,7 @@ static void line(int x0, int y0, int x1, int y1, BYTE rop, int fg, BYTE bgrop, i
                         cur_c = want;
                     }
                     vl = (volatile BYTE __far *)MK_FP(vga_sel, (WORD)py * 80 + (px >> 3));
-                    (void)*vl;
+                    vga_latch(vl);
                     *vl = (BYTE)(0x80 >> (px & 7));
                 }
             }
