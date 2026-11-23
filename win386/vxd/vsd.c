@@ -120,10 +120,6 @@ void __cdecl vsd_service(struct vregs *r)
     r->eflags |= VF_CF;
 }
 
-#define SYS_CRITICAL_INIT 0x00
-#define CREATE_VM         0x07
-#define VM_SUSPEND        0x0D
-#define VM_RESUME         0x0E
 
 void __cdecl vsd_control(struct vregs *r)
 {

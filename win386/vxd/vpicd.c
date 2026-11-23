@@ -688,11 +688,6 @@ void __cdecl vpicd_service(struct vregs *r)
 }
 
 /* ---- the control procedure ---- */
-#define SYS_CRITICAL_INIT 0x00
-#define SYS_VM_INIT       0x03
-#define SYS_CRITICAL_EXIT 0x06
-#define CREATE_VM         0x07
-#define DESTROY_VM        0x0C
 
 /* the next VM's handle (VMM Get_Next_VM_Handle) */
 void __cdecl vmm_get_next_vm(struct vregs *r);

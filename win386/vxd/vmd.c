@@ -121,10 +121,6 @@ void __cdecl vmd_service(struct vregs *r)
     r->eflags |= VF_CF;
 }
 
-#define SYS_CRITICAL_INIT 0x00
-#define DEVICE_INIT       0x01
-#define DESTROY_VM        0x0C
-#define SET_DEVICE_FOCUS  0x0F
 #define VMD_ID            0x000C
 
 void __cdecl vmd_control(struct vregs *r)

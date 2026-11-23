@@ -139,6 +139,9 @@
 #              its program windowed (made at run time with tools/mkpif.py),
 #              then VER typed: the window shows the text (not black), as
 #              with Microsoft's WINOA386 on the same tree
+#   cmdprompt  the install tree's Main group's "Command Prompt" (CMD.PIF),
+#              plain DOSBox: @e386 (WIN /3) a window showing the prompt and
+#              VER; @std (WIN /S) full screen text; EXIT back to Windows
 #   win386woa  w16's WINOA386.MOD with w16's WIN386 on Windows 3.1:
 #              switching (dosbox386s.txt) and Exit Windows with a box
 #              open (dosbox386x.txt), against Microsoft's WINOA386 and
@@ -1797,6 +1800,33 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386memload: XMS, EMS, XMS 3.0 and three boxes at once as under Microsoft's WIN386; KB/s$rates"
         else echo "FAIL win386memload: $r"; fails=$((fails + 1)); fi ;;
+    cmdprompt)
+        # Main's first item runs CMD.PIF (assets/CMD.PIF: COMMAND.COM,
+        # windowed in 386 Enhanced mode; Standard mode's WINOLDAP reads its
+        # 286 section and runs it full screen)
+        k=${part:-e386}
+        case $k in e386) wc="WIN /3" ;; *) wc="WIN /S" ;; esac
+        rm -rf "$out/cmdprompt-$k"
+        DROPIN_NOREDIR=1 DROPIN_CPUTYPE=386 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 5 -t 400 \
+            "$root/tests/scripts/input/dosbox386cmd.txt" "$out/cmdprompt-$k" -T "$root/build/w16" -3 -c "$wc" \
+            > "$out/cmdprompt-$k.txt" 2>&1 || true
+        r=ok
+        if [ $k = e386 ]; then want="01-start:640x480 02-ver:640x480 03-back:640x480"
+        else want="01-start:640x400 02-ver:640x400 03-back:640x480"; fi
+        for w in $want; do
+            f=$out/cmdprompt-$k/${w%%:*}.png
+            g=$(magick identify -format '%wx%h' "$f" 2>/dev/null || echo none)
+            [ "$g" = "${w#*:}" ] || { r="${w%%:*} is $g, not ${w#*:}"; break; }
+            if [ $k = e386 ] && [ "${w%%:*}" != 03-back ]; then
+                # the window shows the DOS screen (white text: DOSBox's
+                # banner box, the prompt), not a black client area
+                n=$(magick "$f" -crop 600x200+10+30 -format '%c' histogram:info:- | grep -i '#FFFFFF' | awk '{print $1}' | tr -d :)
+                [ "${n:-0}" -ge 1000 ] || { r="${w%%:*}: no text in the window (${n:-0} white pixels)"; break; }
+            fi
+        done
+        if [ "$r" = ok ]; then echo "ok   cmdprompt@$k: Main's Command Prompt ($wc): $( [ $k = e386 ] && echo 'a window with the prompt' || echo 'full screen text'), VER, EXIT back to Windows"
+        else echo "     cmdprompt@$k: $r ($out/cmdprompt-$k)"; fi
+        partdone "$r" ;;
     win386pifwin)
         # the user's report (2026-11-22): a PIF made with the PIF Editor
         # ("Command Prompt", windowed) opened a window whose client area
@@ -5652,6 +5682,7 @@ caseparts() {
     gpuser) echo "$1@u286 $1@u386 $1@t286 $1@t386" ;;
     winfile) echo "$1@cmp $1@all" ;;
     exittree) echo "$1@e386 $1@e386ms $1@std" ;;
+    cmdprompt) echo "$1@e386 $1@std" ;;
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
@@ -5730,6 +5761,9 @@ partsummary() {
     exittree)
         if [ $pbad = 0 ]; then echo "ok   exittree: Exit Windows on w16's tree over 3.1 ends cleanly (w16's WIN386, Microsoft's WIN386, Standard mode)"
         else echo "FAIL exittree: $pfirst ($out)"; fi ;;
+    cmdprompt)
+        if [ $pbad = 0 ]; then echo "ok   cmdprompt: Main's Command Prompt (CMD.PIF): a window with the prompt in 386 Enhanced mode, full screen in Standard mode"
+        else echo "FAIL cmdprompt: $pfirst ($out)"; fi ;;
     swapesc)
         if [ $pbad = 0 ]; then echo "ok   swapesc: Alt+Esc, a double click, Alt+Tab and a second prompt as on 3.1 (KRNL386, KRNL286, Microsoft's WINOLDAP)"
         else echo "FAIL swapesc: $pfirst ($out)"; fi ;;

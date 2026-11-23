@@ -32,6 +32,8 @@ is newer. Neither mode needs anything of Microsoft's.
                           (.PIF) for DOS programs, their Standard and
                           386 Enhanced mode settings (its help is
                           PIFEDIT.HLP)
+  CMD.PIF                 "Command Prompt": COMMAND.COM in a window in
+                          386 Enhanced mode (File > Run CMD.PIF)
   WINHELP.EXE             Help: shows Windows 3.x .HLP files, and the
                           topics programs ask for (their Help menus and
                           F1). The help files themselves are not part of
@@ -162,7 +164,7 @@ is newer. Neither mode needs anything of Microsoft's.
                           is built in; Evergreen, Ocean, Plum, Brick,
                           Midnight and High Contrast are w16's own)
   PROGMAN.INI             Program Manager's settings and its groups:
-  MAIN.GRP                  Main (DOS Prompt, Read Me, Control
+  MAIN.GRP                  Main (Command Prompt, Read Me, Control
                             Panel, File Manager, Registry Editor, PIF
                             Editor)
   ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,

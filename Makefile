@@ -2062,6 +2062,13 @@ install-tree: $(W16)/SYSTEM.INI $(W16)/WIN.INI $(W16)/CONTROL.INI
 $(W16)/SYSTEM.INI $(W16)/WIN.INI $(W16)/CONTROL.INI: $(W16)/%: assets/%
 	@mkdir -p $(@D)
 	sed 's/$$/\r/' $< > $@
+# CMD.PIF (assets/): a "Command Prompt" PIF that starts COMMAND.COM in a
+# window in 386 Enhanced mode; the user's own, made with w16's PIF Editor
+W16TREE += $(W16)/CMD.PIF
+install-tree: $(W16)/CMD.PIF
+$(W16)/CMD.PIF: assets/CMD.PIF
+	@mkdir -p $(@D)
+	cp $< $@
 # Program Manager's default groups (assets/progman: PROGMAN.INI and the
 # .GRP files, which tools/mkgrp.py makes from the *.txt definitions and the
 # icons of w16's own programs; `make groups` makes them again, and make

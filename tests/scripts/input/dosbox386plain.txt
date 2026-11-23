@@ -1,10 +1,16 @@
 ; the user's way (2026-11-21): the install tree alone, plain DOSBox, WIN /3
 ; with nothing else (WIN.COM's logo, no BOOTLOG.TXT: the boot is waited
-; for by Program Manager's active caption). The Main group's DOS Prompt
-; full screen (text mode), EXIT typed slowly, then Exit Windows: the DOS
-; prompt must come back (boot-test case win386plain)
+; for by Program Manager's active caption). COMMAND.COM from File > Run (no
+; PIF: full screen, text mode; Main's "Command Prompt" runs CMD.PIF, which
+; starts windowed), EXIT typed slowly, then Exit Windows: the DOS prompt
+; must come back (boot-test case win386plain)
 waitcount 0000aa 0 0 0 0 500 200
 sleep 6
+key alt+f
+sleep 1
+key r
+sleep 2
+type command.com
 key Return
 sleep 15
 shot 01-full
