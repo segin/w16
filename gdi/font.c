@@ -604,14 +604,15 @@ static XP font_map(const LOGFONT __far *lf, int h0, int *psx, int *psy)
             *psx = sx;
             *psy = sy;
         }
-        if (exact && !bexact)           /* the first in the table */
+        if (exact)                      /* the last in the table */
             bexact = x;
     }
     /* GD13 and GD11 on 3.1: a TrueType font chosen below 10 pixels per
        em for a face asked gives way to a raster font of exactly the size
        in a character set the request takes, whatever its face, the
-       first such in the table ("Arial" -7 is Small Fonts' 8-pixel font,
-       -8 MS Serif's 10-pixel one, before Small Fonts' 10-pixel one; -6,
+       last such in the table ("Arial" -7 is Small Fonts' 8-pixel font,
+       -8 MS Serif's 10-pixel one, which SMALLE.FON lists after Small
+       Fonts' 10-pixel one; -6,
        which no raster font is, and -10 are Arial; "Symbol" -9 is Symbol,
        no raster font of its character set being 9) */
     if (best_small && face[0] && bexact) {
