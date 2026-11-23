@@ -22,7 +22,7 @@
  * (gdi/ttf/ttfhint.c) grid-fits the glyphs. /G (Windows 3.1 and later):
  * show the specimen as Windows draws it, with its own TrueType rasteriser
  * (CreateScalableFontResource, found with GetProcAddress so that TTVIEW
- * still loads on 2.x, writes C:\TTVIEW.FOT; AddFontResource; TextOut of
+ * still loads on 2.x, writes the font's .FOT; AddFontResource; TextOut of
  * ttv_line's lines in CreateFont's of the font's family at -em), to
  * compare with w16's at the same sizes.
  *
@@ -45,8 +45,6 @@
 #define IDM_PAGE2 103
 #define IDM_GDI 104
 #define IDC_FILE 200
-
-#define FOT "C:\\TTVIEW.FOT"
 
 static HINSTANCE g_inst;
 static HWND g_wnd;
@@ -114,13 +112,19 @@ static void close_font(void)
 }
 
 /* /G: the font added to Windows (3.1 and later), through a .FOT made for
-   it: 1, else 0 and why in g_fotwhy. First as FN4 does it, which 3.1 adds
-   (tests/apps/fn4.c on the TrueType font branch): the .TTF in the system
-   directory (tests/ttview.sh -g puts a copy there), the .FOT made with its
-   bare name and that directory as the current path; then with the .TTF's
-   full path. (GDI's and KERNEL's exported names are upper case, as the NE
-   format keeps them; both functions are found at run time so that TTVIEW
-   still loads on 2.x) */
+   it: 1, else 0 and why in g_fotwhy. As probe FN4 does it: the .TTF in the
+   system directory (tests/ttview.sh -g puts a copy there), the .FOT made
+   with its bare name and that directory as the current path; else with
+   the .TTF's full path. Observed on 3.1: AddFontResource adds the .FOT
+   only if it is named as the .TTF is (TTFONT.FOT for TTFONT.TTF; made as
+   TTVIEW.FOT, CreateScalableFontResource succeeds and AddFontResource
+   returns 0). GDI's and KERNEL's exported names are upper case, as the NE
+   format keeps them; both functions are found at run time, so that TTVIEW
+   still loads on 2.x */
+typedef BOOL (FAR PASCAL *CSFR)(UINT, LPCSTR, LPCSTR, LPCSTR);
+typedef UINT (FAR PASCAL *GSD)(LPSTR, UINT);
+static const char *g_fotwhy = "";
+
 /* append t to s (no lstrcat before 3.0); s */
 static char *scat(char *s, const char *t)
 {
@@ -132,47 +136,65 @@ static char *scat(char *s, const char *t)
     return s;
 }
 
-typedef BOOL (FAR PASCAL *CSFR)(UINT, LPCSTR, LPCSTR, LPCSTR);
-typedef UINT (FAR PASCAL *GSD)(LPSTR, UINT);
-static const char *g_fotwhy = "";
+/* make dir\BASE.FOT for the font (dir 0: the .TTF's own) and add it */
+static int add_fot(FARPROC csfr, const char *dir, const char *ttf, const char *cur)
+{
+    const char *name = g_path, *s;
+    char *e;
+    int c, a;
+    OFSTRUCT of;
+    for (s = g_path; *s; s++)
+        if (*s == '\\' || *s == ':')
+            name = s + 1;
+    g_fotpath[0] = 0;
+    if (dir)
+        scat(scat(g_fotpath, dir), "\\");
+    else {
+        scat(g_fotpath, g_path);
+        g_fotpath[name - g_path] = 0;
+    }
+    scat(g_fotpath, name);
+    for (e = g_fotpath; *e; e++)
+        ;
+    while (e > g_fotpath && e[-1] != '.' && e[-1] != '\\')
+        e--;
+    if (e > g_fotpath && e[-1] == '.')
+        e[-1] = 0;
+    scat(g_fotpath, ".FOT");
+    OpenFile(g_fotpath, &of, OF_DELETE);
+    c = ((CSFR)csfr)(0, g_fotpath, ttf ? ttf : name, cur);
+    a = c ? AddFontResource(g_fotpath) : 0;
+    lg("add font: ");
+    lg(g_fotpath);
+    lg(": CreateScalableFontResource ");
+    lgnum((DWORD)c);
+    lg(", AddFontResource ");
+    lgnum((DWORD)(a > 0 ? a : 0));
+    lg("\r\n");
+    return a > 0;
+}
+
 static int add_font(void)
 {
     FARPROC p = GetProcAddress(GetModuleHandle("GDI"), "CREATESCALABLEFONTRESOURCE");
     FARPROC gsd = GetProcAddress(GetModuleHandle("KERNEL"), "GETSYSTEMDIRECTORY");
-    OFSTRUCT of;
     char sys[144];
-    const char *name = g_path, *s;
     int n;
     if (!p) {
         g_fotwhy = "no CreateScalableFontResource";
         return 0;
     }
-    for (s = g_path; *s; s++)
-        if (*s == '\\' || *s == ':')
-            name = s + 1;
     n = gsd ? (int)((GSD)gsd)(sys, sizeof sys - 16) : 0;
-    if (n > 0 && n < (int)sizeof sys - 16) {
-        g_fotpath[0] = 0;
-        scat(scat(g_fotpath, sys), "\\TTVIEW.FOT");
-        OpenFile(g_fotpath, &of, OF_DELETE);
-        if (((CSFR)p)(0, g_fotpath, name, sys) && AddFontResource(g_fotpath) > 0) {
-            g_fotwhy = "Windows' TextOut (the .FOT made the portable way)";
-            return 1;
-        }
+    if (n > 0 && n < (int)sizeof sys - 16 && add_fot(p, sys, 0, sys)) {
+        g_fotwhy = "Windows' TextOut (the .FOT made the portable way)";
+        return 1;
     }
-    g_fotpath[0] = 0;
-    scat(g_fotpath, FOT);
-    OpenFile(g_fotpath, &of, OF_DELETE);
-    if (!((CSFR)p)(0, g_fotpath, g_path, NULL)) {
-        g_fotwhy = "CreateScalableFontResource failed";
-        return 0;
+    if (add_fot(p, 0, g_path, NULL)) {
+        g_fotwhy = "Windows' TextOut (the .FOT made with the full path)";
+        return 1;
     }
-    if (AddFontResource(g_fotpath) <= 0) {
-        g_fotwhy = "AddFontResource failed";
-        return 0;
-    }
-    g_fotwhy = "Windows' TextOut (the .FOT made with the full path)";
-    return 1;
+    g_fotwhy = "the font not added";
+    return 0;
 }
 
 /* the page, hinted or not, g_reps times; the time it took */
@@ -202,7 +224,9 @@ static int load(HWND w, const char *path)
     ttfx_u8 FAR *bits;
     int pass;
     close_font();
-    g_file = OpenFile(path, &of, OF_READ);
+    /* /G: shared, for GDI to open it too when Windows adds the font (a
+       3.x sharing mode; Windows 2.x has no /G) */
+    g_file = OpenFile(path, &of, g_gdi ? OF_READ | OF_SHARE_DENY_NONE : OF_READ);
     if (g_file == HFILE_ERROR) {
         if (!g_test)
             MessageBox(w, path, "TTVIEW: cannot open", MB_OK | MB_ICONEXCLAMATION);

@@ -26,8 +26,8 @@
 #     -2       page 2, the specimen at 8-24 pixels to the em (TTVIEW /2)
 #     -g       show the specimen as Windows draws it with its own TrueType
 #              rasteriser (TTVIEW /G, 3.1 and later; implies -2): screen.png
-#              is Windows' rendering, not compared; runs TTVIEW3.EXE, the
-#              same marked 3.10 (a 3.x program, as probe FN4 is)
+#              is Windows' rendering, not compared (the font is also put
+#              in WINDOWS\SYSTEM, where TTVIEW makes its .FOT)
 #     -s       also run each without /T and take screenshots of TTVIEW's
 #              window (DIR/SYSTEM/shot*.png, view-*.png)
 # Needs the reference installs (.tools/ref/win31, .tools/ref/w386, MS-DOS
@@ -41,15 +41,13 @@ while getopts f:r:o:su2g opt; do
     case $opt in
     f) font=$OPTARG ;; r) reps=$OPTARG ;; o) out=$OPTARG ;; s) shots=1 ;;
     u) opts="$opts /U" shown=u ;; 2) opts="$opts /2" page2=-2 ;;
-    g) opts="$opts /G" shown=g page2=-2 exe3=1 ;;
+    g) opts="$opts /G" shown=g page2=-2 gdi=1 ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
     esac
 done
 shift $((OPTIND - 1))
 [ $# -gt 0 ] || set -- w386 std enh w16
 exe=$root/build/dos/TTVIEW.EXE
-# /G: the 3.10-marked copy
-[ -n "${exe3:-}" ] && exe=$root/build/dos/TTVIEW3.EXE
 mkdir -p "$out"
 "$root/build/host/ttvhost" $page2 "$font" "$out/host.pg"
 "$root/build/host/ttvhost" -u $page2 "$font" "$out/host-u.pg"
@@ -89,7 +87,7 @@ for sys in "$@"; do
             esac
             # -g: a copy in the system directory, where a .FOT made the
             # portable way finds it (TTVIEW /G)
-            [ -n "${exe3:-}" ] && [ $sys != w16 ] && set -- "$@" -f "$font=WINDOWS/SYSTEM/TTFONT.TTF"
+            [ -n "${gdi:-}" ] && [ $sys != w16 ] && set -- "$@" -f "$font=WINDOWS/SYSTEM/TTFONT.TTF"
             [ $sys = 286 ] && export DROPIN_CYCLES="${TTV_CYCLES:-fixed 2000}"
             slow=$([ $sys = 286 ] && echo 1 || echo)
             rm -rf "$work/in"

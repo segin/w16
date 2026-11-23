@@ -1602,12 +1602,6 @@ $(DOS)/TTVIEW.EXE: $(B)/shell/start.o $(B)/shell/write/i4.o $(TTV_O) $(B)/ttview
 	    option map=$(B)/ttview/ttview.map option resource=$(B)/ttview/ttview.res \
 	    file { $(B)/shell/start.o $(B)/shell/write/i4.o $(TTV_O) }
 	python3 tools/nemark.py $@ 2.0 0202 02
-# ... the same marked 3.10, for TTVIEW /G (tests/ttview.sh -g): a 3.x
-# program adding a TrueType font to 3.1, as probe FN4 does
-dos: $(DOS)/TTVIEW3.EXE
-$(DOS)/TTVIEW3.EXE: $(DOS)/TTVIEW.EXE tools/nemark.py
-	cp $< $@
-	python3 tools/nemark.py $@ 3.10 0202 00
 # ... and the same page drawn on the host, to compare with (tests/ttview.sh)
 $(B)/host/ttvhost: tests/ttf/ttvhost.c tests/apps/ttvpage.c tests/apps/ttvpage.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h \
                   gdi/ttf/ttfhint.c
