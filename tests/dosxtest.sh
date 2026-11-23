@@ -12,11 +12,14 @@
 #   usage: tests/dosxtest.sh [options] [PROBE...]   (default: all DX probes)
 #     -m WHICH   ms, w16 or both (default both)
 #     -a ARGS    extra arguments after "WIN /S" (the probe's command tail)
-#     -c CPU     386 (DOSBox, the default) or 286 (DOSBox-X, an 80286)
+#     -c CPU     386 (DOSBox, the default), 286 (DOSBox-X, an 80286) or
+#                386x (DOSBox-X, a 386: its INT 25h/26h reach FAT drives)
 #     -t SECS    time limit per run (default 60)
 #     -o DIR     keep the logs in DIR (default build/dosxtest)
 #     -q         print only the diff and the verdict
 # DOSXTEST_DOSX=FILE: use FILE as w16's DOSX (e.g. build/dos/DOSXT.EXE).
+# DX9 gets a floppy image as A: (BIOS drive 0) whose sectors hold their
+# own numbers (tests/scripts/mkfloppy.py --pattern), for its INT 13h test.
 # Prints each run's log (C:\DXn.LOG, then WIN's output and errorlevel),
 # then the differences between the two DOSXes. Lines that are expected to
 # differ are not filtered: the diff is for reading (ARCHITECTURE.md 9.6
@@ -61,8 +64,15 @@ run() {   # run PROBE HOST -> $out/PROBE.HOST.log
     fi
     if [ "$cpu" = 286 ]; then
         emu="dosbox-x -nogui -fastlaunch" xdos="quit warning=false" cputype=286
+    elif [ "$cpu" = 386x ]; then
+        emu="dosbox-x -nogui -fastlaunch" xdos="quit warning=false" cputype=386
     else
         emu="dosbox -noconsole" xdos= cputype=386
+    fi
+    floppy=
+    if [ "$probe" = DX9 ]; then
+        python3 "$root/tests/scripts/mkfloppy.py" --pattern "$work/fd.img"
+        floppy="imgmount a \"$work/fd.img\" -t floppy"
     fi
     cat > "$work/dosbox.conf" <<CONF
 [sdl]
@@ -79,6 +89,7 @@ nosound=true
 [speaker]
 pcspeaker=false
 [autoexec]
+$floppy
 mount c "$work/c"
 c:
 cd \\WINDOWS
@@ -87,7 +98,8 @@ if errorlevel 1 echo ERRORLEVEL=NONZERO >> C:\\OUT.TXT
 echo WINEXIT >> C:\\OUT.TXT
 exit
 CONF
-    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout "$secs" \
+    # (-k: a DOSBox stuck in a guest hang may not end on SIGTERM)
+    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -k 10 "$secs" \
         $emu -conf "$work/dosbox.conf" >/dev/null 2>&1 || true
     log=$(echo "$probe" | tr a-z A-Z).LOG
     {
