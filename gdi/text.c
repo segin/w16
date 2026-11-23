@@ -222,7 +222,12 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
         return FALSE;
     dc = dc_get(hdc);
     if (n > 0 && s)
-        font_bits(dc_font(dc));         /* a scaled copy's bits, the first time */
+    {
+        if (dc_font(dc)->tt)            /* TrueType: the glyphs not drawn yet */
+            tt_glyphs(dc->xFont, s, n);
+        else
+            font_bits(dc_font(dc));     /* a scaled copy's bits, the first time */
+    }
     fi = dc_font(dc)->fi;
     font_xform(dc, dc_font(dc), &tx);
     fn = (DRVEXTTEXTOUT)dc->dev->fn[DRV_EXTTEXTOUT];

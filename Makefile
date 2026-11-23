@@ -1809,8 +1809,15 @@ GCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -wcd=201 -Igdi
 GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/heap.o $(B)/gdi/object.o \
            $(B)/gdi/driver.o $(B)/gdi/dc.o $(B)/gdi/rgn.o $(B)/gdi/bitmap.o \
            $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o $(B)/gdi/draw.o \
-           $(B)/gdi/meta.o
+           $(B)/gdi/meta.o $(B)/gdi/ttfont.o $(B)/gdi/ttfx.o $(B)/gdi/ttfhint.o
 gdi: $(DOS)/GDI.EXE
+$(B)/gdi/ttfx.o: gdi/ttf/ttfx.c gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(WCC) $(GCFLAGS) -fo=$@ $<
+$(B)/gdi/ttfhint.o: gdi/ttf/ttfhint.c gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(WCC) $(GCFLAGS) -fo=$@ $<
+$(B)/gdi/ttfont.o: gdi/ttf/ttfx.h
 dos: $(DOS)/GDI.EXE
 $(B)/gdi/exports.lnk $(B)/gdi/stubs.asm &: tools/mkgdiexp.py tools/mkgdlog.py \
         docs/exports/GDI.txt tests/gdi/gdi.spec $(wildcard gdi/*.c)
@@ -1896,6 +1903,13 @@ $(DOS)/GD11.EXE: $(B)/tests/start.o $(B)/tests/gd11.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd11.map file { $(B)/tests/start.o $(B)/tests/gd11.o }
+# GD13.EXE: the TrueType probe (tests/apps/gd13.c; tests/gd13.sh)
+gdprobes: $(DOS)/GD13.EXE
+dos: $(DOS)/GD13.EXE
+$(DOS)/GD13.EXE: $(B)/tests/start.o $(B)/tests/gd13.o $(B)/gdi/i4.o tests/apps/app.lnk tests/apps/fn.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd13.map file { $(B)/tests/start.o $(B)/tests/gd13.o $(B)/gdi/i4.o }
 # GD12.EXE: integer-scaled fonts drawn for GD1's log (tests/apps/gd12.c;
 # tests/gdiboot.sh -l with it as the shell)
 gdprobes: $(DOS)/GD12.EXE

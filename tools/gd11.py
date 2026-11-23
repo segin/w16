@@ -7,12 +7,17 @@ usage: tools/gd11.py scale LOG          every request with the real size
        tools/gd11.py cmp REF LOG        the M and X lines of LOG must equal
                                         REF's (exit 1 and the differences
                                         if not)
+       tools/gd11.py tt [-v [-v]] REF LOG   the requests REF answers with a
+                                        TrueType font: how many LOG gives
+                                        another face, and which metrics
+                                        differ where the face is the same
 
 The factors come from the E lines (EnumFonts: the real sizes): a result
 of face F is real size r times (sx, sy) when its height, ascent and
 internal leading are sy times r's and its average and maximum widths sx
 times r's (one more each when emboldened).
 """
+import os
 import re
 import sys
 
@@ -103,10 +108,23 @@ def skipped(line):
     return f is not None and f[2] is not None and f[2]['PF'] & 6
 
 
+KNOWN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tests', 'gdi',
+                     'gd11-known.txt')
+
+
+def known():
+    """the requests tests/gdi/gd11-known.txt lists (known differences)"""
+    try:
+        return {l.strip() for l in open(KNOWN) if l.startswith('M ')}
+    except OSError:
+        return set()
+
+
 def cmd_cmp(ref, log):
     _, rm, rx = parse(ref)
     _, lm, lx = parse(log)
-    bad = skip = 0
+    bad = skip = nknown = 0
+    kn = known()
     for name, a, b in (('M', rm, lm), ('X', rx, lx)):
         if len(a) != len(b):
             print('%s lines: %d in %s, %d in %s' % (name, len(a), ref, len(b), log))
@@ -115,16 +133,56 @@ def cmd_cmp(ref, log):
             if name == 'M' and skipped(x):
                 skip += 1
                 continue
+            if x != y and name == 'M' and x.split(' -> ')[0] in kn:
+                nknown += 1
+                continue
             if x != y:
                 bad += 1
                 if bad <= 40:
                     print('- ' + x)
                     print('+ ' + y)
-    print('gd11: %d difference(s) (%d TrueType or vector results not compared)' % (bad, skip))
+    print('gd11: %d difference(s) (%d TrueType or vector results not compared; %d known differences, '
+          'tests/gdi/gd11-known.txt)' % (bad, skip, nknown))
     return 1 if bad else 0
 
 
+def cmd_tt(ref, log, verbose):
+    """the requests 3.1 answers with a TrueType font: the face w16 chose,
+    then each metric of those w16 answered with the same face"""
+    _, rm, _ = parse(ref)
+    _, lm, _ = parse(log)
+    n = face = 0
+    fields_bad = {}
+    same = good = 0
+    for x, y in zip(rm, lm):
+        fx, fy = fields(x), fields(y)
+        if not fx or not fx[2] or not fx[2]['PF'] & 4:
+            continue
+        n += 1
+        if not fy or not fy[2] or fy[2]['face'] != fx[2]['face']:
+            face += 1
+            if verbose and face <= 30:
+                print('face: %s\n   w16 %s' % (x, y.split('->')[1] if '->' in y else y))
+            continue
+        same += 1
+        diff = [k for k in fx[2] if k not in ('face',) and fx[2][k] != fy[2][k]]
+        for k in diff:
+            fields_bad[k] = fields_bad.get(k, 0) + 1
+        if not diff:
+            good += 1
+        elif verbose > 1:
+            print('metrics: %s\n     w16 %s' % (x, y.split('->')[1]))
+    print('gd11 tt: %d TrueType results: %d with another face; of the %d with the same face %d '
+          'identical; fields different: %s' % (n, face, same, good,
+                                             ' '.join('%s %d' % kv for kv in sorted(fields_bad.items()))))
+    return 0
+
+
 def main():
+    if len(sys.argv) >= 4 and sys.argv[1] == 'tt':
+        v = sys.argv[2:].count('-v')
+        a = [x for x in sys.argv[2:] if x != '-v']
+        return cmd_tt(a[0], a[1], v)
     if len(sys.argv) == 3 and sys.argv[1] == 'scale':
         cmd_scale(sys.argv[2])
         return 0
