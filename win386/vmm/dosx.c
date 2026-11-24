@@ -66,12 +66,25 @@ static void bad_ptr(struct cregs *r)
 static int copy_in_str(u32 sel, u32 off, u32 at)
 {
     u8 *s;
-    u32 n = 0;
+    u32 n = 0, lin;
+    s = cl_ptr(sel, off, 1, 0);
+    if (!s) return -1;
+    lin = (u32)s;
     for (;;) {
-        s = cl_ptr(sel, off + n, 1, 0);
-        if (!s) return -1;
-        if (!*s || n == 255) break;
-        *(u8 *)(XB + at + n) = *s;
+        u8 c;
+        if (n > 0) {
+            if (!sysvm.client32 && ((off + n) & 0xFFFF) == 0) {
+                s = cl_ptr(sel, 0, 1, 0);
+                if (!s) return -1;
+                lin = (u32)s;
+            } else {
+                lin++;
+                if ((lin & 0xFFF) == 0 && !lin_user_ok(lin, 1, 0)) return -1;
+            }
+        }
+        c = *(u8 *)lin;
+        if (!c || n == 255) break;
+        *(u8 *)(XB + at + n) = c;
         n++;
     }
     *(u8 *)(XB + at + n) = 0;
@@ -300,18 +313,26 @@ void dos_pm(struct cregs *r)
         /* the program's DTA (1Ah), or, before it set one, DOS's own (the
          * PSP's), which DOS gets back afterwards: before, the search went
          * to the buffer and stayed there, and DOS was left pointing at it */
-        u32 oseg, ooff;
-        u8 *dta;
-        dos_dta(&oseg, &ooff);
-        dta = dta_set ? cl_ptr(dta_sel, dta_off, 43, 1) : (u8 *)((oseg << 4) + ooff);
-        if (!dta) { bad_ptr(r); return; }
+        u32 oseg = 0, ooff = 0;
+        u8 *dta = NULL;
+        int swap_dta = 0;
+        if (dta_set) {
+            dta = cl_ptr(dta_sel, dta_off, 43, 1);
+            if (!dta) { bad_ptr(r); return; }
+        }
         if (ah == 0x4E && copy_in_str(r->ds, r->edx, 0) < 0) { bad_ptr(r); return; }
-        set_dos_dta(XSEG, 512);                         /* DOS's DTA: buffer + 512 */
-        memcpy((void *)(XB + 512), dta, 43);
+        if (dta_set) {
+            dos_dta(&oseg, &ooff);
+            swap_dta = (oseg != XSEG || ooff != 512);
+            if (swap_dta) set_dos_dta(XSEG, 512);       /* DOS's DTA: buffer + 512 */
+            memcpy((void *)(XB + 512), dta, 43);
+        }
         if (ah == 0x4E) call21(r, XSEG, 0, 0, 0, 0, K_DX);
         else call21(r, 0, 0, 0, 0, 0, 0);
-        memcpy(dta, (void *)(XB + 512), 43);
-        set_dos_dta(oseg, ooff);
+        if (dta_set) {
+            memcpy(dta, (void *)(XB + 512), 43);
+            if (swap_dta) set_dos_dta(oseg, ooff);
+        }
         return;
     }
     case 0x11: case 0x12: {             /* FCB search: DS:DX, the result in the DTA */
@@ -321,21 +342,27 @@ void dos_pm(struct cregs *r)
          * attribute 08h): reflected as they were, the label went to
          * DOS's own DTA and the drive line showed "C: [" with nothing
          * after */
-        u32 oseg, ooff, n;
-        u8 *dta, *fcb = cptr(r, r->ds, r->edx, 1, 1);
+        u32 oseg = 0, ooff = 0, n;
+        u8 *dta = NULL, *fcb = cptr(r, r->ds, r->edx, 1, 1);
+        int swap_dta = 0;
         if (!fcb) { bad_ptr(r); return; }
         n = fcb[0] == 0xFF ? 44 : 37;
         if ((fcb = cptr(r, r->ds, r->edx, n, 1)) == NULL) { bad_ptr(r); return; }
-        dos_dta(&oseg, &ooff);
-        dta = dta_set ? cl_ptr(dta_sel, dta_off, n, 1) : (u8 *)((oseg << 4) + ooff);
-        if (!dta) { bad_ptr(r); return; }
-        set_dos_dta(XSEG, 512);
-        memcpy((void *)(XB + 512), dta, n);
+        if (dta_set) {
+            dta = cl_ptr(dta_sel, dta_off, n, 1);
+            if (!dta) { bad_ptr(r); return; }
+            dos_dta(&oseg, &ooff);
+            swap_dta = (oseg != XSEG || ooff != 512);
+            if (swap_dta) set_dos_dta(XSEG, 512);
+            memcpy((void *)(XB + 512), dta, n);
+        }
         memcpy((void *)XB, fcb, n);
         call21(r, XSEG, 0, 0, 0, 0, K_DX);
         memcpy(fcb, (void *)XB, n);
-        memcpy(dta, (void *)(XB + 512), n);
-        set_dos_dta(oseg, ooff);
+        if (dta_set) {
+            memcpy(dta, (void *)(XB + 512), n);
+            if (swap_dta) set_dos_dta(oseg, ooff);
+        }
         return;
     }
     case 0x50: {                        /* set PSP: a selector */

@@ -489,7 +489,11 @@ lin_copy:
         mov es, ax
         xor si, si
         xor di, di
-        rep movsb
+        shr cx, 1
+        rep movsw
+        jnc .even
+        movsb
+.even:
         pop ds
         pop di
         pop si

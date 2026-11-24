@@ -517,10 +517,11 @@ static void lin_free(u32 lin, u32 size)
 static void pages_release(u32 lin, u32 size)
 {
     u32 a, p, t, i, *pt;
+    int need_flush = 0;
     for (a = lin; a < lin + size; a += 4096) {
         p = lin_to_phys(a);
         if (!p) continue;
-        map_page(a, 0, 0);
+        if (map_page_noflush(a, 0, 0) == 2) need_flush = 1;
         page_free(p & ~0xFFFu);
     }
     for (t = lin >> 22; size && t <= (lin + size - 1) >> 22; t++) {
@@ -532,9 +533,11 @@ static void pages_release(u32 lin, u32 size)
         if (i == 1024) {
             p = vmm_pdir_entry_get(t) & ~0xFFFu;
             vmm_pdir_entry(t, 0);
+            need_flush = 1;
             page_free(p);
         }
     }
+    if (need_flush) vmm_flush_tlb();
 }
 
 /* physical memory mapped with 0800h (kept: DPMI 0.9 has no call to free
@@ -561,14 +564,18 @@ static u32 mem_largest_pages(u32 f)
 static int pages_map(u32 lin, u32 n)
 {
     u32 i, p;
+    int need_flush = 0, mr;
     for (i = 0; i < n; i++) {
         p = page_alloc();
-        if (!p || !map_page(lin + i * 4096, p, 7)) {
+        if (!p || (mr = map_page_noflush(lin + i * 4096, p, 7)) == 0) {
             if (p) page_free(p);
+            if (need_flush) vmm_flush_tlb();
             pages_release(lin, i * 4096);
             return 0;
         }
+        if (mr == 2) need_flush = 1;
     }
+    if (need_flush) vmm_flush_tlb();
     return 1;
 }
 
@@ -1010,14 +1017,24 @@ static void dpmi_call(struct cregs *r)
         m = kmalloc(sizeof(*m));
         lin = m && (span || !size) ? lin_alloc(span + 4096) : 0;
         if (!lin) { kfree(m); set_cf(r, 1); break; }
-        for (off = 0; off < span; off += 4096)
-            if (!map_page(lin + off, (phys & ~0xFFFu) + off, 7)) break;
-        if (off < span) {
-            while (off) { off -= 4096; map_page(lin + off, 0, 0); }
-            lin_free(lin, span + 4096);
-            kfree(m);
-            set_cf(r, 1);
-            break;
+        {
+            int need_flush = 0, mr;
+            for (off = 0; off < span; off += 4096) {
+                if ((mr = map_page_noflush(lin + off, (phys & ~0xFFFu) + off, 7)) == 0) break;
+                if (mr == 2) need_flush = 1;
+            }
+            if (off < span) {
+                while (off) {
+                    off -= 4096;
+                    if (map_page_noflush(lin + off, 0, 0) == 2) need_flush = 1;
+                }
+                if (need_flush) vmm_flush_tlb();
+                lin_free(lin, span + 4096);
+                kfree(m);
+                set_cf(r, 1);
+                break;
+            }
+            if (need_flush) vmm_flush_tlb();
         }
         m->phys = phys & ~0xFFFu;
         m->size = span;

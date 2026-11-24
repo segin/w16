@@ -722,27 +722,39 @@ static int add_item(HWND h, PLB lb, int at, LPCSTR s, DWORD data)
 
 static int sorted_pos(HWND h, PLB lb, LPCSTR s)
 {
-    int i;
+    int lo = 0, hi = lb->count;
     if (!hasstrings(h)) {
-        for (i = 0; i < lb->count; i++) {
+        UINT id = GetWindowWord(h, GWW_ID);
+        while (lo < hi) {
+            int mid = lo + (hi - lo) / 2;
             COMPAREITEMSTRUCT ci;
             ci.CtlType = ODT_LISTBOX;
-            ci.CtlID = GetWindowWord(h, GWW_ID);
+            ci.CtlID = id;
             ci.hwndItem = h;
             ci.itemID1 = (UINT)-1;
             ci.itemData1 = (DWORD)s;
-            ci.itemID2 = i;
-            ci.itemData2 = item(lb, i)->data;
+            ci.itemID2 = mid;
+            ci.itemData2 = item(lb, mid)->data;
             if ((int)send_message(lb->owner, WM_COMPAREITEM, ci.CtlID,
                                   (LPARAM)(COMPAREITEMSTRUCT __far *)&ci) < 0)
-                return i;
+                hi = mid;
+            else
+                lo = mid + 1;
+            if (hi > lb->count)
+                hi = lb->count;
+            if (lo > hi)
+                lo = hi;
         }
-        return lb->count;
+        return lo;
     }
-    for (i = 0; i < lb->count; i++)
-        if (lstrcmpi(s, STR(item(lb, i)->text)) < 0)
-            return i;
-    return lb->count;
+    while (lo < hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (lstrcmpi(s, STR(item(lb, mid)->text)) < 0)
+            hi = mid;
+        else
+            lo = mid + 1;
+    }
+    return lo;
 }
 
 static void del_item(PLB lb, int i)

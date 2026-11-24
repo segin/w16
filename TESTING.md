@@ -305,7 +305,9 @@ Microsoft's WIN386 (ARCHITECTURE.md 12.12). Where 386 Enhanced mode's
 time goes: `tests/vx16run.sh OUTDIR CONF` runs VX16 (`make vxprobes`) as
 WIN.INI run= and prints its counts by the CMOS clock (a busy loop, the
 clocks, timer events, trapped I/O, reflections, file reads, drawing,
-messages); CONF `ms`, `w16` or `std` (the reference install under
+messages; text, fills, lines, scrolls, stretches, GetDC, a sorted list
+box, typing in an edit control, SendMessage to another task, GlobalAlloc,
+profile reads: how w16's own drivers and modules perform); CONF `ms`, `w16` or `std` (the reference install under
 Microsoft's or w16's WIN386, or Standard mode), `tree`, `treems` or
 `treestd` (w16's install tree the same ways); `VX16_ONLY` picks phases,
 `DROPIN_CYCLES="fixed 30000"` counts instructions instead of host time

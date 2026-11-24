@@ -17,9 +17,10 @@
 typedef struct DCE {
     WORD   next;
     HDC    hdc;
-    HWND   hwnd;                /* 0: free */
+    HWND   hwnd;                /* 0: free (or cached window when !DCE_INUSE) */
     WORD   flags;               /* DCE_* */
     HRGN   clip;                /* extra clipping (BeginPaint's update region) */
+    HRGN   vis;                 /* cached visible region (private GDI object) */
 } DCE;
 typedef DCE __far *PDCE;
 #define DC_(h)  ((PDCE)UH_PTR(&uhObj, (h)))
@@ -31,6 +32,8 @@ typedef DCE __far *PDCE;
                                    hwnd: the window that had it last) */
 #define DCE_PARENT  0x20        /* a CS_PARENTDC window's: the parent's
                                    visible region */
+#define DCE_DIRTY   0x40        /* cached visrgn is stale */
+#define DCE_MODE_MASK (DCE_WINDOW | DCE_PARENT | DCE_CLIPCHILDREN)
 
 static WORD dces;
 /* the driver name GDI gets; a buffer of its own (UNVERIFIED: GDI appears to
@@ -135,25 +138,35 @@ HRGN visible_rgn(PWND w, BOOL client, BOOL clipchildren)
 static void setup_dc(PDCE d, PWND w)
 {
     BOOL window = (d->flags & DCE_WINDOW) != 0;
-    BOOL clipch = (w->style & WS_CLIPCHILDREN) != 0;
-    HRGN r;
-    /* the desktop's window DC (GetDC(NULL), GetWindowDC of the desktop or
-       of NULL, GetDCEx(desktop, DCX_WINDOW)) is the whole screen, the
-       top-level windows too: a simple region, and GetPixel reads what
-       they show (US33 gdc on 3.1; GetDC of the desktop window itself
-       leaves them out, and so does the desktop's own painting) */
-    if (window && w == PW(hwndDesktop))
-        clipch = FALSE;
-    if (d->flags & DCE_CLIPCHILDREN)
-        clipch = TRUE;
-    if ((d->flags & DCE_PARENT) && w->hwndParent)
-        r = visible_rgn(PW(w->hwndParent), TRUE, FALSE);
-    else
-        r = visible_rgn(w, !window, clipch);
-    if (d->clip)
-        CombineRgn(r, r, d->clip, RGN_AND);
-    G_SELECTVISRGN(d->hdc, r);
-    DeleteObject(r);
+    if (!d->vis || (d->flags & DCE_DIRTY)) {
+        BOOL clipch = (w->style & WS_CLIPCHILDREN) != 0;
+        HRGN r;
+        /* the desktop's window DC (GetDC(NULL), GetWindowDC of the desktop or
+           of NULL, GetDCEx(desktop, DCX_WINDOW)) is the whole screen, the
+           top-level windows too: a simple region, and GetPixel reads what
+           they show (US33 gdc on 3.1; GetDC of the desktop window itself
+           leaves them out, and so does the desktop's own painting) */
+        if (window && w == PW(hwndDesktop))
+            clipch = FALSE;
+        if (d->flags & DCE_CLIPCHILDREN)
+            clipch = TRUE;
+        if ((d->flags & DCE_PARENT) && w->hwndParent)
+            r = visible_rgn(PW(w->hwndParent), TRUE, FALSE);
+        else
+            r = visible_rgn(w, !window, clipch);
+        if (r)
+            G_MAKEOBJECTPRIVATE(r, TRUE);
+        if (d->vis)
+            delete_private(d->vis);
+        d->vis = r;
+        d->flags &= ~DCE_DIRTY;
+    }
+    if (d->clip && d->vis) {
+        CombineRgn(hrgnTmp2, d->vis, d->clip, RGN_AND);
+        G_SELECTVISRGN(d->hdc, hrgnTmp2);
+    } else if (d->vis) {
+        G_SELECTVISRGN(d->hdc, d->vis);
+    }
     if (window)
         G_SETDCORG(d->hdc, w->rcWindow.left, w->rcWindow.top);
     else
@@ -187,9 +200,14 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
                 return 0;
             c = (PCLS)w->cls;
             c->hdce = dh;
-            DC_(dh)->flags = DCE_OWN | DCE_CLASS;
+            DC_(dh)->flags = DCE_OWN | DCE_CLASS | DCE_DIRTY;
         }
-        DC_(dh)->hwnd = h;
+        if (DC_(dh)->hwnd != h) {
+            DC_(dh)->hwnd = h;
+            DC_(dh)->flags |= DCE_DIRTY;
+        }
+        if ((flags & 1) && !(DC_(dh)->flags & DCE_CLIPCHILDREN))
+            DC_(dh)->flags |= DCE_CLIPCHILDREN | DCE_DIRTY;
     } else if ((c->style & CS_OWNDC) && !window) {
         for (dh = dces; dh; dh = DC_(dh)->next)
             if ((DC_(dh)->flags & DCE_OWN) && DC_(dh)->hwnd == h)
@@ -198,16 +216,14 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
             dh = new_dce();
             if (!dh)
                 return 0;
-            DC_(dh)->flags = DCE_OWN;
+            DC_(dh)->flags = DCE_OWN | DCE_DIRTY;
             DC_(dh)->hwnd = h;
         }
+        if ((flags & 1) && !(DC_(dh)->flags & DCE_CLIPCHILDREN))
+            DC_(dh)->flags |= DCE_CLIPCHILDREN | DCE_DIRTY;
     } else {
-        for (dh = dces; dh; dh = DC_(dh)->next)
-            if (!(DC_(dh)->flags & (DCE_INUSE | DCE_OWN)))
-                break;
-        if (!dh && !(dh = new_dce()))
-            return 0;
-        DC_(dh)->flags = DCE_INUSE | (window ? DCE_WINDOW : 0);
+        WORD want = DCE_INUSE | (window ? DCE_WINDOW : 0);
+        WORD mode, empty_dh = 0, evict_dh = 0;
         /* CS_PARENTDC: a cache DC clipped to the parent's client area, its
            origin the child's (US29 dc on 3.1: GetClipBox -10 -10 388 269
            for a child at 10,10 of a 398 x 279 client area). The system
@@ -220,12 +236,38 @@ HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)
            region, inside the window either way. */
         if ((c->style & CS_PARENTDC) && !(flags & DCX_OWNCLIENT) && !window &&
             (w->style & WS_CHILD) && w->hwndParent)
-            DC_(dh)->flags |= DCE_PARENT;
-        DC_(dh)->hwnd = h;
+            want |= DCE_PARENT;
+        if (flags & 1)
+            want |= DCE_CLIPCHILDREN;
+        mode = want & DCE_MODE_MASK;
+        for (dh = dces; dh; dh = d->next) {
+            d = DC_(dh);
+            if (d->flags & (DCE_INUSE | DCE_OWN))
+                continue;
+            if (d->hwnd == h && !(d->flags & DCE_DIRTY) &&
+                (d->flags & DCE_MODE_MASK) == mode)
+                break;          /* cached visrgn hit */
+            if (!d->hwnd && !empty_dh)
+                empty_dh = dh;
+            if (!evict_dh)
+                evict_dh = dh;
+        }
+        if (dh) {
+            DC_(dh)->flags = want;
+        } else {
+            dh = empty_dh ? empty_dh : evict_dh;
+            if (!dh && !(dh = new_dce()))
+                return 0;
+            d = DC_(dh);
+            if (d->vis) {
+                delete_private(d->vis);
+                d->vis = 0;
+            }
+            d->flags = want | DCE_DIRTY;
+            d->hwnd = h;
+        }
     }
     d = DC_(dh);        /* (nothing below allocates in the object heap) */
-    if (flags & 1)
-        d->flags |= DCE_CLIPCHILDREN;
     if (d->clip)
         DeleteObject(d->clip);
     d->clip = 0;
@@ -248,16 +290,26 @@ int release_dc(HWND h, HDC hdc)
                 d->clip = 0;
             }
             if (d->flags & DCE_OWN) {
-                d->flags &= ~DCE_CLIPCHILDREN;
+                if (d->flags & DCE_CLIPCHILDREN) {
+                    d->flags &= ~DCE_CLIPCHILDREN;
+                    d->flags |= DCE_DIRTY;
+                }
                 return 1;
             }
             G_SETDCSTATE(hdc, hdcState);
-            d->flags = 0;
-            d->hwnd = 0;
+            /* Retain hwnd, mode flags, and cached visrgn for reuse on next GetDC */
+            d->flags &= ~DCE_INUSE;
             return 1;
         }
     (void)h;
     return 0;
+}
+
+void invalidate_dce_cache(void)
+{
+    WORD dh;
+    for (dh = dces; dh; dh = DC_(dh)->next)
+        DC_(dh)->flags |= DCE_DIRTY;
 }
 
 /* a window going away gives back its own DC */
@@ -265,8 +317,14 @@ void free_window_dcs(HWND h)
 {
     PDCE d;
     WORD dh;
-    for (dh = dces; dh; dh = d->next)
-        if ((d = DC_(dh))->hwnd == h) {
+    for (dh = dces; dh; dh = d->next) {
+        d = DC_(dh);
+        d->flags |= DCE_DIRTY;
+        if (d->hwnd == h) {
+            if (d->vis) {
+                delete_private(d->vis);
+                d->vis = 0;
+            }
             /* a class's DC stays the class's, with its state */
             if (d->flags & DCE_CLASS) {
                 d->hwnd = 0;
@@ -282,12 +340,17 @@ void free_window_dcs(HWND h)
             d->hwnd = 0;
             d->flags = 0;
         }
+    }
 }
 
 /* a CS_CLASSDC class goes: its DC joins the cache */
 void free_class_dc(PCLS c)
 {
     PDCE d = DC_(c->hdce);
+    if (d->vis) {
+        delete_private(d->vis);
+        d->vis = 0;
+    }
     if (d->clip) {
         DeleteObject(d->clip);
         d->clip = 0;
@@ -303,9 +366,12 @@ void refresh_dcs(void)
 {
     PDCE d;
     WORD dh;
-    for (dh = dces; dh; dh = d->next)
-        if ((d = DC_(dh))->hwnd && valid_wnd(d->hwnd) && (d->flags & (DCE_INUSE | DCE_OWN)))
+    for (dh = dces; dh; dh = d->next) {
+        d = DC_(dh);
+        d->flags |= DCE_DIRTY;
+        if (d->hwnd && valid_wnd(d->hwnd) && (d->flags & (DCE_INUSE | DCE_OWN)))
             setup_dc(d, PW(d->hwnd));
+    }
 }
 
 HDC WINAPI GetDC(HWND h)

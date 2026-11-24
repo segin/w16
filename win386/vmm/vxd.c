@@ -218,13 +218,19 @@ int vxd_service_call(u32 dev, u32 svc, struct svcregs *s)
     return 1;
 }
 
+static struct ddb *vpicd_dev;
+
 static void vpicd_call(u32 svc, u32 eax, u32 ebx)
 {
     struct svcregs s;
+    u32 slot;
+    if (!vpicd_dev) vpicd_dev = find_dev(3);
+    if (!vpicd_dev || !vpicd_dev->svc_table || svc >= vpicd_dev->svc_count) return;
+    slot = *(u32 *)(vpicd_dev->svc_table + svc * 4);
     memset(&s, 0, sizeof(s));
     s.eax = eax;
     s.ebx = ebx;
-    vmm_call_proc(svc_slot(3, svc), &s);
+    vmm_call_proc(slot, &s);
 }
 
 /* ---- the VMM's time-outs (Set_Global_Time_Out, Cancel_Time_Out; the

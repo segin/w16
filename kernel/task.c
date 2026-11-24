@@ -70,6 +70,9 @@ void sig_default_set(u16 t);
 u16 psp_sel;                    /* KERNEL's own PSP (the top PDB) */
 u16 cur_task;                   /* the running task, 0 while booting */
 u16 cur_pdb;                    /* its PDB */
+u16 dos_owner_task;             /* task whose PSP/DTA/CWD is currently in DOS */
+u8  dos_nosync;                 /* non-zero while syncing or under kernel_psp */
+static u8 kpsp_depth;           /* nesting count for kernel_psp(1) */
 static u16 task_head;
 static u16 num_tasks;
 static u16 in_sched;
@@ -329,6 +332,25 @@ static void restore_dir(u16 t, u16 from)
     dos(0x3B00, TDB_DIR, t);
 }
 
+/* Lazy DOS context switch (called from kentry.asm's INT 21h hook when
+   cur_task != dos_owner_task): save the previous DOS owner's drive/dir,
+   then load cur_task's PSP, DTA, and drive/dir. */
+void __cdecl sync_dos_context(void)
+{
+    u16 prev = dos_owner_task;
+    u16 t = cur_task;
+    if (!t || t == prev || dos_nosync)
+        return;
+    dos_nosync++;
+    if (prev)
+        save_dir(prev);
+    set_psp(TW(t, TDB_PDB));
+    set_dta(t);
+    restore_dir(t, prev);
+    dos_owner_task = t;
+    dos_nosync--;
+}
+
 /* ---- FPU control word ---- */
 
 static void fpu_save(u16 FAR *w);
@@ -557,16 +579,12 @@ static void switch_to(u16 t)
     list_requeue(t);
     if (from) {
         th_task_out();                  /* toolhelp.c: 0Dh */
-        save_dir(from);
         if (have87)
             fpu_save((u16 FAR *)MK_FP(from, TDB_FPCW));
     }
     cur_task = t;
     cur_pdb = TW(t, TDB_PDB);
-    set_psp(cur_pdb);
-    set_dta(t);
     int_vec_switch(t);
-    restore_dir(t, from);
     if (have87)
         fpu_load((u16 FAR *)MK_FP(t, TDB_FPCW));
     in_sched = 0;
@@ -688,7 +706,7 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
        KERNEL's (one selector for every task), the command tail is the one
        given, and the first FCB holds 2 and nCmdShow (Pietrek; observed
        for the first task) */
-    set_psp(psp_sel);
+    kernel_psp(1);
     rm_int(0x21, 0x5500, 0, seg + (TDB_PSP >> 4), *(u16 FAR *)MK_FP(psp_sel, 2));
     p = MK_FP(pdb, 0);
     *(u16 FAR *)(p + 0x16) = psp_sel;
@@ -701,8 +719,7 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     p[0x81 + k] = whole ? '\n' : '\r';
     *(u16 FAR *)(p + 0x5C) = show ? show[0] : 2;
     *(u16 FAR *)(p + 0x5E) = show ? show[1] : 1;   /* UNVERIFIED w/o */
-    if (cur_task)
-        set_psp(cur_pdb);
+    kernel_psp(0);
 
     /* the TDB */
     TW(t, TDB_EVENTS) = 0;
@@ -715,7 +732,12 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     TW(t, TDB_PDB) = pdb;
     TW(t, TDB_DTA) = 0x80;
     TW(t, TDB_DTA + 2) = pdb;
-    save_dir(t);
+    if (cur_task && cur_task != dos_owner_task && TB(cur_task, TDB_DRIVE)) {
+        TB(t, TDB_DRIVE) = TB(cur_task, TDB_DRIVE);
+        kmemcpy(MK_FP(t, TDB_DIR), MK_FP(cur_task, TDB_DIR), TDB_DIRLEN);
+    } else {
+        save_dir(t);
+    }
     TW(t, TDB_LIBINIT) = libinit;
     TW(t, TDB_ALIAS) = alias;
     sig_default_set(t);
@@ -824,13 +846,12 @@ u16 task_boot(void)
     cur_task = t;
     cur_pdb = TW(t, TDB_PDB);
     thhook_sync();
-    set_psp(cur_pdb);
-    set_dta(t);
+    dos_owner_task = 0;
     int_vec_switch(t);
-    restore_dir(t, 0);
     in_sched = 0;
     task_switch((u16 FAR *)boot_sssp, TW(t, TDB_SSSP + 2), TW(t, TDB_SSSP));
     /* back here when the last task has ended */
+    dos_owner_task = 0;
     set_psp(psp_sel);
     return last_exit;
 }
@@ -898,6 +919,14 @@ void __cdecl task_exit_c(u16 code)
         module_end_instance(m, x->dg_hnd, x->dg_sel);
     in_sched = 0;
     cur_task = 0;
+    if (dos_owner_task == t) {
+        dos_owner_task = 0;
+    } else if (dos_owner_task) {
+        dos_nosync++;
+        save_dir(dos_owner_task);
+        dos_nosync--;
+        dos_owner_task = 0;
+    }
     set_psp(psp_sel);
     cur_pdb = 0;
     thhook_sync();                      /* (no freed TDB in THHOOK while
@@ -1009,8 +1038,16 @@ void __cdecl inittask_c(regs16 FAR *r)
 
 void kernel_psp(int on)
 {
-    if (cur_pdb && cur_pdb != psp_sel)
-        set_psp(on ? psp_sel : cur_pdb);
+    if (on) {
+        dos_nosync++;
+        if (kpsp_depth++ == 0 && dos_owner_task)
+            set_psp(psp_sel);
+    } else if (kpsp_depth) {
+        if (--kpsp_depth == 0 && dos_owner_task)
+            set_psp(TW(dos_owner_task, TDB_PDB));
+        if (dos_nosync)
+            dos_nosync--;
+    }
 }
 
 static u16 ss_now(void);
@@ -1294,6 +1331,7 @@ u16 task_boot_tdb(void)
     boot_tdb = t;
     cur_task = t;
     cur_pdb = psp_sel;
+    dos_owner_task = t;
     thhook_sync();          /* THHOOK's CurTDB is GetCurrentTask's (Schulman;
                                KERNEL audit, L19) */
     return t;
@@ -1304,6 +1342,8 @@ void task_boot_tdb_end(void)
     u16 t = boot_tdb;
     if (!t)
         return;
+    if (dos_owner_task == t)
+        dos_owner_task = 0;
     if (cur_task == t) {
         cur_task = 0;
         cur_pdb = 0;

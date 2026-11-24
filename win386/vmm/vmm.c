@@ -304,10 +304,11 @@ void vmm_flush_tlb(void)
     flush_tlb();
 }
 
-/* Map one page; flags: 1 present, 2 writable, 4 user. */
-int map_page(u32 lin, u32 phys, u32 flags)
+/* Map one page without flushing the TLB; flags: 1 present, 2 writable, 4 user.
+ * Returns 0 on failure, 1 if old PTE was not present, 2 if old PTE was present. */
+int map_page_noflush(u32 lin, u32 phys, u32 flags)
 {
-    u32 *pd = pdir(), *pt;
+    u32 *pd = pdir(), *pt, idx, old;
     u32 pde = pd[lin >> 22];
     if (!(pde & 1)) {
         u32 p = page_alloc();
@@ -316,9 +317,19 @@ int map_page(u32 lin, u32 phys, u32 flags)
         pd[lin >> 22] = pde;
     }
     pt = (u32 *)phys_to_lin(pde & ~0xFFFu);
-    pt[(lin >> 12) & 0x3FF] = phys ? ((phys & ~0xFFFu) | flags) : 0;
-    flush_tlb();
-    return 1;
+    idx = (lin >> 12) & 0x3FF;
+    old = pt[idx];
+    pt[idx] = phys ? ((phys & ~0xFFFu) | flags) : 0;
+    return (old & 1) ? 2 : 1;
+}
+
+/* Map one page; flags: 1 present, 2 writable, 4 user.
+ * Non-present -> present needs no TLB flush on x86. */
+int map_page(u32 lin, u32 phys, u32 flags)
+{
+    int r = map_page_noflush(lin, phys, flags);
+    if (r == 2) flush_tlb();
+    return r != 0;
 }
 
 /* Let ring 3 reach VMM memory (the LDT, for the vendor API's alias). */

@@ -431,13 +431,18 @@ static u32 ems_total_pages(struct mmvm *m)
 }
 
 /* frame page p (0-3) shows handle h's logical page l, or nothing (h < 0) */
-static void ems_map(struct vm *v, u32 p, s32 h, u32 l)
+static void ems_map_noflush(struct vm *v, u32 p, s32 h, u32 l)
 {
     struct mmvm *m = v->mm;
     u32 *pt = ptab(v), base = (info->ems_frame >> 8) + p * 4, k;
     for (k = 0; k < 4; k++)
         pt[base + k] = h < 0 ? m->frame_pte[p * 4 + k] : (m->eh[h].pg[l * 4 + k] | 7);
     m->map[p] = h < 0 ? -1 : (h << 16) | l;
+}
+
+static void ems_map(struct vm *v, u32 p, s32 h, u32 l)
+{
+    ems_map_noflush(v, p, h, l);
     if (v == cur_vm) vmm_flush_tlb();
 }
 
@@ -467,9 +472,13 @@ static int eh_resize(struct mmvm *m, struct eh *e, u32 nn)
 static void eh_unmap_from(struct vm *v, u32 h, u32 from)
 {
     u32 p;
+    int changed = 0;
     for (p = 0; p < 4; p++)
-        if (v->mm->map[p] >= 0 && (u32)v->mm->map[p] >> 16 == h && ((u32)v->mm->map[p] & 0xFFFF) >= from)
-            ems_map(v, p, -1, 0);
+        if (v->mm->map[p] >= 0 && (u32)v->mm->map[p] >> 16 == h && ((u32)v->mm->map[p] & 0xFFFF) >= from) {
+            ems_map_noflush(v, p, -1, 0);
+            changed = 1;
+        }
+    if (changed && v == cur_vm) vmm_flush_tlb();
 }
 
 #define EAH(r, v)   SETHI((r)->eax, (v))
@@ -542,8 +551,9 @@ int v86mm_ems(struct cregs *r)
         if ((e = eh_of(m, DX(r))) == NULL) { EAH(r, 0x83); return 1; }
         if (!e->saved) { EAH(r, 0x8E); return 1; }
         for (p = 0; p < 4; p++)
-            ems_map(v, p, e->save[p] < 0 || !eh_of(m, (u32)e->save[p] >> 16) ? -1 : (s32)((u32)e->save[p] >> 16),
+            ems_map_noflush(v, p, e->save[p] < 0 || !eh_of(m, (u32)e->save[p] >> 16) ? -1 : (s32)((u32)e->save[p] >> 16),
                     (u32)e->save[p] & 0xFFFF);
+        if (v == cur_vm) vmm_flush_tlb();
         e->saved = 0;
         EAH(r, 0);
         return 1;
@@ -583,14 +593,16 @@ int v86mm_ems(struct cregs *r)
             buf = (u8 *)v86_lin(r->ds, SI(r));
             for (p = 0; p < 4; p++) {
                 s32 x = *(s32 *)(buf + p * 4);
-                ems_map(v, p, x < 0 || !eh_of(m, (u32)x >> 16) || ((u32)x & 0xFFFF) >= m->eh[(u32)x >> 16].n
+                ems_map_noflush(v, p, x < 0 || !eh_of(m, (u32)x >> 16) || ((u32)x & 0xFFFF) >= m->eh[(u32)x >> 16].n
                         ? -1 : (s32)((u32)x >> 16), (u32)x & 0xFFFF);
             }
+            if (v == cur_vm) vmm_flush_tlb();
         }
         EAH(r, 0);
         return 1;
     }
-    case 0x50:                                          /* map several: DS:SI CX pairs */
+    case 0x50: {                                        /* map several: DS:SI CX pairs */
+        int changed = 0;
         if ((e = eh_of(m, DX(r))) == NULL) { EAH(r, 0x83); return 1; }
         if (al > 1) { EAH(r, 0x8F); return 1; }
         buf = (u8 *)v86_lin(r->ds, SI(r));
@@ -598,13 +610,15 @@ int v86mm_ems(struct cregs *r)
             l = *(u16 *)(buf + i * 4);
             p = *(u16 *)(buf + i * 4 + 2);
             if (al == 1) p = (p - info->ems_frame) >> 10;   /* a segment */
-            if (p > 3) { EAH(r, 0x8B); return 1; }
-            if (l == 0xFFFF) ems_map(v, p, -1, 0);
-            else if (l >= e->n) { EAH(r, 0x8A); return 1; }
-            else ems_map(v, p, DX(r), l);
+            if (p > 3) { if (changed && v == cur_vm) vmm_flush_tlb(); EAH(r, 0x8B); return 1; }
+            if (l == 0xFFFF) { ems_map_noflush(v, p, -1, 0); changed = 1; }
+            else if (l >= e->n) { if (changed && v == cur_vm) vmm_flush_tlb(); EAH(r, 0x8A); return 1; }
+            else { ems_map_noflush(v, p, DX(r), l); changed = 1; }
         }
+        if (changed && v == cur_vm) vmm_flush_tlb();
         EAH(r, 0);
         return 1;
+    }
     case 0x51: {                                        /* resize to BX pages */
         int err;
         if ((e = eh_of(m, DX(r))) == NULL) { EAH(r, 0x83); return 1; }

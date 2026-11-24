@@ -127,17 +127,72 @@ BOOL GDIAPI BitBlt(HDC hdc, int x, int y, int w, int h, HDC hsrc, int xs, int ys
     return TRUE;
 }
 
+/* stretch one 1bpp-per-plane scanline from src[sx..sx+sw) into dst[0..dw)
+   using exact nearest-neighbor DDA: floor((flipx ? dw-1-i : i) * sw / dw) */
+static void stretch_row_1bpp(BYTE __far *dst, int dw, const BYTE __far *src,
+                             int sx, int sw, int slim, int flipx)
+{
+    int xq = sw / dw, xr = sw % dw;
+    int pos, i, bi = 0, bit;
+    WORD acc;
+    if (!flipx) {
+        pos = 0;
+        acc = 0;
+        for (i = 0; i < dw; ) {
+            BYTE out = 0;
+            int lim = dw - i < 8 ? dw - i : 8;
+            for (bit = 0; bit < lim; bit++, i++) {
+                int sxi = sx + pos;
+                if (sxi >= 0 && sxi < slim) {
+                    if (src[sxi >> 3] & (0x80 >> (sxi & 7)))
+                        out |= (BYTE)(0x80 >> bit);
+                }
+                pos += xq;
+                acc += (WORD)xr;
+                if (acc >= (WORD)dw) {
+                    acc -= (WORD)dw;
+                    pos++;
+                }
+            }
+            dst[bi++] = out;
+        }
+    } else {
+        long num = (long)(dw - 1) * sw;
+        pos = (int)(num / dw);
+        acc = (WORD)(num % dw);
+        for (i = 0; i < dw; ) {
+            BYTE out = 0;
+            int lim = dw - i < 8 ? dw - i : 8;
+            for (bit = 0; bit < lim; bit++, i++) {
+                int sxi = sx + pos;
+                if (sxi >= 0 && sxi < slim) {
+                    if (src[sxi >> 3] & (0x80 >> (sxi & 7)))
+                        out |= (BYTE)(0x80 >> bit);
+                }
+                pos -= xq;
+                if (acc < (WORD)xr) {
+                    acc += (WORD)(dw - xr);
+                    pos--;
+                } else {
+                    acc -= (WORD)xr;
+                }
+            }
+            dst[bi++] = out;
+        }
+    }
+}
+
 /* StretchBlt with different sizes: VGA.DRV has no StretchBlt, so GDI
    stretches. UNVERIFIED: 3.1's sampling; here each destination pixel
    takes the source pixel at floor(i * src / dst), through a temporary
-   bitmap of the destination's format, then one BitBlt. */
+   bitmap of the source's format, then one BitBlt. */
 BOOL stretch_blt(LPDC dc, int dx, int dy, int dw, int dh, LPDC sdc, int sx, int sy,
                  int sw, int sh, DWORD rop)
 {
     DRVBITBLT fn = (DRVBITBLT)dc->dev->fn[DRV_BITBLT];
     DRAWMODE dm = sdc->dm;
     LPPBITMAP srcdev = sdc->lpPDevice, pt;
-    HBITMAP tmp;
+    HBITMAP tmp, rowbm = 0;
     DC t;
     int i, j, flipx = 0, flipy = 0;
     if (dw < 0) { dw = -dw; flipx = 1; }
@@ -155,6 +210,67 @@ BOOL stretch_blt(LPDC dc, int dx, int dy, int dw, int dh, LPDC sdc, int sx, int 
         return FALSE;
     pt = bm_pbitmap(tmp);
     dm.Rop2 = 13;
+    if (pt->bmBitsPixel == 1 && (pt->bmPlanes == 1 || pt->bmPlanes == 4)) {
+        int src_is_mem = srcdev->bmType == 0;
+        LPPBITMAP prow = 0;
+        int planes = pt->bmPlanes;
+        WORD dwb = pt->bmWidthBytes, swb = 0;
+        int slim = 0, shlim = 0, need_zero = 0;
+        int yq = sh / dh, yr = sh % dh, ypos = 0;
+        WORD yacc = 0;
+        int prev_syj = -1, prev_dj = -1;
+        if (src_is_mem) {
+            swb = srcdev->bmWidthBytes;
+            slim = srcdev->bmWidth;
+            shlim = srcdev->bmHeight;
+        } else {
+            rowbm = bm_create(sw, 1, planes, 1, 0, 0);
+            if (rowbm) {
+                prow = bm_pbitmap(rowbm);
+                swb = prow->bmWidthBytes;
+                slim = sw;
+                shlim = dc->dev->info.dpVertRes;
+                need_zero = sx < 0 || sx + sw > dc->dev->info.dpHorzRes;
+            }
+        }
+        if (src_is_mem || prow) {
+            for (j = 0; j < dh; j++) {
+                int dj = flipy ? dh - 1 - j : j;
+                int syj = sy + ypos;
+                if (syj == prev_syj && prev_dj >= 0) {
+                    mem_copy(bm_scan(pt, dj), bm_scan(pt, prev_dj), dwb * planes);
+                } else if (syj >= 0 && syj < shlim) {
+                    BYTE __far *sscan, __far *dscan;
+                    int p;
+                    if (src_is_mem) {
+                        sscan = bm_scan(srcdev, syj);
+                    } else {
+                        if (need_zero)
+                            mem_set(bm_scan(prow, 0), 0, swb * planes);
+                        fn(prow, 0, 0, srcdev, sx, syj, sw, 1, 0x00CC0020L, 0, &dm);
+                        prow = bm_pbitmap(rowbm);
+                        pt = bm_pbitmap(tmp);
+                        sscan = bm_scan(prow, 0);
+                    }
+                    dscan = bm_scan(pt, dj);
+                    for (p = 0; p < planes; p++)
+                        stretch_row_1bpp(dscan + p * dwb, dw, sscan + p * swb,
+                                         src_is_mem ? sx : 0, sw, slim, flipx);
+                    prev_syj = syj;
+                    prev_dj = dj;
+                }
+                ypos += yq;
+                yacc += (WORD)yr;
+                if (yacc >= (WORD)dh) {
+                    yacc -= (WORD)dh;
+                    ypos++;
+                }
+            }
+            if (rowbm)
+                bm_free(rowbm);
+            goto done;
+        }
+    }
     for (j = 0; j < dh; j++) {
         int syj = sy + (int)((long)(flipy ? dh - 1 - j : j) * sh / dh);
         for (i = 0; i < dw; i++) {
@@ -162,8 +278,9 @@ BOOL stretch_blt(LPDC dc, int dx, int dy, int dw, int dh, LPDC sdc, int sx, int 
             fn(pt, i, j, srcdev, sxi, syj, 1, 1, 0x00CC0020L, 0, &dm);
         }
     }
+done:
     t = *sdc;
-    t.lpPDevice = pt;
+    t.lpPDevice = bm_pbitmap(tmp);
     blt_out(dc, dx + dc->dcOrg.x, dy + dc->dcOrg.y, dw, dh, &t, 0, 0, rop);
     bm_free(tmp);
     return TRUE;

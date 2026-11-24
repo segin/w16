@@ -297,6 +297,7 @@ void edit_show_sel(HWND h);                 /* edit.c */
 extern HWND hwndFocusPending;                 /* input.c: SetFocus's window while it activates */
 void font_base(HFONT f, int *cx, int *cy);        /* dlg.c: a font's dialog base units */
 int  release_dc(HWND h, HDC hdc);
+void invalidate_dce_cache(void);
 HRGN visible_rgn(PWND w, BOOL client, BOOL clipchildren);
 void invalidate(HWND h, HRGN rgn, const RECT *rc, BOOL erase, BOOL children, BOOL nc);
 void validate_all(PWND w);

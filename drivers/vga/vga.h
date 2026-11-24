@@ -262,6 +262,13 @@ extern BYTE enabled;
 extern volatile BYTE busy;              /* drawing on the screen: no cursor */
 extern BYTE repaint_off;
 
+/* a read of the screen byte at p, which loads the VGA's four latches (for
+   write modes 0 with a bit mask, 1 and 3). Inline code, not a C read: the
+   compiler drops a C read whose value is unused, volatile or not, and the
+   write then takes whatever the latches held from an earlier read. */
+void vga_latch(const volatile BYTE __far *p);
+#pragma aux vga_latch = "mov al, es:[bx]" __parm [__es __bx] __modify [__al]
+
 /* entry.asm */
 void __cdecl __far int10(WORD ax, WORD bx, WORD cx, WORD dx);
 void __cdecl __far memcpyf(void __far *d, const void __far *s, WORD n);
@@ -296,6 +303,7 @@ extern const BYTE dib_to_index[16], index_to_dib[16];
 void pattern_planes(LPPBRUSH b, LPDRAWMODE dm, int mono, BYTE pat[4][8], BYTE *mask, BYTE *transp);
 void fill_rect(SURF *s, int x0, int y0, int x1, int y1, BYTE rop, LPPBRUSH b, LPDRAWMODE dm);
 void fill_solid(SURF *s, int x0, int y0, int x1, int y1, BYTE rop, int idx, int mono);
+void scr_fill_solid(int x0, int y0, int x1, int y1, int idx);
 void row_op(SURF *D, int y, int x0, int x1, BYTE rop, BYTE pat[4][8], int smask);
 
 /* cursor (cursor.c, entry.asm) */

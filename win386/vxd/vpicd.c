@@ -108,6 +108,8 @@ static vu32 sys_vm;
 static vu32 phys_isr;                   /* physically in service: masked until Phys_EOI */
 static vu32 dos_masks;                  /* the 8259s' masks before Windows */
 static int vm_ready;                    /* Sys_VM_Init done: the VM's PIC set up */
+static vu8 imr_master, imr_slave;       /* cached last-written 0x21 / 0xA1 IMR bytes */
+static int imr_valid;
 
 /* a VM's virtual PIC (in its control block) */
 #define NIRET 32
@@ -148,6 +150,9 @@ static void pic_program(vu32 b1, vu32 b2)
     outb(0x21, 4);    outb(0xA1, 2);        /* ICW3: slave on IRQ 2 */
     outb(0x21, 1);    outb(0xA1, 1);        /* ICW4: 8086 mode */
     outb(0x21, m1);   outb(0xA1, m2);
+    imr_master = (vu8)m1;
+    imr_slave = (vu8)m2;
+    imr_valid = 1;
 }
 
 /* a specific EOI for irq (and the cascade for the slave's) */
@@ -192,8 +197,12 @@ static void phys_update(void)
         else on = ((vm_ready ? vp->imr : dos_masks) >> irq) & 1;
         if (on) m |= 1u << irq;
     }
-    outb(0x21, m & 0xFF);
-    outb(0xA1, (m >> 8) & 0xFF);
+    {
+        vu8 m1 = (vu8)(m & 0xFF), m2 = (vu8)((m >> 8) & 0xFF);
+        if (!imr_valid || m1 != imr_master) { outb(0x21, m1); imr_master = m1; }
+        if (!imr_valid || m2 != imr_slave)  { outb(0xA1, m2); imr_slave = m2; }
+        imr_valid = 1;
+    }
 }
 
 /* the VM's vector for an IRQ (its ICW2 bases; DPMI 0400h reports 08h/70h) */
@@ -796,6 +805,7 @@ void __cdecl vpicd_control(struct vregs *r)
         pic_program(vpicd_link.rm_base1, vpicd_link.rm_base2);
         outb(0x21, VP(sys_vm)->imr & 0xFF);
         outb(0xA1, (VP(sys_vm)->imr >> 8) & 0xFF);
+        imr_valid = 0;
         break;
     }
 }

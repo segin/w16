@@ -36,6 +36,8 @@ extern _inittask_c              ; void __cdecl __far inittask_c(regs16 __far *)
 extern kexit_to_dos_            ; void __far kexit_to_dos(u8 code), AX = code
 extern _task_exit_c             ; void __cdecl __far task_exit_c(u16 code)
 extern _cur_task, _cur_pdb      ; task.c: the running task and its PDB
+extern _dos_owner_task, _dos_nosync ; task.c: lazy DOS context state
+extern _sync_dos_context        ; task.c: void __cdecl __far sync_dos_context(void)
 extern _int_vec_cur             ; task.c: the vectors installed (TDB 32h)
 extern _dos_exit_note           ; fault.c
 extern _task_signal_exit        ; task.c
@@ -224,6 +226,7 @@ cdr_none:
         pop ax
         pop ds
 .chain:
+        call sync_dos_if_needed
         sub sp, 4                       ; room for the far jump target
         push bp
         mov bp, sp
@@ -239,6 +242,43 @@ cdr_none:
         pop ds
         pop bp
         retf                            ; to the old handler; IRET frame intact
+
+; Ensure DOS's PSP/DTA/CWD matches _cur_task before chaining to _old21.
+; Preserves all registers and flags.
+sync_dos_if_needed:
+        pushf
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        cmp byte [_dos_nosync wrt DGROUP], 0
+        jne .done
+        mov ax, [_cur_task wrt DGROUP]
+        or ax, ax
+        jz .done
+        cmp ax, [_dos_owner_task wrt DGROUP]
+        je .done
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        push bp
+        push es
+        cld
+        call far _sync_dos_context
+        pop es
+        pop bp
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+.done:
+        pop ax
+        pop ds
+        popf
+        ret
 
 ; With a FileCdr callback installed (kmisc.c): the calls that change the
 ; file system (observed on 3.1, TK64: 39h, 3Ah, 3Ch, 41h, 4301h, 56h, 5Ah,
@@ -275,6 +315,7 @@ cdr_check:
         jne .dos
         mov [bp-6], si
 .dos:
+        call sync_dos_if_needed
         ; INT 21h to the previous handler: an IRET frame back to .back
         push word [bp+6]
         push cs
@@ -628,6 +669,7 @@ DOS3CALL:
 ; registers, through an IRET frame back to here. UNVERIFIED.
 global NOHOOKDOSCALL
 NOHOOKDOSCALL:
+        call sync_dos_if_needed
         pushf
         push cs
         push word .back
