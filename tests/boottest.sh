@@ -164,6 +164,12 @@
 #              give the same log as under Microsoft's WIN386
 #   win386memload  w16's WIN386: MEMLOAD's XMS and EMS workloads, XMS 3.0 calls
 #              and three boxes at once, as under Microsoft's WIN386
+#   win386mcb  the DOS memory arena in a DOS box (MCBCHK.EXE, tests/
+#              mcbrun.sh): the UMB link's MCB at 9FFFh, UMBs linked, high
+#              and low first allocations, the chain walked; on DOSBox-X's
+#              and DOSBox's own DOS, w16's WIN386 on 3.1 and the tree alone
+#              against Microsoft's WIN386 (w16 lost the 9FFFh MCB and
+#              DOSBox-X stopped with "Corrupt MCB chain")
 #   win386pifwin  plain DOSBox, the tree alone, WIN /3: a PIF that starts
 #              its program windowed (made at run time with tools/mkpif.py),
 #              then VER typed: the window shows the text (not black), as
@@ -969,7 +975,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload vsd vdmad bigmem filecdr}
+cases=${*:-kernel dosx dosxaudit kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1970,6 +1976,32 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386memload: XMS, EMS, XMS 3.0 and three boxes at once as under Microsoft's WIN386; KB/s$rates"
         else echo "FAIL win386memload: $r"; fails=$((fails + 1)); fi ;;
+    win386mcb)
+        # the user's report (2026-11-23): Norton Utilities' NCC.EXE in a
+        # DOS box under w16's WIN386 on DOSBox-X ended the emulator with
+        # "Corrupt MCB chain": a new VM's private pages started as zeros,
+        # so the MCB after the free arena (9FFFh, the UMB link) was gone
+        # (win386/vmm/vm.c). MCBCHK (tests/dos/mcbchk.c) must pass and
+        # its log (but for the INFO lines) equal Microsoft's WIN386's, on
+        # DOSBox-X and plain DOSBox; also on w16's tree alone (DOSBox-X)
+        r=ok
+        for e in x dosbox; do
+            refrun win386mcb-ref$e win386mcb \
+                sh "$root/tests/mcbrun.sh" "$out/win386mcb-ref$e" ms $e "$root/build/dos/MCBCHK.EXE" "$root/tests/mcbrun.sh" &
+            sh "$root/tests/mcbrun.sh" "$out/win386mcb-w16$e" w16 $e > "$out/win386mcb-w16$e.txt" 2>&1 &
+        done
+        sh "$root/tests/mcbrun.sh" "$out/win386mcb-tree" tree x > "$out/win386mcb-tree.txt" 2>&1 &
+        wait
+        for k in w16x:refx w16dosbox:refdosbox tree:refx; do
+            a=$out/win386mcb-${k#*:}/MCA.LOG b=$out/win386mcb-${k%:*}/MCA.LOG
+            grep -q '^MCBCHK end, 0 failures' "$a" 2>/dev/null || { r="${k#*:}: the reference did not pass ($a)"; break; }
+            grep -q '^MCBCHK end, 0 failures' "$b" 2>/dev/null || { r="${k%:*}: w16's did not pass ($b; DOSBox-X: $(grep -i 'mcb chain' "$out/win386mcb-${k%:*}/emu.log" 2>/dev/null | head -1))"; break; }
+            grep -v '^INFO' "$a" > "$out/win386mcb-a.txt"
+            grep -v '^INFO' "$b" > "$out/win386mcb-b.txt"
+            cmp -s "$out/win386mcb-a.txt" "$out/win386mcb-b.txt" || { r="${k%:*}: the logs differ (diff $a $b)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386mcb: the MCB chain, UMB link and strategies in a DOS box as under Microsoft's WIN386 (DOSBox-X, DOSBox, the tree)"
+        else echo "FAIL win386mcb: $r"; fails=$((fails + 1)); fi ;;
     cmdprompt)
         # Main's first item runs CMD.PIF (assets/CMD.PIF: COMMAND.COM,
         # windowed in 386 Enhanced mode; Standard mode's WINOLDAP reads its

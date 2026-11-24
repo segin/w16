@@ -329,6 +329,59 @@ static void dma_setup(struct w386_info *in)
     in->dma_buf_seg = seg;
 }
 
+/* ---- upper memory ----
+ * Windows 3.1's WIN386 takes every free upper memory block for itself
+ * before Windows starts: in a DOS box under it (MCBCHK, tests/mcbrun.sh,
+ * DOSBox-X's own DOS) the free UMB was owned by WIN386's PSP and a
+ * high-first allocation got conventional memory. The pages above A0000h
+ * are the same in every VM, so a block one box took there would be every
+ * other box's too. Here: the UMBs linked, strategy high only (40h), the
+ * largest block taken until none is left, the strategy and link put
+ * back; DOS frees them when this program ends. A DOS without UMBs (or
+ * without 5802h/5803h, as MS-DOS 4.00) is left alone. UNVERIFIED what
+ * 3.1 does with them. */
+static void take_umbs(void)
+{
+    union REGS r;
+    unsigned strat, link, n, sz;
+    r.x.ax = 0x5800;
+    intdos(&r, &r);
+    if (r.x.cflag) return;
+    strat = r.x.ax;
+    r.x.ax = 0x5802;
+    intdos(&r, &r);
+    if (r.x.cflag) return;
+    link = r.h.al & 1;
+    r.x.ax = 0x5803; r.x.bx = 1;
+    intdos(&r, &r);
+    if (r.x.cflag) return;
+    r.x.ax = 0x5801; r.x.bx = 0x40;
+    intdos(&r, &r);
+    if (!r.x.cflag) {
+        for (n = 0; n < 64; n++) {
+            r.h.ah = 0x48; r.x.bx = 0xFFFF;
+            intdos(&r, &r);
+            if (!r.x.cflag || !r.x.bx) break;
+            sz = r.x.bx;
+            r.h.ah = 0x48; r.x.bx = sz;
+            intdos(&r, &r);
+            if (r.x.cflag) break;
+            if (r.x.ax < 0xA000) {      /* not upper memory after all */
+                struct SREGS sr;
+                segread(&sr);
+                sr.es = r.x.ax;
+                r.h.ah = 0x49;
+                intdosx(&r, &r, &sr);
+                break;
+            }
+        }
+    }
+    r.x.ax = 0x5801; r.x.bx = strat;
+    intdos(&r, &r);
+    r.x.ax = 0x5803; r.x.bx = link;
+    intdos(&r, &r);
+}
+
 /* ---- the VMM image ---- */
 #define PAGE 4096UL
 
@@ -982,6 +1035,7 @@ int main(int argc, char **argv)
     /* a DOS VM's memory starts after this program's block (its MCB is the
      * paragraph before the PSP; the size at MCB+3), up to the BIOS's
      * memory size (40:13h, KB) */
+    take_umbs();
     info.free_mcb = _psp + *(unsigned __far *)MK_FP(_psp - 1, 3);
     info.mem_top = *(unsigned __far *)MK_FP(0x40, 0x13) * 64;
     info.vmstub_off = vm_stub_off();

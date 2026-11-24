@@ -73,6 +73,10 @@ static struct irange irng[8];
 static u32 n_irng, inst_size;
 static u8 *inst_snap;                   /* as at Windows' start */
 static u32 priv_start, priv_end;        /* the private pages (linear, 4 KB aligned) */
+/* what follows the free arena in the private pages, as at Windows' start:
+ * the MCB that links the upper memory blocks (9FFFh where DOS has UMBs) */
+static u8 *tail_snap;
+static u32 tail_lin, tail_size;
 
 static void add_range(u32 lin, u32 len)
 {
@@ -165,13 +169,28 @@ void vm_snapshot(void)
         priv_end = top & ~0xFFFu;
         add_range(mcb, priv_start - mcb);
         if (top > priv_end) add_range(priv_end, top - priv_end);
+        /* a new VM's private pages start as zeros, but the free arena
+         * need not reach the top of memory: where DOS has UMBs the arena
+         * ends a paragraph short, at the MCB that links them (owner 8,
+         * "SC", reaching past A000h). Without it DOS (DOSBox-X's and
+         * DOSBox's own) ran into zeros there, merged them into the arena
+         * and stopped with "Corrupt MCB chain" at the first resize or UMB
+         * link; under Windows 3.1 a box sees it as before Windows
+         * (tests/mcbrun.sh) */
+        tail_lin = mcb + 0x10 + ((u32)*(u16 *)(mcb + 3) << 4);
+        if (tail_lin >= priv_start && tail_lin < priv_end) {
+            tail_size = priv_end - tail_lin;
+            tail_snap = kmalloc(tail_size);
+            if (tail_snap) memcpy(tail_snap, (void *)tail_lin, tail_size);
+            else tail_size = 0;
+        }
     }
     inst_snap = kmalloc(inst_size);
     sysvm.inst = kmalloc(inst_size);
     if (!inst_snap || !sysvm.inst) panic("no memory for the instance data");
     inst_copy(inst_snap, 1);
-    trace("VMM: instance data %d bytes in %d ranges, DOS VM memory %x-%x (MCB %x)\n",
-          inst_size, n_irng, priv_start, priv_end, info->free_mcb);
+    trace("VMM: instance data %d bytes in %d ranges, DOS VM memory %x-%x (MCB %x, %d bytes after its arena)\n",
+          inst_size, n_irng, priv_start, priv_end, info->free_mcb, tail_size);
 }
 
 /* ---- the VM list ---- */
@@ -271,6 +290,7 @@ struct vm *vm_create(void)
     v->cb->vmid = id;
     v->cb->vm = v;
     memcpy(inst, inst_snap, inst_size);
+    if (tail_size) memcpy((void *)(HIGH_LIN(id) + tail_lin), tail_snap, tail_size);
     v->prio_fg = 100;
     v->prio_bg = 50;
     v->exclusive = v->background = 0;

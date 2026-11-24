@@ -354,7 +354,14 @@ prints its log of XMS and INT 67h results (`V86MM_PIF` the PIF's limits,
 (ARCHITECTURE.md 12.13). `tests/memloadrun.sh OUTDIR MODE [w16]` runs
 MEMLOAD.EXE's workloads (x XMS, e EMS, 3 XMS 3.0 and UMBs, c three boxes
 at once) and prints their logs; the case `win386memload` compares them
-with Microsoft's WIN386.
+with Microsoft's WIN386. The DOS memory arena in a box:
+`tests/mcbrun.sh OUTDIR MODE [x|dosbox]` runs MCBCHK.EXE (the chain
+walked, the MCB that links the UMBs, UMBs linked, high- and low-first
+allocations) without Windows (`plain`), under Microsoft's WIN386 (`ms`),
+w16's (`w16`) or on w16's tree alone (`tree`), in DOSBox-X or plain DOSBox,
+and prints its log and DOSBox-X's MCB messages; `MCBRUN_PROG=DIR:PROG`
+runs a program of your own in the box instead. The case `win386mcb`
+compares the logs with Microsoft's WIN386.
 
 ## 5. Running on a remote host
 
