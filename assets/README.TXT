@@ -43,7 +43,7 @@ is newer. Neither mode needs anything of Microsoft's.
                           on the desktop): switch to, close, cascade or
                           tile the programs' windows, arrange icons
   VMTASK.EXE              the VM Task Manager (w16's own; Windows 3.1
-                          has nothing like it, in Accessories): in 386
+                          has nothing like it; in Main): in 386
                           Enhanced mode, how the processor's time is
                           shared between w16 and each DOS program's
                           virtual machine, and between the programs
@@ -187,16 +187,17 @@ is newer. Neither mode needs anything of Microsoft's.
   PROGMAN.INI             Program Manager's settings and its groups:
   MAIN.GRP                  Main (Command Prompt, Read Me, Control
                             Panel, File Manager, Registry Editor, PIF
-                            Editor)
+                            Editor, VM Task Manager)
   ACCESSOR.GRP              Accessories (Notepad, Cardfile, Calculator,
                             Clock)
   STARTUP.GRP               StartUp (empty)
 
-Main differs from Windows 3.1's on purpose: its prompt is called "DOS
-Prompt" (3.1: "MS-DOS Prompt"), and it has the Registry Editor
-(REGEDIT.EXE), which 3.1 puts in no group. For 3.1's Main, select the
-Registry Editor item and press Del, and rename the prompt with File >
-Properties; Program Manager keeps the change in MAIN.GRP.
+Main differs from Windows 3.1's on purpose: its prompt is called
+"Command Prompt" (3.1: "MS-DOS Prompt"), and it has the Registry Editor
+(REGEDIT.EXE), which 3.1 puts in no group, and the VM Task Manager
+(VMTASK.EXE), which 3.1 does not have. For 3.1's Main, select those
+items and press Del, and rename the prompt with File > Properties;
+Program Manager keeps the change in MAIN.GRP.
 
 This directory is meant to be C:\W16: PROGMAN.INI names the group files
 as C:\W16\MAIN.GRP and so on. Installed elsewhere, change the [Groups]

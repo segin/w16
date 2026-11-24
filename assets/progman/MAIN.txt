@@ -17,7 +17,10 @@
 # group, is the fifth item, "Registry Editor". The PIF Editor
 # (PIFEDIT.EXE, its own icon; ARCHITECTURE.md 15.11) follows it as
 # "PIF Editor", the title 3.1's Setup gives it in its Main group (there
-# the seventh item, after Windows Setup). Commands
+# the seventh item, after Windows Setup). w16's own VM Task Manager
+# (VMTASK.EXE, its own icon; ARCHITECTURE.md 15.12), which 3.1 does not
+# have, is the seventh item, "VM Task Manager" (the user's decision,
+# 2026-11-23; it was the last of Accessories before). Commands
 # and icon files are bare names, found in the w16 directory (or on the
 # PATH), as Setup writes them.
 file MAIN.GRP
@@ -31,3 +34,4 @@ item Control Panel | CONTROL.EXE | CONTROL.EXE
 item File Manager | WINFILE.EXE | WINFILE.EXE
 item Registry Editor | REGEDIT.EXE | REGEDIT.EXE
 item PIF Editor | PIFEDIT.EXE | PIFEDIT.EXE
+item VM Task Manager | VMTASK.EXE | VMTASK.EXE
