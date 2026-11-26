@@ -55,6 +55,8 @@ void calc_client(PWND w)
      bottom while hidden and then shown: w16 left it under the frame);
    - a window brought to the top has the windows it owns put above it,
      in their order. */
+static BOOL max_client_rule;     /* ShowWindow's maximise: WM_SIZE by the client size */
+
 static void owner_order(PWND w, HWND after)
 {
     PWND d = PW(hwndDesktop);
@@ -118,6 +120,8 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     BOOL wasvis, nowvis, changed, send_changed, restored = FALSE, zmoved = FALSE;
     HRGN above = 0;             /* what covered it before it came up */
     int px = 0, py = 0;
+    BOOL client_rule = max_client_rule;     /* (this call's only) */
+    max_client_rule = FALSE;
     if (!w || h == hwndDesktop)
         return FALSE;
     parent = PW(w->hwndParent);
@@ -289,11 +293,15 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         if (oldwin.left == w->rcWindow.left && oldwin.top == w->rcWindow.top &&
             oldcli.left == w->rcClient.left && oldcli.top == w->rcClient.top)
             wp.flags |= SWP_NOMOVE;
-        /* (the client area's size decides: TK75 "all0 sv showmax" on 3.1,
-           an MDI child maximised in a 0 x 0 client went from 102 x 26 to
-           102 x 27, its client area 94 x 0 both times, and got no WM_SIZE,
-           so its client did not count it maximised yet) */
-        if (oldcli.right - oldcli.left == w->rcClient.right - w->rcClient.left &&
+        /* (when ShowWindow maximises, the client area's size alone
+           decides: TK75 "all0 sv showmax" on 3.1, an MDI child maximised
+           in a 0 x 0 client went from 102 x 26 to 102 x 27, its client
+           area 94 x 0 both times, and got no WM_SIZE, so its client did
+           not count it maximised yet; elsewhere a new window size with
+           the same client area does get one: US34's 2-pixel lists) */
+        if ((client_rule || (oldwin.right - oldwin.left == wp.cx &&
+                                 oldwin.bottom - oldwin.top == wp.cy)) &&
+            oldcli.right - oldcli.left == w->rcClient.right - w->rcClient.left &&
             oldcli.bottom - oldcli.top == w->rcClient.bottom - w->rcClient.top)
             wp.flags |= SWP_NOSIZE;
     }
@@ -754,6 +762,7 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             if (!(w = valid_wnd(h)))        /* (USER audit, sweep) */
                 return wasvis;
             sized = w->rcWindow;
+            max_client_rule = TRUE;     /* (for this call alone) */
             set_window_pos(h, 0, mm.ptMaxPosition.x, mm.ptMaxPosition.y,
                            mm.ptMaxSize.x, mm.ptMaxSize.y, SWP_NOZORDER | SWP_FRAMECHANGED |
                            (max_hidden ? SWP_NOACTIVATE : SWP_SHOWWINDOW));

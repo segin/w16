@@ -113,6 +113,15 @@ Microsoft's VGA.DRV faults in DISPLAY (DS 0) at StarWriter's start: not
 looked into. Microsoft's VGA.DRV draws a solid gray brush as black in a
 colour -> mono BitBlt with a pattern ROP (GD14, unchecked case).
 
+Boot test (2026-11-26, this branch): 171 ok; holdbtn, lzexpand, swapesc
+and vdmad fail on master 5a637f5 as well; scrnsave passed on a rerun;
+win386tree's 04-back fails with this branch's KRNL386 and passes with
+master's. It is not the trace code: master's KERNEL with only an unused
+function of about 100 bytes added to thunk.c (_TEXT) fails the same
+way, so some KERNEL/WIN386 path depends on where code lands in KERNEL's
+_TEXT (Microsoft's WIN386 run, "ref" in the case: after EXIT from the
+full-screen box the DOS screen stays). Not looked into further.
+
 Hand runs (installation-05): /mnt/build/w16-staroff/so3/run.sh tree|ref
 NAME PROG [dropin opts] (run dir /mnt/build/w16-runs/w16-staroff3b; MS=GDI.EXE,USER.EXE
 swaps Microsoft's modules into the tree; SECS, SHOTS); results in so3/out/NAME.
