@@ -282,6 +282,19 @@ u32 page_alloc_run(u32 n, u32 align, u32 max_phys)
     return first;
 }
 
+/* n contiguous pages whose first one's physical address is phase modulo
+ * 64 KB (the never-used pages before it go to the free list) */
+u32 page_alloc_run_phase(u32 n, u32 phase)
+{
+    u32 i;
+    for (i = 0; i < 16 && ((info->xms_phys + next_page) & 0xFFFF) != (phase & 0xF000); i++) {
+        u32 p = page_alloc_run(1, 0, 0);
+        if (!p) return 0;
+        page_free(p);
+    }
+    return page_alloc_run(n, 0, 0);
+}
+
 void page_free(u32 phys)
 {
     *(u32 *)phys_to_lin(phys) = free_list;

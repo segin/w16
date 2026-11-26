@@ -191,6 +191,7 @@ void *kmalloc(u32 size);
 void kfree(void *p);
 u32 page_alloc(void);               /* a physical page, zeroed; 0 if none */
 u32 page_alloc_run(u32 n, u32 align, u32 max_phys);    /* contiguous pages, or 0 */
+u32 page_alloc_run_phase(u32 n, u32 phase);           /* the same, the first at phase mod 64 KB */
 u32 pages_free(void);
 u32 v86mm_pages(struct vm *v);      /* v86mmgr.c: a VM's pages beyond its first MB */
 void page_free(u32 phys);
