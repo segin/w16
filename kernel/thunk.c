@@ -182,10 +182,10 @@ void where(u16 sel);             /* fault.c */
    SYSTEM.INI [w16] trace=MOD.ORD,MOD.ORD,... makes the loader bind those
    imports to trace thunks: each call is recorded (thunk, caller CS:IP,
    AX, BX, CX, DX, SI, DI and the first 6 stack words above the return
-   address)
+   address, DS)
    in a ring the fault and watchdog reports print. */
 #define TR_N 400
-typedef struct trrec { u16 idx, ip, cs, ax, bx, cx, dx, si, di, arg[6], rax, rdx, ret; } trrec;
+typedef struct trrec { u16 idx, ip, cs, ax, bx, cx, dx, si, di, ds, arg[6], rax, rdx, ret; } trrec;
 static trrec trring[TR_N];
 static u16 trpos, trcount;
 
@@ -250,6 +250,7 @@ u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
     r->dx = dx;
     r->si = frame[-9];                  /* trace_entry's saved SI and DI */
     r->di = frame[-10];
+    r->ds = frame[-11];
     /* only the words the stack segment holds (a call near the top of
        its stack faulted here: KERNEL audit, medium 14) */
     for (i = 0; i < 6; i++)
@@ -304,6 +305,7 @@ void trace_print(void)
         kputs(" dx="); kputhex(r->dx);
         kputs(" si="); kputhex(r->si);
         kputs(" di="); kputhex(r->di);
+        kputs(" ds="); kputhex(r->ds);
         kputs(" args");
         for (j = 0; j < 6; j++) {
             kputs(" ");

@@ -623,7 +623,7 @@ static void linit1(const char *pfx, WORD start, WORD end, DWORD bytes)
 static void lgrow(const char *pfx, WORD flags)
 {
     static char nm[48];
-    HGLOBAL g = GlobalAlloc(flags | GMEM_ZEROINIT, 0x400);
+    HGLOBAL g = GlobalAlloc((flags & ~0x8000) | GMEM_ZEROINIT, 0x400);
     WORD seg, n = 0, i, k;
     while (pfx[n]) {
         nm[n] = pfx[n];
@@ -633,6 +633,13 @@ static void lgrow(const char *pfx, WORD flags)
         return;
     seg = SELECTOROF(GlobalLock(g));
     note(pfx);
+    if (flags & 0x8000) {
+        /* wired (GlobalWire, as Microsoft's USER does its data segment),
+           with blocks allocated after it in the way */
+        GlobalWire(g);
+        for (i = 0; i < 8; i++)
+            GlobalAlloc(GMEM_FIXED, 0x100);
+    }
     lstrcpy(nm + n, "init");
     obs(nm, LocalInit(seg, 0x10, 0x3FF) != 0);
     for (i = 0; i < 100; i++)
@@ -715,6 +722,7 @@ static void linit(void)
     linit1("linit end=size: ", 0x22, 0x1000, 0x1000);
     linit1("linit end>size: ", 0x22, 0x1001, 0x1000);
     lgrow("linit grow moveable: ", GMEM_MOVEABLE);
+    lgrow("linit grow wired: ", GMEM_MOVEABLE | 0x8000);
     lpat();
 }
 

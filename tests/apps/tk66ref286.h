@@ -8,3 +8,4 @@
 { "sels: conf DStoCS rights", 0x00FB },
 { "linit grow moveable: size", 0x0FFF },
 { "linit pattern: size", 0x0FFF },
+{ "linit grow wired: size", 0x0FFF },

@@ -2008,6 +2008,30 @@ u16 KAPI GlobalReAlloc(u16 h, u32 size, u16 flags)            /* KERNEL.16 */
     return h;
 }
 
+/* A local heap's growth (local.c grow): the segment may move even while
+   it is locked, wired (GlobalWire) or fixed by GlobalFix; its selector
+   stays. Observed on Windows 3.1 (TK66I "linit grow wired", KRNL286 and
+   KRNL386, Standard and 386 Enhanced mode): a heap in a wired 400h-byte
+   block with blocks allocated after it grows to 64K. Microsoft's USER
+   wires its data segment: w16 could not grow USER's heap past its 8K,
+   and after some 60 windows CreateWindow failed ("System resources
+   exhausted" under StarOffice). */
+u16 global_grow_heap(u16 h, u32 size)
+{
+    aid a;
+    u8 hold;
+    u16 r;
+    if (find(h, &a) != FB_BLOCK)
+        return 0;
+    hold = AR(a)->count;
+    AR(a)->count = 0;
+    r = GlobalReAlloc(h, size, GMEM_MOVEABLE);
+    /* (the block's arena may have moved: find it again) */
+    if (find(h, &a) == FB_BLOCK)
+        AR(a)->count = hold;
+    return r;
+}
+
 u16 KAPI GlobalFree(u16 h)                                    /* KERNEL.17 */
 {
     aid a;

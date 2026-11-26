@@ -511,7 +511,7 @@ static int grow(const lheap *hp, u16 need)
     p = a_prev(hp, last);
     if (!(a_flags(hp, p) & LA_BUSY))
         room += last - p;
-    if (size <= old || nl <= last || room < need || !GlobalReAlloc(h, size, 0))
+    if (size <= old || nl <= last || room < need || !global_grow_heap(h, size))
         return 0;
     /* the heap ends at the segment's end, which is what GlobalSize says
        (KRNL286 gives 10h more than asked) */

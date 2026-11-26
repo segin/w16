@@ -160,6 +160,7 @@ void KAPI FarSetOwner(u16 h, u16 owner);
 int  gset_code(u16 sel);                    /* make a block executable */
 u32  gsize_of_sel(u16 sel);
 u16  KAPI GlobalReAlloc(u16 h, u32 size, u16 flags);
+u16  global_grow_heap(u16 h, u32 size);   /* global.c: a local heap grows */
 u16  KAPI GlobalFree(u16 h);
 u32  KAPI GlobalSize(u16 h);
 u32  KAPI_ES GlobalHandle(u16 sel);
