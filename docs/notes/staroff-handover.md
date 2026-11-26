@@ -106,6 +106,16 @@ groups (tools/mkgrp.py / tests/grpref.py read .GRP files). Note SVT312MW
 imports DDEML: Setup likely talks to PROGMAN through DDEML, so
 tests/ddemlscen.sh and tests/ddescenario.sh are the places to add a case.
 
+2026-11-26 (staroff-mdi2): the commands Setup's SETUP.INF [PROGMAN]
+section implies (CreateGroup "StarOffice 3.1" and "Autostart", AddItem
+of its six programs, CreateGroup of an existing group, requests) are
+tests/scripts/dde/staroff.txt, part `staroff` of boot-test case
+ddescen: w16's Program Manager answers them and writes the same .GRP
+files and PROGMAN.INI as Microsoft's. So the commands themselves work;
+what is left to find is Setup's own path (DDEML connection, the
+command strings it really builds, whether it reaches that step at all
+on w16): reproduce Setup itself as above.
+
 ### Bug 4: the OS/2 programs on the CD
 
 D:\ENGLISH\PROD_OS2\SETUP.EXE and D:\CSERVE.OS2\SETUP.EXE are LX files.
