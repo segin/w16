@@ -1662,6 +1662,14 @@ u16 KAPI WinExec(const char FAR *cmd, u16 show)                /* KERNEL.166 */
     while (cmd[n])
         if (++n > 0xFF)
             return 0;
+    {
+        extern u16 __cdecl i21_log;     /* [w16] int21log: the command too */
+        if (i21_log) {
+            kdbg_file("WinExec \"");
+            kdbg_file(cmd);
+            kdbg_file("\"\r\n");
+        }
+    }
     n = 0;
     while (cmd[i] == ' ')
         i++;
@@ -1713,8 +1721,8 @@ u16 KAPI FreeModule(u16 h)                                     /* KERNEL.46 */
 }
 
 /* Observed: "C:\WINDOWS" and "C:\WINDOWS\SYSTEM" (no trailing backslash).
-   UNVERIFIED: the result when the buffer is too small (the documented
-   behaviour, the size needed, is used). */
+   A buffer too small for the path and its NUL (0 up to the length):
+   the length + 1 and the buffer untouched (TK69, 386 Enhanced mode). */
 static u16 copy_dir(const char *dir, char FAR *buf, u16 n)
 {
     u16 len = kstrlen(dir), i;

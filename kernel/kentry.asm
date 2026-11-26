@@ -227,6 +227,19 @@ cdr_none:
         pop ds
 .chain:
         call sync_dos_if_needed
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        cmp word [_i21_log wrt DGROUP], 0
+        je .nolog
+        cmp word [_i21_in wrt DGROUP], 0
+        jne .nolog
+        pop ax
+        pop ds
+        jmp i21_logcall
+.nolog: pop ax
+        pop ds
         sub sp, 4                       ; room for the far jump target
         push bp
         mov bp, sp
@@ -242,6 +255,82 @@ cdr_none:
         pop ds
         pop bp
         retf                            ; to the old handler; IRET frame intact
+
+; [w16] int21log=1 (a debugging aid): the call goes to DOS from here and
+; i21_note (fault.c) writes the registers before and after it to the
+; debuglog, in the caller's task and on its stack; the caller gets DOS's
+; registers and arithmetic flags. i21_note's own INT 21h calls (the log
+; file) are not logged.
+extern _i21_note                ; void __cdecl i21_note(u16 far *in, u16 far *out)
+i21_logcall:
+        push bp
+        mov bp, sp                      ; [bp+2] IP, [bp+4] CS, [bp+6] FLAGS
+        push es                         ; [bp-2] .. [bp-16]: the call
+        push ds
+        push di
+        push si
+        push dx
+        push cx
+        push bx
+        push ax
+        push word [bp+6]                ; an IRET frame back to .back
+        push cs
+        push .back
+        sub sp, 4
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        mov ax, [_old21 wrt DGROUP]
+        mov [bp+2], ax
+        mov ax, [_old21+2 wrt DGROUP]
+        mov [bp+4], ax
+        pop ax
+        pop ds
+        pop bp
+        retf
+.back:
+        pushf                           ; [bp-18] .. [bp-34]: DOS's answer
+        push es
+        push ds
+        push di
+        push si
+        push dx
+        push cx
+        push bx
+        push ax
+        mov ax, sp
+        mov bx, DGROUP
+        mov ds, bx
+        mov word [_i21_in wrt DGROUP], 1
+        push ss
+        push ax
+        lea ax, [bp-16]
+        push ss
+        push ax
+        cld
+        call far _i21_note
+        add sp, 8
+        mov word [_i21_in wrt DGROUP], 0
+        pop ax
+        pop bx
+        pop cx
+        pop dx
+        pop si
+        pop di
+        pop ds
+        pop es
+        push ax
+        mov ax, [bp-18]
+        and ax, 08D5h
+        and word [bp+6], 0F72Ah
+        or [bp+6], ax
+        pop ax
+        mov sp, bp
+        pop bp
+        iret
 
 ; Ensure DOS's PSP/DTA/CWD matches _cur_task before chaining to _old21.
 ; Preserves all registers and flags.
@@ -896,7 +985,10 @@ segment _BSS
 global _i21_ring, _i21_pos
 _i21_ring       resw 80         ; 16 x (ax bx dx ip cs)
 _i21_pos        resw 1
-_fault_regs     resw 16         ; exc err ip cs fl sp ss ax bx cx dx si di bp ds es
+global _i21_log, _i21_in
+_i21_log        resw 1          ; [w16] int21log: log every call (i21_note)
+_i21_in         resw 1          ; i21_note is running (its own calls not logged)
+_fault_regs    resw 16         ; exc err ip cs fl sp ss ax bx cx dx si di bp ds es
 in_fault        resb 1          ; set while a fault is being handled
 gp_ip           resw 1
 segment _TEXT

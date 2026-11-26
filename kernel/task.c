@@ -259,6 +259,32 @@ static u16 seg_of(u16 sel)
     return (u16)(dpmi_get_base(sel) >> 4);
 }
 
+/* DOS's current PSP (a segment; INT 21h 51h in real mode) and the
+   running task's PDB as a segment: for [w16] int21log (fault.c) */
+void dos_psp_note(u16 *real, u16 *task)
+{
+    regs16 r;
+    rmcall rmc;
+    kmemset(&rmc, 0, sizeof rmc);
+    rmc.eax = 0x5100;
+    r.ax = 0x0300;
+    r.bx = 0x21;
+    r.cx = 0;
+    r.di = FP_OFF((void FAR *)&rmc);
+    r.es = FP_SEG((void FAR *)&rmc);
+    r.ds = 0;
+    dpmi31(&r);
+    *real = (u16)rmc.ebx;
+    *task = cur_task ? seg_of(TW(cur_task, TDB_PDB)) : 0;
+}
+
+/* DOS's current PSP back to seg (int21log's own file writes switch it:
+   during a task switch's sync it must stay as the call left it) */
+void dos_psp_restore(u16 seg)
+{
+    rm_int(0x21, 0x5000, seg, 0, 0);
+}
+
 /* Make pdb DOS's current PSP (the PDBs are in DOS memory). Windows
    switches it lazily (Pietrek); w16 does it with every task switch. */
 static void set_psp(u16 pdb)
