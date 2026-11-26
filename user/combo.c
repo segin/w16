@@ -568,6 +568,10 @@ LRESULT WINAPI __loadds ComboBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case CB_GETLBTEXT: return send_message(c->list, LB_GETTEXT, wp, lp);
     case CB_GETLBTEXTLEN: return send_message(c->list, LB_GETTEXTLEN, wp, lp);
     case CB_FINDSTRING: return send_message(c->list, LB_FINDSTRING, wp, lp);
+    /* (w16 left it to DefWindowProc, 0: COMMDLG's Font dialog, which
+       looks each face up before adding it, found every face at item 0
+       of its empty list and showed none) */
+    case CB_FINDSTRINGEXACT: return send_message(c->list, LB_FINDSTRINGEXACT, wp, lp);
     case CB_GETITEMDATA: return send_message(c->list, LB_GETITEMDATA, wp, lp);
     case CB_SETITEMDATA: return send_message(c->list, LB_SETITEMDATA, wp, lp);
     case CB_GETCURSEL: return send_message(c->list, LB_GETCURSEL, wp, lp);
