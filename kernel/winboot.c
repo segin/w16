@@ -147,7 +147,8 @@ void diag_load_end(const char FAR *name, u16 rc)
     diag_write("\r\n");
 }
 
-/* ---- the import trace (thunk.c): [w16] trace=MOD.ORD,... ---- */
+/* ---- the import trace (thunk.c): [w16] trace=MOD.ORD,... ----
+   MOD.* traces every import from MOD */
 
 static char trace_list[2048];
 
@@ -162,6 +163,8 @@ int trace_wanted(const char FAR *mod, u16 ordinal)
             m++, p++;
         if (!*m && *p == '.') {
             p++;
+            if (*p == '*')
+                return 1;
             while (*p >= '0' && *p <= '9')
                 n = n * 10 + (*p++ - '0');
             if (n == ordinal)
