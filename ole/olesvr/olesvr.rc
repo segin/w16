@@ -1,0 +1,6 @@
+/*
+ * olesvr.rc - OLESVR.DLL's version resource, written by tools/mkver.py (the
+ * Makefile): 3.1's numbers (file 1.10.0.0, product 3.10.0.103), w16's texts.
+ * Setups compare it before they replace the library.
+ */
+1 16 MOVEABLE PURE "olesvrver.bin"

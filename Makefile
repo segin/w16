@@ -2943,7 +2943,17 @@ $(B)/shelldll/%.o: shell/shelldll/%.c shell/shelldll/shell.h
 $(B)/shelldll/shlogo.bmp: tools/mkaboutlogo.py tools/mklogo.py
 	@mkdir -p $(@D)
 	python3 -B tools/mkaboutlogo.py $@
-$(B)/shelldll/shell.res: shell/shelldll/shell.rc shell/shelldll/shell.h $(B)/shelldll/shlogo.bmp
+# the version resource (3.1's numbers, w16's texts; setups compare it
+# before they replace a library)
+$(B)/shelldll/shellver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" "FileDescription=Shell library" \
+	    FileVersion=3.10 InternalName=SHELL \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
+	    OriginalFilename=SHELL.DLL ProductName=w16 ProductVersion=3.10
+$(B)/shelldll/shell.res: shell/shelldll/shell.rc shell/shelldll/shell.h $(B)/shelldll/shlogo.bmp \
+                         $(B)/shelldll/shellver.bin
 	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/shelldll -i=$(B)/shelldll \
 	    -fo=$@ $<
 $(DOS)/SHELL.DLL: $(SHDLL_O) $(B)/shelldll/shell.res shell/shelldll/shell.lnk tools/nenoname.py
@@ -3809,8 +3819,22 @@ $(B)/olesvr/%.o: ole/olesvr/%.asm
 $(B)/olesvr/%.o: ole/olesvr/%.c ole/olesvr/olesvr.h
 	@mkdir -p $(@D)
 	$(WCC) $(OSVCFLAGS) -fo=$@ $<
-$(DOS)/OLESVR.DLL: $(OSVOBJS) ole/olesvr/olesvr.lnk tools/nemark.py
+# the version resource (3.1's numbers, 1.10.0.0 as its OLECLI's, w16's
+# texts; setups compare it before they replace a library)
+$(B)/olesvr/olesvrver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 1.10.0.0 --product 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" \
+	    "FileDescription=Object Linking and Embedding Server Library" \
+	    FileVersion=1.10.000 InternalName=OLESVR \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
+	    OriginalFilename=OLESVR.DLL ProductName=w16 ProductVersion=3.10
+$(B)/olesvr/olesvr.res: ole/olesvr/olesvr.rc $(B)/olesvr/olesvrver.bin
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=$(B)/olesvr -fo=$@ $<
+$(DOS)/OLESVR.DLL: $(OSVOBJS) $(B)/olesvr/olesvr.res ole/olesvr/olesvr.lnk tools/nemark.py
 	@mkdir -p $(@D)
 	$(WLINK) @ole/olesvr/olesvr.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/olesvr/olesvr.map file { $(OSVOBJS) }
+	    option map=$(B)/olesvr/olesvr.map option resource=$(B)/olesvr/olesvr.res \
+	    file { $(OSVOBJS) }
 	python3 tools/nemark.py $@ 3.10

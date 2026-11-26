@@ -348,3 +348,8 @@ BEGIN
     1287, "Bold Italic"
     1408, "User Defined Size"
 END
+
+/* the version resource, written by tools/mkver.py (commdlg.mk): 3.1's
+   numbers (3.10.0.103), w16's texts; setups compare it before they
+   replace the library */
+1 16 MOVEABLE PURE "cdver.bin"

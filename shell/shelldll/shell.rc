@@ -99,3 +99,8 @@ BEGIN
     IDS_NOCOMMDLG,   "Cannot load COMMDLG.DLL"
     IDS_CLOSENOOPEN, "\r\nSHELL.DLL: RegCloseKey called with no corresponding RegOpenKey"
 END
+
+/* the version resource, written by tools/mkver.py (the Makefile): 3.1's
+   numbers (3.10.0.103), w16's texts; setups compare it before they
+   replace the library */
+1 16 MOVEABLE PURE "shellver.bin"
