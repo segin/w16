@@ -94,7 +94,9 @@
 #   gdifont    GD10 (raster font simulations: italic, underline, strike-out,
 #              emboldening, integer scaling; metrics and pixels) and GD11
 #              (the font mapper: every mapping and metric as in 3.1's log,
-#              tests/gdi/gd11ref.txt) with Microsoft's GDI and VGA.DRV,
+#              tests/gdi/gd11ref.txt) and GD14 (font enumeration: its
+#              log as 3.1's, tests/gdi/gd14ref.txt) with Microsoft's GDI
+#              and VGA.DRV,
 #              w16's GDI, w16's VGA.DRV and both: no FAIL
 #   shell      w16's SHELL.DLL on Microsoft's KRNL286 must be 0
 #   shellk     w16's SHELL.DLL on w16's KRNL286   must be 0
@@ -1664,7 +1666,10 @@ runcase() {
         # (tests/apps/gd11.c: the font mapper and integer scaling,
         # ARCHITECTURE.md 11.10): every mapping and metric as 3.1's own
         # run gave them (tests/gdi/gd11ref.txt; tools/gd11.py leaves out
-        # the TrueType and vector results w16 cannot give yet)
+        # the TrueType and vector results w16 cannot give yet). And GD14
+        # (tests/apps/gd14.c: font enumeration's returns, faces, DCs and
+        # mapping modes, ARCHITECTURE.md 11.12): its log as 3.1's
+        # (tests/gdi/gd14ref.txt)
         r=ok
         for k in ms gdi vga both; do
             case $k in ms) set -- -r ;; gdi) set -- ;; vga) set -- -r -v "$root/build/dos/VGA.DRV" ;;
@@ -1672,6 +1677,7 @@ runcase() {
             "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD10.EXE" > "$out/gdifont-$k.log" 2>&1 &
             # (GD11's 5138 requests take over 10 minutes on a loaded host)
             REFRUN_TIMEOUT=1500 "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD11.EXE" > "$out/gdifont-map-$k.log" 2>&1 &
+            "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD14.EXE" > "$out/gdifont-enum-$k.log" 2>&1 &
         done
         wait
         for k in ms gdi vga both; do
@@ -1682,8 +1688,11 @@ runcase() {
             grep -q '^GD11 done' "$f" || { r="$k: GD11 did not finish ($f)"; break; }
             python3 "$root/tools/gd11.py" cmp "$root/tests/gdi/gd11ref.txt" "$f" > "$f.cmp" ||
                 { r="$k: GD11 differs from 3.1 ($f.cmp)"; break; }
+            f=$out/gdifont-enum-$k.log
+            sed -n '/^GD14 start/,/^GD14 done/p' "$f" | tr -d '\r' | diff "$root/tests/gdi/gd14ref.txt" - > "$f.diff" ||
+                { r="$k: GD14 differs from 3.1 ($f.diff)"; break; }
         done
-        if [ "$r" = ok ]; then echo "ok   gdifont: GD10 (simulations, integer scaling) and GD11 (font mapping) with w16's GDI and VGA.DRV as with Microsoft's"
+        if [ "$r" = ok ]; then echo "ok   gdifont: GD10 (simulations, integer scaling), GD11 (font mapping) and GD14 (enumeration) with w16's GDI and VGA.DRV as with Microsoft's"
         else echo "FAIL gdifont: $r"; fails=$((fails + 1)); fi ;;
     shell)  ref; boot shell -r -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
             check shell shell ref ;;

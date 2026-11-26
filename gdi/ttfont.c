@@ -56,6 +56,8 @@ typedef TTFILE __far *LPTTFILE;
 
 #define RT_TTNAME 204                   /* the .FOT's resource naming the .TTF */
 
+static int tt_name(int id, char __far *out, int n);
+
 /* ---- reading the file: one open file at a time, through ttfx's cache ---- */
 
 static ttfx_font ttf;
@@ -460,6 +462,66 @@ LPFONTINFO tt_info(XP xs)
     mem_set(s->done, 0, sizeof s->done);
     s->fi = fi;
     return fi;
+}
+
+/* A .FOT's entry as EnumFonts and EnumFontFamilies give it (FN1 on 3.1,
+   tests/fonts/fn1ref.txt): the TEXTMETRIC tt_info's size at ppem would
+   give, but for the heights (the FONTDIR's weight, italic, character
+   set, pitch and family and characters; 3.1's at 96 dpi are 32 pixels
+   per em: Arial's tmHeight 36), then NEWTEXTMETRIC's ntmFlags (italic 1, bold 20h,
+   neither 40h: NTM_REGULAR), ntmSizeEM (the units per em), ntmCellHeight
+   (usWinAscent + usWinDescent: Arial 2288) and ntmAvgWidth
+   (xAvgCharWidth) into ntm[0..4] (the flags a DWORD), the full name and
+   the style (name records 4 and 2: "Arial Bold Italic", "Bold Italic").
+   0: the file cannot be read. */
+int tt_enum(XP xf, WORD ppem, TEXTMETRIC __far *tm, WORD __far *ntm, char __far *full,
+            char __far *style)
+{
+    LPFONT f = xptr(xf);
+    LPTTFILE t = xptr(f->ttf);
+    int a, d;
+    if (!tt_open(t))
+        return 0;
+    tt_load(t);
+    f = xptr(xf);
+    t = xptr(f->ttf);
+    /* FN1 on 3.1: usWinAscent and usWinDescent scaled, each rounded, not
+       VDMX's (Courier New 27 + 10, Times New Roman 29 + 7: VDMX has 26 +
+       10 and 28 + 8 at 32) */
+    a = rnd(t->winA, ppem, t->upem);
+    d = rnd(t->winD, ppem, t->upem);
+    mem_set(tm, 0, sizeof(TEXTMETRIC));
+    tm->tmHeight = a + d;
+    tm->tmAscent = a;
+    tm->tmDescent = d;
+    tm->tmInternalLeading = a + d - ppem;
+    tm->tmExternalLeading = rnd(t->gap, ppem, t->upem);
+    tm->tmAveCharWidth = rnd(t->xavg, ppem, t->upem);
+    tm->tmMaxCharWidth = rnd(t->bboxw, ppem, t->upem);
+    tm->tmWeight = f->weight;
+    tm->tmItalic = f->italic;
+    tm->tmUnderlined = f->underline;
+    tm->tmStruckOut = f->strikeout;
+    tm->tmFirstChar = f->first;
+    tm->tmLastChar = f->last;
+    tm->tmDefaultChar = f->dflt + f->first;
+    tm->tmBreakChar = f->brk + f->first;
+    tm->tmPitchAndFamily = f->pitch;
+    tm->tmCharSet = f->charset;
+    tm->tmDigitizedAspectX = tm->tmDigitizedAspectY = 96;
+    /* (UNVERIFIED: the weight a face needs to be NTM_BOLD; 3.1's are
+       400 and 700) */
+    ntm[0] = (f->italic ? 1 : 0) | (f->weight >= 700 ? 0x20 : 0);
+    if (!ntm[0])
+        ntm[0] = 0x40;
+    ntm[1] = 0;
+    ntm[2] = t->upem;
+    ntm[3] = t->winA + t->winD;
+    ntm[4] = t->xavg;
+    tt_name(4, full, 64);
+    tt_name(2, style, 32);
+    tt_close();
+    return 1;
 }
 
 /* rasterise character index i of size s into its cell */

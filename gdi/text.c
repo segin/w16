@@ -403,19 +403,25 @@ BOOL GDIAPI GetTextMetrics(HDC hdc, TEXTMETRIC __far *tm)          /* GDI.93 */
        192) */
     tm->tmDigitizedAspectX = fi->dfVertRes;
     tm->tmDigitizedAspectY = fi->dfHorizRes;
-    if (dc->mapMode != 1) {
-        /* GD5 on 3.1 (MM_LOMETRIC, anisotropic 2:1): heights and widths
-           in logical units, the descent what the ascent leaves */
-        tm->tmHeight = log_y(dc, tm->tmHeight);
-        tm->tmAscent = log_y(dc, tm->tmAscent);
-        tm->tmDescent = tm->tmHeight - tm->tmAscent;
-        tm->tmInternalLeading = log_y(dc, tm->tmInternalLeading);
-        tm->tmExternalLeading = log_y(dc, tm->tmExternalLeading);
-        tm->tmAveCharWidth = log_x(dc, tm->tmAveCharWidth);
-        tm->tmMaxCharWidth = log_x(dc, tm->tmMaxCharWidth);
-        tm->tmOverhang = log_x(dc, tm->tmOverhang);
-    }
+    tm_logical(dc, tm);
     return TRUE;
+}
+
+/* GD5 on 3.1 (MM_LOMETRIC, anisotropic 2:1): a TEXTMETRIC's heights and
+   widths in logical units, the descent what the ascent leaves (also
+   font enumeration's, GD14) */
+void tm_logical(LPDC dc, TEXTMETRIC __far *tm)
+{
+    if (dc->mapMode == 1)
+        return;
+    tm->tmHeight = log_y(dc, tm->tmHeight);
+    tm->tmAscent = log_y(dc, tm->tmAscent);
+    tm->tmDescent = tm->tmHeight - tm->tmAscent;
+    tm->tmInternalLeading = log_y(dc, tm->tmInternalLeading);
+    tm->tmExternalLeading = log_y(dc, tm->tmExternalLeading);
+    tm->tmAveCharWidth = log_x(dc, tm->tmAveCharWidth);
+    tm->tmMaxCharWidth = log_x(dc, tm->tmMaxCharWidth);
+    tm->tmOverhang = log_x(dc, tm->tmOverhang);
 }
 
 int GDIAPI GetTextFace(HDC hdc, int n, LPSTR buf)                  /* GDI.92 */

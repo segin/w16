@@ -1040,3 +1040,231 @@ int font_italic_overhang(LPFONTINFO fi, const TEXTXFORM __far *tx)
 {
     return (tx->txfAccelerator & 0x0400) ? (fi->dfPixHeight - 1) / 2 : 0;
 }
+
+/* ---- enumeration: EnumFonts, EnumFontFamilies ---- */
+
+/* A font's .FNT header (dfVersion to dfReserved, 71h bytes) as its
+   module's FONTDIR has it: what enumeration reports of a raster or
+   vector font, without loading the font itself. 0: not found. */
+static int fontdir_header(LPFONT f, BYTE __far *hdr)
+{
+    HINSTANCE h = f->hMod;
+    WORD id = f->resId, n, i;
+    HRSRC r = find_fontdir(h);
+    HGLOBAL g;
+    BYTE __far *p;
+    int found = 0;
+    if (!r || !(g = LoadResource(h, r)))
+        return 0;
+    p = LockResource(g);
+    if (p) {
+        n = *(WORD __far *)p;
+        p += 2;
+        for (i = 0; i < n; i++) {
+            if (*(WORD __far *)p == id) {
+                mem_copy(hdr, p + 2, 0x71);
+                found = 1;
+                break;
+            }
+            p += 2 + 0x71;
+            while (*p)                  /* the device name, then the face */
+                p++;
+            p++;
+            while (*p)
+                p++;
+            p++;
+        }
+        GlobalUnlock(g);
+    }
+    FreeResource(g);
+    return found;
+}
+
+/* ENUMLOGFONT and NEWTEXTMETRIC (SDK): what EnumFontFamilies' callback
+   gets; EnumFonts' gets their first parts, LOGFONT and TEXTMETRIC */
+typedef struct {
+    LOGFONT lf;
+    char full[64], style[32];
+} ENUMLF;
+typedef struct {
+    TEXTMETRIC tm;
+    WORD ntm[5];                        /* ntmFlags (a DWORD), ntmSizeEM,
+                                           ntmCellHeight, ntmAvgWidth */
+} ENUMTM;
+typedef int (__far __pascal *ENUMFONTPROC)(ENUMLF __far *, ENUMTM __far *, int, DWORD);
+
+#define RASTER_FONTTYPE 1
+#define TRUETYPE_FONTTYPE 4
+
+/* the entries enumeration lists: raster and vector fonts (pass 0), then
+   TrueType ones (pass 1) */
+static int enum_listed(LPFONT f, int pass)
+{
+    if (pass)
+        return f->tt && tt_usable(f);
+    return !f->tt && f->height && !(f->type & 4);
+}
+
+/* whether entry x is the one a family list (no face asked) shows of its
+   face: a face TrueType has is shown as its first TrueType entry, after
+   the raster and vector faces, each shown as its first entry, in the
+   order the fonts were added (FN1 on 3.1: Symbol, a raster and a
+   TrueType face, comes last, as its TrueType entry; System, Fixedsys,
+   Terminal, then WIN.INI [fonts]' raster and vector faces, then the
+   TrueType ones) */
+static int enum_first(XP x, int pass)
+{
+    LPFONT f = xptr(x), g;
+    XP y;
+    if (!pass)
+        for (y = fonts; y; y = g->next) {
+            g = xptr(y);
+            if (!str_icmp(g->face, f->face) && enum_listed(g, 1))
+                return 0;               /* shown as TrueType */
+        }
+    for (y = fonts; y != x; y = g->next) {
+        g = xptr(y);
+        if (!str_icmp(g->face, f->face) && enum_listed(g, pass))
+            return 0;                   /* an earlier entry of the face */
+    }
+    return 1;
+}
+
+/* EnumFonts and EnumFontFamilies, as GD14 and FN1 show 3.1's (tests/
+   gdi/gd14ref.txt, tests/fonts/fn1ref.txt):
+   - no face (NULL): one entry a face; a face: every font of it (each
+     size of a raster face, each style of a TrueType one; a face both
+     have: the raster sizes, then the TrueType styles), the name matched
+     without regard to case, or through WIN.INI [FontSubstitutes] ("Helv"
+     lists MS Sans Serif's sizes, named "Helv" as asked); "" none.
+   - the callback gets the LOGFONT (lfHeight tmHeight, lfWidth
+     tmAveCharWidth, lfOutPrecision 1 raster, 3 vector and TrueType,
+     lfClipPrecision 2, lfQuality 1, lfPitchAndFamily the family with
+     VARIABLE_PITCH or FIXED_PITCH) and TEXTMETRIC, in the DC's logical
+     units (MM_LOMETRIC, anisotropic), the type (raster 1, vector 0,
+     TrueType 4) and the caller's data; EnumFontFamilies' ENUMLOGFONT and
+     NEWTEXTMETRIC have the full name, style and NEWTEXTMETRIC's fields
+     for TrueType fonts (for others 3.1 leaves them as memory was).
+   - a callback's 0 ends it; the return is the last callback's value, 1
+     when nothing was listed, 0 for a metafile DC or no DC.
+   - every DC alike: screen, memory, CreateDC and CreateIC of the
+     display. TrueType fonts at 24 points of the device (32 pixels per
+     em at 96 dpi). UNVERIFIED: a printer's DC (w16 drives no printer
+     yet: its own fonts, the driver's EnumDFonts, are not asked for). */
+static int enum_fonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
+{
+    LPDC dc = dc_get(hdc);
+    char asked[LF_FACESIZE], subst[LF_FACESIZE];
+    ENUMLF elf;
+    ENUMTM etm;
+    BYTE hdr[0x71];
+    WORD ppem, ax, ay;
+    XP x;
+    int pass, r = 1, i, type;
+    if (!dc || !proc)
+        return 0;
+    ax = dc->dev->info.dpLogPixelsX;
+    ay = dc->dev->info.dpLogPixelsY;
+    ppem = (WORD)mul_div(24, ay, 72);
+    if (face) {
+        for (i = 0; i < LF_FACESIZE - 1 && face[i]; i++)
+            asked[i] = face[i];
+        asked[i] = 0;
+        if (!asked[0])
+            return 1;
+        substitute(asked, subst);
+    }
+    for (pass = 0; pass < 2; pass++) {
+        for (x = fonts; x; x = ((LPFONT)xptr(x))->next) {
+            LPFONT f = xptr(x);
+            int named = 0;
+            if (!enum_listed(f, pass))
+                continue;
+            if (face) {
+                if (!str_icmp(asked, f->face))
+                    ;
+                else if (subst[0] && !str_icmp(subst, f->face))
+                    named = 1;          /* listed by the name asked */
+                else
+                    continue;
+            } else if (!enum_first(x, pass))
+                continue;
+            mem_set(&elf, 0, sizeof elf);
+            mem_set(&etm, 0, sizeof etm);
+            if (pass) {
+                if (!tt_enum(x, ppem, &etm.tm, etm.ntm, elf.full, elf.style))
+                    continue;
+                etm.tm.tmDigitizedAspectX = ax;
+                etm.tm.tmDigitizedAspectY = ay;
+                /* the face's pitch and family: TrueType's bits (vector,
+                   TrueType) whatever the .FOT says */
+                etm.tm.tmPitchAndFamily |= 6;
+                type = TRUETYPE_FONTTYPE;
+            } else {
+                if (!fontdir_header(xptr(x), hdr))
+                    continue;
+                etm.tm.tmHeight = *(short *)(hdr + 88);
+                etm.tm.tmAscent = *(short *)(hdr + 74);
+                etm.tm.tmDescent = etm.tm.tmHeight - etm.tm.tmAscent;
+                etm.tm.tmInternalLeading = *(short *)(hdr + 76);
+                etm.tm.tmExternalLeading = *(short *)(hdr + 78);
+                etm.tm.tmAveCharWidth = *(short *)(hdr + 91);
+                etm.tm.tmMaxCharWidth = *(short *)(hdr + 93);
+                etm.tm.tmWeight = *(short *)(hdr + 83);
+                etm.tm.tmItalic = hdr[80];
+                etm.tm.tmUnderlined = hdr[81];
+                etm.tm.tmStruckOut = hdr[82];
+                etm.tm.tmFirstChar = hdr[95];
+                etm.tm.tmLastChar = hdr[96];
+                etm.tm.tmDefaultChar = hdr[97] + hdr[95];
+                etm.tm.tmBreakChar = hdr[98] + hdr[95];
+                etm.tm.tmPitchAndFamily = hdr[90];
+                etm.tm.tmCharSet = hdr[85];
+                /* (as GetTextMetrics: X dfVertRes, Y dfHorizRes) */
+                etm.tm.tmDigitizedAspectX = *(short *)(hdr + 70);
+                etm.tm.tmDigitizedAspectY = *(short *)(hdr + 72);
+                type = RASTER_FONTTYPE;
+                if (*(short *)(hdr + 66) & 1) {
+                    /* FN1 on 3.1: a vector font's has TMPF_VECTOR (ROMAN.FON's
+                       11h is 13h) */
+                    etm.tm.tmPitchAndFamily |= 2;
+                    type = 0;
+                }
+            }
+            dc = dc_get(hdc);
+            if (!dc)
+                return 0;
+            tm_logical(dc, &etm.tm);
+            f = xptr(x);
+            elf.lf.lfHeight = etm.tm.tmHeight;
+            elf.lf.lfWidth = etm.tm.tmAveCharWidth;
+            elf.lf.lfWeight = etm.tm.tmWeight;
+            elf.lf.lfItalic = etm.tm.tmItalic;
+            elf.lf.lfUnderline = etm.tm.tmUnderlined;
+            elf.lf.lfStrikeOut = etm.tm.tmStruckOut;
+            elf.lf.lfCharSet = etm.tm.tmCharSet;
+            elf.lf.lfOutPrecision = type == RASTER_FONTTYPE ? 1 : 3;
+            elf.lf.lfClipPrecision = 2;
+            elf.lf.lfQuality = 1;
+            /* TEXTMETRIC's pitch bit is set for a variable pitch */
+            elf.lf.lfPitchAndFamily = (etm.tm.tmPitchAndFamily & 0xF0) |
+                                      ((etm.tm.tmPitchAndFamily & 1) ? 2 : 1);
+            for (i = 0; i < LF_FACESIZE - 1 && (named ? asked[i] : f->face[i]); i++)
+                elf.lf.lfFaceName[i] = named ? asked[i] : f->face[i];
+            r = ((ENUMFONTPROC)proc)(&elf, &etm, type, data);
+            if (!r)
+                return 0;
+        }
+    }
+    return r;
+}
+
+int GDIAPI EnumFonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)      /* GDI.70 */
+{
+    return enum_fonts(hdc, face, proc, data);
+}
+
+int GDIAPI EnumFontFamilies(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)  /* GDI.330 */
+{
+    return enum_fonts(hdc, face, proc, data);
+}

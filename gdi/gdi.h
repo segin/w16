@@ -641,6 +641,11 @@ int tt_ppem(XP xf, int h, int w, WORD __far *xppem);   /* the size a request ask
 LPFONTINFO tt_info(XP xs);              /* a size's header and character table */
 void tt_glyphs(XP xs, LPCSTR str, int n);       /* draw the glyphs not drawn yet */
 LPFONT tt_dc_font(LPDC dc);             /* the DC's font if it is TrueType */
+int tt_enum(XP xf, WORD ppem, TEXTMETRIC __far *tm, WORD __far *ntm, char __far *full,
+            char __far *style);         /* an entry as font enumeration gives it */
+
+/* text.c */
+void tm_logical(LPDC dc, TEXTMETRIC __far *tm); /* a TEXTMETRIC in the DC's logical units */
 
 /* API functions used inside GDI too */
 BOOL GDIAPI PtInRegion(HRGN, int, int);

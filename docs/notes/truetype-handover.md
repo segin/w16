@@ -21,10 +21,9 @@ should be picked up, and how to measure it.
 
 ## Left in stage 2
 
-1. **EnumFonts / EnumFontFamilies / EnumObjects**: w16's GDI has none yet
-   (raster fonts included). TrueType entries enumerate with
-   TRUETYPE_FONTTYPE (4) and NEWTEXTMETRIC's ntmFlags; one scalable entry
-   a face, not per size. Probe on 3.1 first (a GD14).
+1. **EnumObjects**: not done. (EnumFonts and EnumFontFamilies are done:
+   ARCHITECTURE.md 11.12, probe GD14; printer DCs' own fonts are not
+   listed.)
 2. **GetOutlineTextMetrics (GDI.308)**: OUTLINETEXTMETRIC from OS/2,
    head, hhea, post and the name table at the DC's size (the
    TEXTMETRIC part as GetTextMetrics); the four name strings after the

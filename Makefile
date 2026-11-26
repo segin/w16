@@ -2052,6 +2052,14 @@ $(DOS)/GD13.EXE: $(B)/tests/start.o $(B)/tests/gd13.o $(B)/gdi/i4.o tests/apps/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd13.map file { $(B)/tests/start.o $(B)/tests/gd13.o $(B)/gdi/i4.o }
+# GD14.EXE: font enumeration's edges (tests/apps/gd14.c, tests/gdi/gd14ref.txt;
+# the boot-test case gdifont)
+gdprobes: $(DOS)/GD14.EXE
+dos: $(DOS)/GD14.EXE
+$(DOS)/GD14.EXE: $(B)/tests/start.o $(B)/tests/gd14.o $(B)/gdi/i4.o tests/apps/app.lnk tests/apps/fn.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd14.map file { $(B)/tests/start.o $(B)/tests/gd14.o $(B)/gdi/i4.o }
 # GD12.EXE: integer-scaled fonts drawn for GD1's log (tests/apps/gd12.c;
 # tests/gdiboot.sh -l with it as the shell)
 gdprobes: $(DOS)/GD12.EXE
