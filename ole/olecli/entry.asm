@@ -34,10 +34,13 @@ olecli_libentry:
         push word 0
         push cx
         call far LOCALINIT
+        or ax, ax                       ; no local heap: the load fails
+        jz .done
 .noheap:
         push di
         call far _olecli_init
         add sp, 2
+.done:
         pop es
         pop di
         pop si

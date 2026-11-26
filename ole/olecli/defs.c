@@ -91,6 +91,8 @@ OLESTATUS OLEAPI DefLoadFromStream(LPOLESTREAM s, LPCSTR protocol, LPOLECLIENT c
     *out = NULL;
     if (!d)
         return OLE_ERROR_HANDLE;
+    if (!s)
+        return OLE_ERROR_STREAM;
     cn[0] = 0;
     if (cls)
         GlobalGetAtomName(cls, cn, sizeof cn);
@@ -157,7 +159,7 @@ OLESTATUS OLEAPI SetNetName(LPOLEOBJECT p)
         return OLE_ERROR_OBJECT;
     f = gstr(o->htopic);
     drive[0] = f[0];
-    drive[1] = f[1];
+    drive[1] = f[0] ? f[1] : 0;         /* an empty name has no second */
     drive[2] = 0;
     gstr_unlock(o->htopic);
     if (drive[1] != ':')

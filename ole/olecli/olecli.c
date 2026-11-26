@@ -223,10 +223,29 @@ void obj_free(LPOBJ o)
     gfree(o->hname);
     gfree(o->hnet);
     gfree(o->hhost);
+    gfree(o->hlinkdata);
     gfree(o->hsteps);
+    o->hpres = o->hnative = o->hclass = o->htopic = o->hitem = NULL;
+    o->hname = o->hnet = o->hhost = o->hlinkdata = o->hsteps = NULL;
+    o->nsteps = o->cur = 0;
+    o->wait = 0;
+    o->busy = FALSE;
     o->magic = 0;
-    GlobalUnlock(o->hself);
-    GlobalFree(o->hself);
+    if (o->depth) {
+        /* deleted from a callback: the code that made the callback still
+           reads the object, so its block stays until OleWndProc returns
+           (the API refuses it: its magic is gone) */
+        o->dead = TRUE;
+        return;
+    }
+    obj_free_self(o);
+}
+
+void obj_free_self(LPOBJ o)
+{
+    HGLOBAL h = o->hself;
+    GlobalUnlock(h);
+    GlobalFree(h);
 }
 
 /* An embedded object's DDE document name, "<doc class>%<doc name>%<object
@@ -283,7 +302,7 @@ HGLOBAL obj_embedded_topic(LPOBJ o)
 
 void callback(LPOBJ o, OLE_NOTIFICATION n)
 {
-    if (o->client && o->client->lpvtbl && o->client->lpvtbl->CallBack)
+    if (!o->dead && o->client && o->client->lpvtbl && o->client->lpvtbl->CallBack)
         o->client->lpvtbl->CallBack(o->client, n, (LPOLEOBJECT)o);
 }
 

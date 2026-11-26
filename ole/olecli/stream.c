@@ -157,6 +157,13 @@ void pres_save_body(void FAR *out, LPOBJ ob, BOOL with_class)
             RECT r;
             GetObject(ob->hpres, sizeof bm, &bm);
             n = (DWORD)bm.bmWidthBytes * bm.bmHeight * bm.bmPlanes;
+            /* the bits first: without them nothing is written (a record
+               that promises bits it lacks would spoil the stream) */
+            h = GlobalAlloc(GMEM_MOVEABLE, n ? n : 1);
+            if (!h) {
+                o->err = TRUE;
+                break;
+            }
             pres_bounds(ob, &r);
             if (with_class)
                 put_str(o, "BITMAP");
@@ -164,8 +171,7 @@ void pres_save_body(void FAR *out, LPOBJ ob, BOOL with_class)
             put_dw(o, r.bottom);
             put_dw(o, n + 10);
             put(o, &bm, 10);
-            h = GlobalAlloc(GMEM_MOVEABLE, n ? n : 1);
-            if (h) {
+            {
                 void FAR *p = GlobalLock(h);
                 GetBitmapBits(ob->hpres, n, p);
                 put(o, p, n);
@@ -264,6 +270,10 @@ static HGLOBAL get_str(IN FAR *i)
     LPSTR p;
     if (i->err || !n)
         return NULL;
+    if (n >= 0xFFFF) {                  /* no class, topic or item is */
+        i->err = TRUE;
+        return NULL;
+    }
     h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, n + 1);
     if (!h) {
         i->err = TRUE;
@@ -273,6 +283,10 @@ static HGLOBAL get_str(IN FAR *i)
     get(i, p, n);
     p[n] = 0;
     GlobalUnlock(h);
+    if (i->err) {
+        GlobalFree(h);
+        return NULL;
+    }
     return h;
 }
 
@@ -339,6 +353,8 @@ static void load_body(IN FAR *i, LPOBJ ob, LPCSTR cls)
         m->xExt = hdr[1];
         m->yExt = hdr[2];
         m->hMF = SetMetaFileBits(bits);
+        if (!m->hMF)                    /* not a metafile: still ours */
+            GlobalFree(bits);
         GlobalUnlock(mfp);
         pres_set(ob, CF_METAFILEPICT, mfp);
     } else if (!lstrcmp(cls, "DIB")) {
@@ -359,6 +375,20 @@ static void load_body(IN FAR *i, LPOBJ ob, LPCSTR cls)
             return;
         }
         get(i, &bm, 10);
+        if (!i->err) {
+            /* the bits CreateBitmap reads (its own row width: word
+               aligned) must all be in the record */
+            DWORD wb;
+            if (bm.bmWidth <= 0 || bm.bmHeight <= 0 || !bm.bmPlanes || !bm.bmBitsPixel) {
+                i->err = TRUE;
+                return;
+            }
+            wb = (((DWORD)bm.bmWidth * bm.bmBitsPixel + 15) >> 4) << 1;
+            if ((n - 10) / bm.bmPlanes / bm.bmHeight < wb) {
+                i->err = TRUE;
+                return;
+            }
+        }
         bits = get_global(i, n - 10);
         if (!i->err) {
             HBITMAP b = CreateBitmap(bm.bmWidth, bm.bmHeight, bm.bmPlanes, bm.bmBitsPixel,
@@ -461,8 +491,10 @@ OLESTATUS strm_load(LPOLESTREAM s, LPOLECLIENT c, LPDOC doc, LPCSTR name,
     if (i.err || (fmt != OT_LINK && fmt != OT_EMBEDDED && fmt != OT_STATIC))
         return OLE_ERROR_STREAM;
     cls = get_str(&i);
-    if (i.err)
+    if (i.err) {
+        gfree(cls);
         return OLE_ERROR_STREAM;
+    }
     r = strm_load_rest(s, c, doc, name, out, fmt, gstr(cls));
     gstr_unlock(cls);
     gfree(cls);

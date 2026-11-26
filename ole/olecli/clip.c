@@ -6,6 +6,13 @@
  */
 #include "olecli.h"
 
+/* a block onto the clipboard; one it refuses (not opened) is freed */
+static void set_data(WORD cf, HGLOBAL h)
+{
+    if (h && !SetClipboardData(cf, h))
+        GlobalFree(h);
+}
+
 /* OleCopyToClipboard: observed formats and order: an embedded object
    "Native", "OwnerLink", CF_METAFILEPICT; a link "OwnerLink" (holding the
    link's class, file and item), "Native", CF_METAFILEPICT */
@@ -27,15 +34,27 @@ OLESTATUS clip_copy(LPOBJ o)
     }
     if (o->type == OT_EMBEDDED) {
         if (o->hnative)
-            SetClipboardData(cf_native, copy_global(o->hnative));
-        SetClipboardData(cf_ownerlink, link_data(o));
+            set_data(cf_native, copy_global(o->hnative));
+        set_data(cf_ownerlink, link_data(o));
     } else if (o->type == OT_LINK) {
-        SetClipboardData(cf_ownerlink, link_data(o));
+        set_data(cf_ownerlink, link_data(o));
         if (o->hnative)
-            SetClipboardData(cf_native, copy_global(o->hnative));
+            set_data(cf_native, copy_global(o->hnative));
     }
-    if (pic)
-        SetClipboardData(picfmt, pic);
+    if (pic && !SetClipboardData(picfmt, pic)) {
+        /* refused (the clipboard not open): the copy is still ours */
+        if (picfmt == CF_METAFILEPICT) {
+            METAFILEPICT FAR *m = (METAFILEPICT FAR *)GlobalLock(pic);
+            if (m) {
+                DeleteMetaFile(m->hMF);
+                GlobalUnlock(pic);
+            }
+            GlobalFree(pic);
+        } else if (picfmt == CF_BITMAP || picfmt == CF_PALETTE)
+            DeleteObject(pic);
+        else
+            GlobalFree(pic);
+    }
     return OLE_OK;
 }
 
@@ -74,30 +93,39 @@ OLESTATUS OLEAPI OleQueryLinkFromClip(LPCSTR protocol, OLEOPT_RENDER r, OLECLIPF
 }
 
 /* the three strings of an OwnerLink or ObjectLink block */
-static BOOL parse_link(HANDLE h, LPSTR cls, LPSTR file, LPSTR item, WORD cb)
+static BOOL parse_link(HANDLE h, LPSTR cls, WORD ccls, LPSTR file, WORD cfile, LPSTR item,
+                       WORD citem)
 {
     LPSTR p;
     DWORD n;
     WORD i = 0, k;
     LPSTR outs[3];
+    WORD cbs[3];
     if (!h)
         return FALSE;
     n = GlobalSize(h);
     p = (LPSTR)GlobalLock(h);
     if (!p)
         return FALSE;
+    /* the strings are read from the block's first 64K (one segment) */
+    if (n > 0xFFFF)
+        n = 0xFFFF;
     outs[0] = cls;
     outs[1] = file;
     outs[2] = item;
+    cbs[0] = ccls;
+    cbs[1] = cfile;
+    cbs[2] = citem;
     for (k = 0; k < 3; k++) {
-        WORD j = 0;
+        WORD j = 0, cb = cbs[k];
         while (i < n && p[i]) {
             if (j + 1 < cb)
                 outs[k][j++] = p[i];
             i++;
         }
         outs[k][j] = 0;
-        i++;
+        if (i < n)
+            i++;
     }
     GlobalUnlock(h);
     return cls[0] != 0;
@@ -124,7 +152,7 @@ static void take_picture(LPOBJ o, OLEOPT_RENDER r, OLECLIPFORMAT f)
     if (!h)
         return;
     h = pres_copy(cf, h);
-    if (h && cf == CF_DIB) {
+    if (h && cf == CF_DIB && GlobalSize(h) >= sizeof(BITMAPINFOHEADER)) {
         /* a DIB without a resolution gets the screen's (3.1's OLECLI:
            3780 pixels a metre on VGA in Write's pasted pictures and
            links, WR16, WR30, from SNAP's DIBs with 0; UNVERIFIED: how it
@@ -174,7 +202,8 @@ OLESTATUS OLEAPI OleCreateFromClip(LPCSTR protocol, LPOLECLIENT c, LHCLIENTDOC l
     if (lstrcmp(protocol, "StdFileEditing"))
         return OLE_ERROR_PROTOCOL;
     if (!IsClipboardFormatAvailable(cf_native) ||
-        !parse_link(GetClipboardData(cf_ownerlink), cls, file, item, sizeof file))
+        !parse_link(GetClipboardData(cf_ownerlink), cls, sizeof cls, file, sizeof file, item,
+                        sizeof item))
         return OLE_ERROR_CLIPBOARD;
     o = obj_new(c, d, name);
     if (!o)
@@ -207,7 +236,8 @@ OLESTATUS OLEAPI OleCreateLinkFromClip(LPCSTR protocol, LPOLECLIENT c, LHCLIENTD
         return OLE_ERROR_HANDLE;
     if (!protocol || lstrcmp(protocol, "StdFileEditing"))
         return OLE_ERROR_PROTOCOL;
-    if (!parse_link(GetClipboardData(cf_objectlink), cls, file, item, sizeof file))
+    if (!parse_link(GetClipboardData(cf_objectlink), cls, sizeof cls, file, sizeof file, item,
+                    sizeof item))
         return OLE_ERROR_CLIPBOARD;
     if (r == olerender_draw && has_picture()) {
         /* the clipboard's picture is the presentation (le.c link_new) */

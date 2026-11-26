@@ -134,14 +134,6 @@ void pres_set(LPOBJ o, WORD cf, HANDLE h)
 
 /* ---- the DIB of a Paintbrush object (its Native data: a .BMP file) ---- */
 
-/* the BITMAPINFOHEADER inside a locked .BMP file, or NULL */
-static BITMAPINFOHEADER FAR *bmp_info(BYTE FAR *p, DWORD n)
-{
-    if (n < 14 + sizeof(BITMAPINFOHEADER) || p[0] != 'B' || p[1] != 'M')
-        return NULL;
-    return (BITMAPINFOHEADER FAR *)(p + 14);
-}
-
 static WORD dib_colors(BITMAPINFOHEADER FAR *b)
 {
     if (b->biClrUsed)
@@ -149,6 +141,39 @@ static WORD dib_colors(BITMAPINFOHEADER FAR *b)
     if (b->biBitCount <= 8)
         return 1 << b->biBitCount;
     return 0;
+}
+
+/* the header of a locked DIB of n bytes at offset off of its segment, or
+   NULL when the header, the colours or (uncompressed) the bits are not
+   all there: such a picture is blank */
+static BITMAPINFOHEADER FAR *dib_info(BYTE FAR *p, DWORD n, WORD off)
+{
+    BITMAPINFOHEADER FAR *b = (BITMAPINFOHEADER FAR *)p;
+    DWORD need, row, h;
+    if (!p || n < sizeof *b || b->biSize < sizeof *b || b->biWidth <= 0)
+        return NULL;
+    if (b->biClrUsed > (b->biBitCount <= 8 ? 256 : 0x3FC0))
+        return NULL;
+    need = b->biSize + (DWORD)dib_colors(b) * sizeof(RGBQUAD);
+    if (need > n || need + off > 0xFFFFL)
+        return NULL;
+    if (b->biCompression == BI_RGB) {
+        if (b->biWidth > 0xFFFFL)
+            return NULL;
+        h = b->biHeight < 0 ? -b->biHeight : b->biHeight;
+        row = ((DWORD)b->biWidth * b->biBitCount + 31) / 32 * 4;
+        if (h && row > (n - need) / h)
+            return NULL;
+    }
+    return b;
+}
+
+/* the BITMAPINFOHEADER inside a locked .BMP file, or NULL */
+static BITMAPINFOHEADER FAR *bmp_info(BYTE FAR *p, DWORD n)
+{
+    if (!p || n < 14 + sizeof(BITMAPINFOHEADER) || p[0] != 'B' || p[1] != 'M')
+        return NULL;
+    return dib_info(p + 14, n - 14, 14);
 }
 
 /* a picture's size in HIMETRIC from its pixels and resolution (observed:
@@ -180,7 +205,8 @@ OLESTATUS pres_bounds(LPOBJ o, RECT FAR *r)
         BITMAPINFOHEADER FAR *b = bmp_info(p, GlobalSize(h));
         LONG cx, cy;
         if (!b) {
-            GlobalUnlock(h);
+            if (p)
+                GlobalUnlock(h);
             return OLE_ERROR_BLANK;
         }
         dib_himetric(b, &cx, &cy);
@@ -195,6 +221,8 @@ OLESTATUS pres_bounds(LPOBJ o, RECT FAR *r)
     case PRES_MF:
         {
             METAFILEPICT FAR *m = (METAFILEPICT FAR *)GlobalLock(o->hpres);
+            if (!m)
+                return OLE_ERROR_BLANK;
             r->right = m->xExt;
             r->bottom = -m->yExt;
             GlobalUnlock(o->hpres);
@@ -202,8 +230,14 @@ OLESTATUS pres_bounds(LPOBJ o, RECT FAR *r)
         }
     case PRES_DIB:
         {
-            BITMAPINFOHEADER FAR *b = (BITMAPINFOHEADER FAR *)GlobalLock(o->hpres);
+            BYTE FAR *p = (BYTE FAR *)GlobalLock(o->hpres);
+            BITMAPINFOHEADER FAR *b = dib_info(p, GlobalSize(o->hpres), 0);
             LONG cx, cy;
+            if (!b) {
+                if (p)
+                    GlobalUnlock(o->hpres);
+                return OLE_ERROR_BLANK;
+            }
             dib_himetric(b, &cx, &cy);
             GlobalUnlock(o->hpres);
             r->right = (int)cx;
@@ -243,7 +277,8 @@ int OLEAPI MfCallBackFunc(HDC dc, HANDLETABLE FAR *t, METARECORD FAR *r, int n,
 {
     (void)lp;
     PlayMetaFileRecord(dc, t, r, n);
-    if (++g_records % 64 == 0 && g_drawing && g_drawing->client) {
+    if (++g_records % 64 == 0 && g_drawing && g_drawing->client &&
+        g_drawing->client->lpvtbl && g_drawing->client->lpvtbl->CallBack) {
         if (!g_drawing->client->lpvtbl->CallBack(g_drawing->client, OLE_QUERY_PAINT,
                                                  (LPOLEOBJECT)g_drawing)) {
             g_abort = TRUE;
@@ -262,10 +297,14 @@ static HPALETTE dib_palette(BITMAPINFOHEADER FAR *b)
     HPALETTE r;
     if (!n)
         return NULL;
-    h = GlobalAlloc(GMEM_MOVEABLE, 4 + n * sizeof(PALETTEENTRY));
+    h = GlobalAlloc(GMEM_MOVEABLE, 4 + (DWORD)n * sizeof(PALETTEENTRY));
     if (!h)
         return NULL;
     p = (LOGPALETTE FAR *)GlobalLock(h);
+    if (!p) {
+        GlobalFree(h);
+        return NULL;
+    }
     p->palVersion = 0x300;
     p->palNumEntries = n;
     for (i = 0; i < n; i++) {
@@ -284,7 +323,7 @@ static HPALETTE dib_palette(BITMAPINFOHEADER FAR *b)
 static void draw_dib(HDC dc, BITMAPINFOHEADER FAR *b, int x, int y, int cx, int cy)
 {
     HPALETTE pal = dib_palette(b), old = NULL;
-    BYTE FAR *bits = (BYTE FAR *)b + b->biSize + dib_colors(b) * sizeof(RGBQUAD);
+    BYTE FAR *bits = (BYTE FAR *)b + b->biSize + (DWORD)dib_colors(b) * sizeof(RGBQUAD);
     if (pal) {
         old = SelectPalette(dc, pal, FALSE);
         RealizePalette(dc);
@@ -309,7 +348,8 @@ OLESTATUS pres_draw(LPOBJ o, HDC dc, const RECT FAR *r, HDC fmt)
         BYTE FAR *p = (BYTE FAR *)GlobalLock(h);
         BITMAPINFOHEADER FAR *b = bmp_info(p, GlobalSize(h));
         if (!b) {
-            GlobalUnlock(h);
+            if (p)
+                GlobalUnlock(h);
             return OLE_ERROR_BLANK;
         }
         draw_dib(dc, b, r->left, r->top, r->right - r->left, r->bottom - r->top);
@@ -323,6 +363,9 @@ OLESTATUS pres_draw(LPOBJ o, HDC dc, const RECT FAR *r, HDC fmt)
         {
             METAFILEPICT FAR *m;
             OLESTATUS s = OLE_OK;
+            LPOBJ prev = g_drawing;
+            WORD prev_records = g_records;
+            BOOL prev_abort = g_abort;
             SaveDC(dc);
             IntersectClipRect(dc, r->left, r->top, r->right, r->bottom);
             if (OleIsDcMeta(dc))
@@ -330,6 +373,10 @@ OLESTATUS pres_draw(LPOBJ o, HDC dc, const RECT FAR *r, HDC fmt)
                    fails, after the SaveDC and the clip */
                 return OLE_ERROR_DRAW;
             m = (METAFILEPICT FAR *)GlobalLock(o->hpres);
+            if (!m) {
+                RestoreDC(dc, -1);
+                return OLE_ERROR_BLANK;
+            }
             SetMapMode(dc, MM_ANISOTROPIC);
             SetViewportOrg(dc, r->left, r->top);
             SetViewportExt(dc, r->right - r->left, r->bottom - r->top);
@@ -339,14 +386,23 @@ OLESTATUS pres_draw(LPOBJ o, HDC dc, const RECT FAR *r, HDC fmt)
             EnumMetaFile(dc, m->hMF, (MFENUMPROC)MfCallBackFunc, 0);
             if (g_abort)
                 s = OLE_ERROR_ABORT;
-            g_drawing = NULL;
+            /* an OleDraw from the client's OLE_QUERY_PAINT has its own */
+            g_drawing = prev;
+            g_records = prev_records;
+            g_abort = prev_abort;
             GlobalUnlock(o->hpres);
             RestoreDC(dc, -1);
             return s;
         }
     case PRES_DIB:
         {
-            BITMAPINFOHEADER FAR *b = (BITMAPINFOHEADER FAR *)GlobalLock(o->hpres);
+            BYTE FAR *p = (BYTE FAR *)GlobalLock(o->hpres);
+            BITMAPINFOHEADER FAR *b = dib_info(p, GlobalSize(o->hpres), 0);
+            if (!b) {
+                if (p)
+                    GlobalUnlock(o->hpres);
+                return OLE_ERROR_BLANK;
+            }
             draw_dib(dc, b, r->left, r->top, r->right - r->left, r->bottom - r->top);
             GlobalUnlock(o->hpres);
             return OLE_OK;
@@ -391,7 +447,8 @@ static HGLOBAL pb_metafile(LPOBJ o)
     LONG cx, cy;
     int w, ht;
     if (!b || !(mdc = CreateMetaFile(NULL))) {
-        GlobalUnlock(h);
+        if (p)
+            GlobalUnlock(h);
         return NULL;
     }
     w = (int)b->biWidth;
