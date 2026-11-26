@@ -185,7 +185,7 @@ void where(u16 sel);             /* fault.c */
    address)
    in a ring the fault and watchdog reports print. */
 #define TR_N 400
-typedef struct trrec { u16 idx, ip, cs, ax, bx, cx, dx, si, di, arg[6]; } trrec;
+typedef struct trrec { u16 idx, ip, cs, ax, bx, cx, dx, si, di, arg[6], rax, rdx, ret; } trrec;
 static trrec trring[TR_N];
 static u16 trpos, trcount;
 
@@ -193,6 +193,39 @@ static u16 trpos, trcount;
    caller's frame (return IP, CS, arguments) and registers; returns the
    real target */
 char trace_from[9];     /* [w16] tracefrom=MODULE (winboot.c): only its calls */
+int trace_ret_on;       /* [w16] traceret=1 (winboot.c): the results too */
+
+/* [w16] traceret=1: the traced calls still to return, with the caller's
+   return address, which trace_note replaced by trace_ret (kentry.asm).
+   A call returns on the stack it was made on, below the frames of calls
+   made before it: the pending call of that stack whose return address
+   lies nearest below the stack pointer at the return is the one. */
+#define TP_N 64
+static struct { u16 ss, slot, ip, cs, rec, seq; } tpend[TP_N];
+extern void __far trace_ret(void);
+#pragma aux trace_ret "*"
+
+u32 __cdecl trace_ret_note(u16 ss, u16 sp, u16 ax, u16 dx)
+{
+    u16 i, best = TP_N;
+    for (i = 0; i < TP_N; i++)
+        if (tpend[i].cs && tpend[i].ss == ss && tpend[i].slot < sp &&
+            (best == TP_N || tpend[i].slot > tpend[best].slot))
+            best = i;
+    if (best == TP_N)
+        return 0;                       /* (cannot happen) */
+    {
+        trrec *r = &trring[tpend[best].rec];
+        u32 ret = ((u32)tpend[best].cs << 16) | tpend[best].ip;
+        if (r->ret == tpend[best].seq) {
+            r->rax = ax;
+            r->rdx = dx;
+            r->ret = 0xFFFF;
+        }
+        tpend[best].cs = 0;
+        return ret;
+    }
+}
 
 u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
 {
@@ -222,6 +255,21 @@ u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
     for (i = 0; i < 6; i++)
         r->arg[i] = (u32)FP_OFF(frame) + 2 * (2 + i) + 1 <= sel_lim16(FP_SEG(frame)) ?
                     frame[2 + i] : 0;
+    r->ret = 0;
+    if (trace_ret_on) {
+        for (i = 0; i < TP_N && tpend[i].cs; i++)
+            ;
+        if (i < TP_N) {
+            tpend[i].ss = FP_SEG(frame);
+            tpend[i].slot = FP_OFF(frame);
+            tpend[i].ip = frame[0];
+            tpend[i].cs = frame[1];
+            tpend[i].rec = (u16)(r - trring);
+            tpend[i].seq = r->ret = (trcount & 0x7FFF) | 1;
+            frame[0] = FP_OFF((void __far *)trace_ret);
+            frame[1] = FP_SEG((void __far *)trace_ret);
+        }
+    }
     return b ? b->info[idx % TB_COUNT].real : 0;
 }
 
@@ -260,6 +308,14 @@ void trace_print(void)
         for (j = 0; j < 6; j++) {
             kputs(" ");
             kputhex(r->arg[j]);
+        }
+        if (r->ret == 0xFFFF) {
+            kputs(" -> ");
+            kputhex(r->rdx);
+            kputs(":");
+            kputhex(r->rax);
+        } else if (r->ret) {
+            kputs(" (no return)");
         }
         kputs("\r\n");
     }

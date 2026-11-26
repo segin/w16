@@ -324,6 +324,13 @@ int __cdecl tmain(void)
         r = call(k);
         wsprintf(line, "OBS %s AX=~ \r\n", (LPSTR)(k == 134 ? "AnsiToOemBuff" : "OemToAnsiBuff"));
         put(line);
+        /* DX:AX against the buffers (StarOffice's TL312MW.DLL used DX
+           after OemToAnsiBuff: w16's left its own data segment there) */
+        wsprintf(line, "OBS ~%s DX=%04X AX=%04X dst=%04X:%04X src=%04X:%04X\r\n",
+                 (LPSTR)(k == 134 ? "AnsiToOemBuff" : "OemToAnsiBuff"), HIWORD(r), LOWORD(r),
+                 SELECTOROF((void FAR *)buf2), OFFSETOF((void FAR *)buf2),
+                 SELECTOROF((void FAR *)buf), OFFSETOF((void FAR *)buf));
+        put(line);
         hexline(k == 134 ? "AnsiToOemBuff" : "OemToAnsiBuff", buf2, 258);
         fill(buf2, 8, 0xCC);
         args[15] = 0;

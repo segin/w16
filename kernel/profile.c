@@ -647,6 +647,53 @@ static int write_string(const char FAR *sec, const char FAR *key, const char FAR
     return flush_out(pc);
 }
 
+/* ---- [w16] profilelog=1 (a debugging aid; winboot.c): each read to
+   the debuglog: the file, section, key, size, result and what the buffer
+   got (NULs as '|', up to 80 characters) ---- */
+u16 profile_log;
+
+static void plog_str(const char FAR *p)
+{
+    if (!p) {
+        kdbg("(null)");
+        return;
+    }
+    if (!FP_SEG(p)) {
+        kdbg("#");
+        kdbghex(FP_OFF(p));
+        return;
+    }
+    kdbg("\"");
+    kdbg(p);
+    kdbg("\"");
+}
+
+static int plog(const char FAR *file, const char FAR *sec, const char FAR *key,
+                const char FAR *buf, int n, int r)
+{
+    static char b[84];
+    int i;
+    if (!profile_log)
+        return r;
+    kdbg("w16: profile ");
+    plog_str(file);
+    kdbg(" [");
+    plog_str(sec);
+    kdbg("] ");
+    plog_str(key);
+    kdbg(" n=");
+    kdbghex((u16)n);
+    kdbg(" -> ");
+    kdbghex((u16)r);
+    kdbg(" ");
+    for (i = 0; buf && i < r + 1 && i < 80 && i < n; i++)
+        b[i] = buf[i] ? buf[i] : '|';
+    b[i] = 0;
+    kdbg(b);
+    kdbg("\r\n");
+    return r;
+}
+
 /* ---- the APIs ---- */
 
 static int win_ini_path(char *path)
@@ -668,7 +715,7 @@ int KAPI GetProfileString(const char FAR *sec, const char FAR *key,
     char *path = api_path;
     if (!win_ini_path(path))
         return put_default(def, buf, n ? (u32)(u16)n : 0x10000UL);
-    return read_string(sec, key, def, buf, n, path, &win_ini);
+    return plog("WIN.INI", sec, key, buf, n, read_string(sec, key, def, buf, n, path, &win_ini));
 }
 
 u16 KAPI WriteProfileString(const char FAR *sec, const char FAR *key,
@@ -699,8 +746,8 @@ int KAPI GetPrivateProfileString(const char FAR *sec, const char FAR *key,
 {
     char *path = api_path;
     if (!file || !resolve(file, path))
-        return put_default(def, buf, n ? (u32)(u16)n : 0x10000UL);
-    return read_string(sec, key, def, buf, n, path, cache_for(path));
+        return plog(file, sec, key, buf, n, put_default(def, buf, n ? (u32)(u16)n : 0x10000UL));
+    return plog(file, sec, key, buf, n, read_string(sec, key, def, buf, n, path, cache_for(path)));
 }
 
 u16 KAPI WritePrivateProfileString(const char FAR *sec, const char FAR *key,

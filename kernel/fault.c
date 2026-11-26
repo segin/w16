@@ -223,6 +223,47 @@ extern void __far wd_int70(void);
 
 static void print_int21_ring(u16 pos);
 
+/* The faulting stack: 16 words from SS:SP, then the chain of BP frames
+   (a far frame's BP is odd: Windows' prologue), each with the return
+   address it holds, as far as the words lie inside the segment. */
+static void print_stack(u16 ss, u16 sp, u16 bp)
+{
+    u32 lim = (u32)lsl(ss);
+    u16 i;
+    if (!ss || lar_any(ss) == 0)
+        return;
+    kputs("stack:");
+    for (i = 0; i < 16 && (u32)sp + 2 * i + 1 <= lim; i++) {
+        kputs(" ");
+        kputhex(*(u16 __far *)MK_FP(ss, sp + 2 * i));
+    }
+    kputs("\r\n");
+    for (i = 0; i < 12 && bp && (u32)(bp & ~1) + 7 <= lim; i++) {
+        u16 __far *fr = (u16 __far *)MK_FP(ss, bp & ~1);
+        kputs(" frame ");
+        kputhex(bp);
+        kputs(" ret ");
+        if (bp & 1) {
+            kputhex(fr[2]);
+            kputs(":");
+            kputhex(fr[1]);
+            where(fr[2]);
+        } else {
+            kputhex(fr[1]);
+        }
+        kputs(" args ");
+        kputhex(fr[3]);
+        kputs(" ");
+        kputhex(fr[4]);
+        kputs(" ");
+        kputhex(fr[5]);
+        kputs("\r\n");
+        if ((fr[0] & ~1) <= (bp & ~1))
+            break;
+        bp = fr[0];
+    }
+}
+
 void __cdecl fault_report(void)
 {
     u16 *f = fault_regs, pos = i21_pos;
@@ -261,6 +302,7 @@ void __cdecl fault_report(void)
     where(f[6]);
     reg("SP", f[5]);
     kputs("\r\n");
+    print_stack(f[6], f[5], f[13]);
     print_int21_ring(pos);
     trace_print();
     kexit_to_dos(0xFF);

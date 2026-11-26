@@ -285,7 +285,11 @@ u16 winboot(void)
                             sysini);
     {
         extern char trace_from[9];      /* thunk.c */
+        extern int trace_ret_on;        /* thunk.c */
+        extern u16 profile_log;         /* profile.c */
         u16 i;
+        trace_ret_on = GetPrivateProfileInt("w16", "traceret", 0, sysini) != 0;
+        profile_log = GetPrivateProfileInt("w16", "profilelog", 0, sysini) != 0;
         GetPrivateProfileString("w16", "tracefrom", "", trace_from, sizeof trace_from,
                                 sysini);
         for (i = 0; trace_from[i]; i++)

@@ -1341,6 +1341,49 @@ trace_entry:
         pop bp
         retf                            ; to the real target
 
+; trace_ret: where a traced call returns with [w16] traceret=1 (thunk.c:
+; trace_note put this in place of the caller's return address). Records
+; DX:AX (trace_ret_note, which gives back the caller's own return address)
+; and returns there with every register and flag as the callee left them.
+extern _trace_ret_note
+global trace_ret
+trace_ret:
+        push ax                         ; room for the caller's return
+        push ax                         ; (PUSH keeps the flags)
+        push bp
+        mov bp, sp                      ; [bp+2] the return, [bp+6] the caller's SP
+        pushf
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        push ds
+        push es
+        mov si, DGROUP
+        mov ds, si
+        push dx
+        push ax
+        lea si, [bp + 6]
+        push si
+        push ss
+        call far _trace_ret_note
+        add sp, 8
+        mov [bp + 2], ax
+        mov [bp + 4], dx
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        popf
+        pop bp
+        retf
+
 ; GetDOSEnvironment (KERNEL.131): task.c's GDEnv, keeping BX and ES, as
 ; observed on Windows 3.1 (TK24). MOUSE.DRV uses ES afterwards as it was.
 extern GDENV
