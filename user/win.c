@@ -13,6 +13,8 @@ HWND hwndDesktop;
 /* CS_BYTEALIGNCLIENT: the client area's left edge goes to the nearest
    multiple of 8 on screen (probe US5: asked for x 10 and 333, Windows 3.1
    put such windows at 12 and 332, their client areas at 16 and 336) */
+LRESULT WINAPI ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp);
+LRESULT WINAPI ComboLBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp);
 BOOL no_byte_align;             /* set around Tile/Cascade's moves (mdi.c) */
 void byte_align(PWND w, BOOL made)
 {
@@ -555,7 +557,13 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
        and the show). w16 held them back for every hidden window, and
        StarOffice's StarView, whose MDI children and controls take their
        size from WM_SIZE, faulted later in its own message 046Eh. */
-    if (!(style & (WS_CHILD | WS_POPUP)))
+    /* (w16's list boxes, combo boxes' lists among them, still get theirs
+       at the first show: their whole-item height worked out from an
+       at-create WM_SIZE used the system font's items before the dialog
+       font came, 98 high where 3.1's is 92: boot-test case combo.
+       UNVERIFIED what 3.1's list box does with that WM_SIZE) */
+    if (!(style & (WS_CHILD | WS_POPUP)) || w->lpfnWndProc == (WNDPROC)ListBoxWndProc ||
+        w->lpfnWndProc == (WNDPROC)ComboLBoxWndProc)
         w->flags |= WF_SENDSIZE;
     else {
         send_message(h, WM_SIZE, SIZE_RESTORED,
