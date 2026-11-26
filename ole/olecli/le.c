@@ -319,9 +319,11 @@ void FAR * OLEAPI LeQueryProtocol(LPOLEOBJECT p, OLE_LPCSTR protocol)
     return NULL;
 }
 
+/* busy: an operation waits for the server, or (in_step) a step waits for
+   a server it started and the client's messages run meanwhile */
 static OLESTATUS busy_check(LPOBJ o)
 {
-    return o->busy ? OLE_BUSY : OLE_OK;
+    return o->busy || o->in_step ? OLE_BUSY : OLE_OK;
 }
 
 /* the end of an object: conversations closed first (Delete closes an open
@@ -329,7 +331,7 @@ static OLESTATUS busy_check(LPOBJ o)
 static OLESTATUS finish(LPOBJ o, BOOL del)
 {
     OLESTATUS s;
-    if (o->busy)
+    if (busy_check(o))
         return OLE_BUSY;
     if (o->hdoc && o->open) {
         /* an open embedded object's document is closed, by OleDelete as
@@ -379,9 +381,8 @@ OLESTATUS OLEAPI LeActivate(LPOLEOBJECT p, UINT verb, BOOL show, BOOL focus,
                                        HWND w, OLE_CONST RECT FAR *r)
 {
     OBJ_OF(p);
-    char cmd[300];
     LPSTR item;
-    HGLOBAL h;
+    HGLOBAL h, t;
     (void)w;
     (void)r;
     if (o->type == OT_STATIC)
@@ -397,7 +398,7 @@ OLESTATUS OLEAPI LeActivate(LPOLEOBJECT p, UINT verb, BOOL show, BOOL focus,
         gstr_unlock(o->htopic);
         dde_add(o, ST_DOC_CONNECT, 0, NULL, 0);
         if (o->hhost)                   /* UNVERIFIED: where host names go */
-            dde_add(o, ST_POKE, cf_binary, copy_global(o->hhost), IT_HOST);
+            dde_add(o, ST_POKE, cf_binary, poke_block(cf_binary, o->hhost), IT_HOST);
         if (o->hnative)
             dde_add(o, ST_POKE, cf_native, poke_block(cf_native, o->hnative), IT_NONE);
         add_embedded_advises(o);
@@ -414,10 +415,20 @@ OLESTATUS OLEAPI LeActivate(LPOLEOBJECT p, UINT verb, BOOL show, BOOL focus,
     /* "[StdDoVerbItem("<item>",<verb>,<show>,<!focus>)]": the last
        argument is the opposite of fTakeFocus (observed both ways) */
     item = gstr(o->hitem);
-    wsprintf(cmd, "[StdDoVerbItem(\"%s\",%u,%s,%s)]", item, verb,
-             (LPSTR)(show ? "TRUE" : "FALSE"), (LPSTR)(focus ? "FALSE" : "TRUE"));
+    /* the rest is at most 37 characters: the block fits any item */
+    t = GlobalAlloc(GMEM_MOVEABLE, (DWORD)slen(item) + 40);
+    h = NULL;
+    if (t) {
+        LPSTR cmd = (LPSTR)GlobalLock(t);
+        lstrcpy(cmd, "[StdDoVerbItem(\"");
+        lstrcat(cmd, item);
+        wsprintf(cmd + lstrlen(cmd), "\",%u,%s,%s)]", verb,
+                 (LPSTR)(show ? "TRUE" : "FALSE"), (LPSTR)(focus ? "FALSE" : "TRUE"));
+        h = gstr_new(cmd);
+        GlobalUnlock(t);
+        GlobalFree(t);
+    }
     gstr_unlock(o->hitem);
-    h = gstr_new(cmd);
     dde_add(o, ST_EXEC, 0, h, OLE_ERROR_DOVERB);
     return dde_run(o);
 }
@@ -599,6 +610,8 @@ OLESTATUS OLEAPI LeSetColorScheme(LPOLEOBJECT p, OLE_CONST LOGPALETTE FAR *pal)
         return OLE_BUSY;
     if (!o->open)
         return OLE_OK;
+    if (pal->palNumEntries > 0x3FC0)    /* more than any palette has */
+        return OLE_ERROR_PALETTE;
     n = 4 + pal->palNumEntries * sizeof(PALETTEENTRY);
     h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, 4 + n);
     if (!h)
@@ -632,8 +645,10 @@ static OLESTATUS copy_obj(LPOBJ o, LPOLECLIENT c, LHCLIENTDOC lh, LPCSTR name,
         return OLE_ERROR_MEMORY;
     n->type = type;
     n->hclass = copy_global(o->hclass);
-    n->hitem = copy_global(o->hitem);
-    n->hnet = copy_global(o->hnet);
+    if (type != OT_EMBEDDED) {          /* a link's item is not an embedded object's */
+        n->hitem = copy_global(o->hitem);
+        n->hnet = copy_global(o->hnet);
+    }
     n->hnative = copy_global(o->hnative);
     n->render = o->render;
     n->renderfmt = o->renderfmt;
@@ -702,11 +717,54 @@ static BOOL same_str(HGLOBAL a, HGLOBAL b)
     return r;
 }
 
+/* two bitmaps of the same size, format and bits */
+static BOOL same_bitmap(HBITMAP a, HBITMAP b)
+{
+    BITMAP ba, bb;
+    DWORD n;
+    HGLOBAL ha, hb;
+    BOOL r = FALSE;
+    if (!GetObject(a, sizeof ba, &ba) || !GetObject(b, sizeof bb, &bb))
+        return FALSE;
+    if (ba.bmWidth != bb.bmWidth || ba.bmHeight != bb.bmHeight
+        || ba.bmPlanes != bb.bmPlanes || ba.bmBitsPixel != bb.bmBitsPixel)
+        return FALSE;
+    n = (DWORD)ba.bmWidthBytes * ba.bmHeight * ba.bmPlanes;
+    ha = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, n ? n : 1);
+    hb = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, n ? n : 1);
+    if (ha && hb) {
+        GetBitmapBits(a, n, GlobalLock(ha));
+        GetBitmapBits(b, n, GlobalLock(hb));
+        GlobalUnlock(ha);
+        GlobalUnlock(hb);
+        r = same_global(ha, hb);
+    }
+    gfree(ha);
+    gfree(hb);
+    return r;
+}
+
+/* two metafile pictures: the same mapping, extents and metafile */
+static BOOL same_mfpict(HGLOBAL a, HGLOBAL b)
+{
+    METAFILEPICT FAR *ma = (METAFILEPICT FAR *)GlobalLock(a);
+    METAFILEPICT FAR *mb = (METAFILEPICT FAR *)GlobalLock(b);
+    BOOL r = ma && mb && ma->mm == mb->mm && ma->xExt == mb->xExt && ma->yExt == mb->yExt
+             && same_global((HGLOBAL)ma->hMF, (HGLOBAL)mb->hMF);
+    if (ma)
+        GlobalUnlock(a);
+    if (mb)
+        GlobalUnlock(b);
+    return r;
+}
+
 /* equal: same kind, class, and (embedded) Native data or (link) document
-   and item (UNVERIFIED beyond the equal embedded copies observed) */
+   and item (UNVERIFIED beyond the equal embedded copies observed); a
+   static object's picture by its contents */
 OLESTATUS OLEAPI LeEqual(LPOLEOBJECT a, LPOLEOBJECT b)
 {
     LPOBJ x = (LPOBJ)a, y = (LPOBJ)b;
+    BOOL r;
     if (x->type != y->type || !same_str(x->hclass, y->hclass))
         return OLE_ERROR_NOT_EQUAL;
     if (x->type == OT_LINK)
@@ -714,7 +772,17 @@ OLESTATUS OLEAPI LeEqual(LPOLEOBJECT a, LPOLEOBJECT b)
                    ? OLE_OK : OLE_ERROR_NOT_EQUAL;
     if (x->type == OT_EMBEDDED)
         return same_global(x->hnative, y->hnative) ? OLE_OK : OLE_ERROR_NOT_EQUAL;
-    return same_global(x->hpres, y->hpres) ? OLE_OK : OLE_ERROR_NOT_EQUAL;
+    if (!x->hpres || !y->hpres)
+        r = x->hpres == y->hpres;
+    else if (x->pres != y->pres || x->presfmt != y->presfmt)
+        r = FALSE;
+    else if (x->pres == PRES_MF)
+        r = same_mfpict(x->hpres, y->hpres);
+    else if (x->pres == PRES_BM)
+        r = same_bitmap(x->hpres, y->hpres);
+    else
+        r = same_global(x->hpres, y->hpres);
+    return r ? OLE_OK : OLE_ERROR_NOT_EQUAL;
 }
 
 OLESTATUS OLEAPI LeCopyToClipboard(LPOLEOBJECT p)
@@ -934,7 +1002,7 @@ OLESTATUS OLEAPI LeQueryOutOfDate(LPOLEOBJECT p)
 
 OLESTATUS OLEAPI LeQueryReleaseStatus(LPOLEOBJECT p)
 {
-    return ((LPOBJ)p)->busy ? OLE_BUSY : OLE_OK;
+    return busy_check((LPOBJ)p);
 }
 
 OLESTATUS OLEAPI LeQueryReleaseError(LPOLEOBJECT p)
@@ -1053,8 +1121,8 @@ OLEOBJECTVTBL g_vtbl = {
     LeChangeData
 };
 
-/* OLECLI.54, 55 (UNVERIFIED: not observed; a lock keeps the server's
-   system conversation) */
+/* OLECLI.54, 55 (UNVERIFIED: not observed; the lock is the server's, kept
+   by a system conversation of its own, dde.c) */
 OLESTATUS OLEAPI OleLockServer(LPOLEOBJECT p, LHSERVER FAR *lh)
 {
     LPOBJ o = obj_check(p);
@@ -1062,16 +1130,10 @@ OLESTATUS OLEAPI OleLockServer(LPOLEOBJECT p, LHSERVER FAR *lh)
         return OLE_ERROR_OBJECT;
     if (!lh)
         return OLE_ERROR_ADDRESS;
-    *lh = (LHSERVER)o;
-    o->locked++;
-    return OLE_OK;
+    return dde_lock(o, lh);
 }
 
 OLESTATUS OLEAPI OleUnlockServer(LHSERVER lh)
 {
-    LPOBJ o = obj_check((LPOLEOBJECT)lh);
-    if (!o || !o->locked)
-        return OLE_ERROR_HANDLE;
-    o->locked--;
-    return OLE_OK;
+    return dde_unlock(lh);
 }

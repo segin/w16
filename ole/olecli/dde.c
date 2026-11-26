@@ -96,7 +96,43 @@ static STEP FAR *steps(LPOBJ o)
     return (STEP FAR *)GlobalLock(o->hsteps);
 }
 
-void dde_add(LPOBJ o, WORD op, WORD fmt, HGLOBAL data, WORD arg)
+/* a POKE's data: the DDEPOKE block and, for a picture, the handle in it */
+void poke_free(WORD cf, HGLOBAL b)
+{
+    BYTE FAR *p;
+    if (!b)
+        return;
+    p = (BYTE FAR *)GlobalLock(b);
+    if (p && (cf == CF_METAFILEPICT || cf == CF_BITMAP || cf == CF_PALETTE)) {
+        HANDLE h = *(HANDLE FAR *)(p + 4);
+        if (h && cf == CF_METAFILEPICT) {
+            METAFILEPICT FAR *m = (METAFILEPICT FAR *)GlobalLock(h);
+            if (m) {
+                DeleteMetaFile(m->hMF);
+                GlobalUnlock(h);
+            }
+            GlobalFree(h);
+        } else if (h)
+            DeleteObject(h);
+    }
+    if (p)
+        GlobalUnlock(b);
+    GlobalFree(b);
+}
+
+/* a step's data that will not be sent */
+static void step_data_free(WORD op, WORD fmt, HGLOBAL data)
+{
+    if (!data)
+        return;
+    if (op == ST_POKE)
+        poke_free(fmt, data);
+    else
+        GlobalFree(data);
+}
+
+/* FALSE when there is no memory for the step (its data is freed) */
+BOOL dde_add(LPOBJ o, WORD op, WORD fmt, HGLOBAL data, WORD arg)
 {
     STEP FAR *s;
     WORD cap = o->hsteps ? (WORD)(GlobalSize(o->hsteps) / sizeof(STEP)) : 0;
@@ -105,8 +141,10 @@ void dde_add(LPOBJ o, WORD op, WORD fmt, HGLOBAL data, WORD arg)
         cap = cap ? cap * 2 : 8;
         h = o->hsteps ? GlobalReAlloc(o->hsteps, cap * sizeof(STEP), GMEM_MOVEABLE)
                       : GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, cap * sizeof(STEP));
-        if (!h)
-            return;
+        if (!h) {
+            step_data_free(op, fmt, data);
+            return FALSE;
+        }
         o->hsteps = h;
     }
     s = steps(o);
@@ -116,14 +154,19 @@ void dde_add(LPOBJ o, WORD op, WORD fmt, HGLOBAL data, WORD arg)
     s[o->nsteps].arg = arg;
     o->nsteps++;
     GlobalUnlock(o->hsteps);
+    return TRUE;
 }
 
-/* insert a step right after the current one */
-static void insert_next(LPOBJ o, WORD op, WORD fmt, HGLOBAL data, WORD arg)
+/* insert a step right after the current one (FALSE: no memory; the data
+   is freed) */
+static BOOL insert_next(LPOBJ o, WORD op, WORD fmt, HGLOBAL data, WORD arg)
 {
     STEP FAR *s;
     WORD i;
-    dde_add(o, ST_NONE, 0, NULL, 0);
+    if (!dde_add(o, ST_NONE, 0, NULL, 0)) {
+        step_data_free(op, fmt, data);
+        return FALSE;
+    }
     s = steps(o);
     for (i = o->nsteps - 1; i > o->cur + 1; i--)
         s[i] = s[i - 1];
@@ -132,19 +175,33 @@ static void insert_next(LPOBJ o, WORD op, WORD fmt, HGLOBAL data, WORD arg)
     s[o->cur + 1].data = data;
     s[o->cur + 1].arg = arg;
     GlobalUnlock(o->hsteps);
+    return TRUE;
 }
 
-static void clear_steps(LPOBJ o)
+/* free the data of steps from..to-1; a POKE the server has (posted, its
+   ACK not in) stays: after an ACK the client frees it, but the server may
+   already own a picture in it */
+static void drop_steps(LPOBJ o, WORD from, WORD to)
 {
     STEP FAR *s;
     WORD i;
     if (!o->hsteps)
         return;
     s = steps(o);
-    for (i = o->cur; i < o->nsteps; i++)
-        if (s[i].data && s[i].op != ST_POKE)
-            GlobalFree(s[i].data);
+    for (i = from; i < to && i < o->nsteps; i++) {
+        if (s[i].op == ST_POKE && i == o->cur && o->wait == W_ACK)
+            continue;
+        step_data_free(s[i].op, s[i].fmt, s[i].data);
+        s[i].data = NULL;
+    }
     GlobalUnlock(o->hsteps);
+}
+
+static void clear_steps(LPOBJ o)
+{
+    if (!o->hsteps)
+        return;
+    drop_steps(o, o->cur, o->nsteps);
     o->nsteps = o->cur = 0;
 }
 
@@ -334,6 +391,7 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
         cls = gstr(o->hclass);
         lstrcpyn(buf, cls, sizeof buf);
         gstr_unlock(o->hclass);
+        kill_window(&o->hsys);          /* one whose server went silently */
         o->hsys = make_window(o, FALSE);
         r = initiate(o->hsys, buf, "OLEsystem");
         if (!r)
@@ -349,7 +407,11 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
             }
             o->launched = h;
             o->hsys = make_window(o, FALSE);
+            /* the client's messages are dispatched meanwhile: calls that
+               would change or free the object are refused (OLE_BUSY) */
+            o->in_step = TRUE;
             r = initiate_retry(o->hsys, buf, "OLEsystem", h);
+            o->in_step = FALSE;
             if (!r) {
                 kill_window(&o->hsys);
                 *err = OLE_ERROR_COMM;
@@ -360,6 +422,10 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
         return R_NEXT;
 
     case ST_SYS_EXEC:
+        if (!s->data) {                 /* no memory for the command */
+            *err = OLE_ERROR_MEMORY;
+            return R_FAIL;
+        }
         o->wait = W_ACK;
         if (!PostMessage(o->hsrvsys, WM_DDE_EXECUTE, (WPARAM)o->hsys,
                          MAKELONG(0, s->data))) {
@@ -413,17 +479,27 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
                 return R_NEXT;
             }
             kill_window(&o->hdoc);
-            o->hsys = make_window(o, FALSE);
-            r = initiate(o->hsys, buf, "OLEsystem");
-            if (!r)
-                r = initiate(o->hsys, buf, "System");
+            if (o->hsys && o->hsrvsys && IsWindow(o->hsrvsys))
+                /* the system conversation an earlier connect left open */
+                r = o->hsrvsys;
+            else {
+                kill_window(&o->hsys);
+                o->hsys = make_window(o, FALSE);
+                r = initiate(o->hsys, buf, "OLEsystem");
+                if (!r)
+                    r = initiate(o->hsys, buf, "System");
+            }
             if (r) {
                 /* UNVERIFIED (not observed yet): StdOpenDocument on the
                    system topic, then the document */
                 o->hsrvsys = r;
-                insert_next(o, ST_DOC_CONNECT, 0, NULL, 0);
-                insert_next(o, ST_SYS_EXEC, 0, dde_exec_str("StdOpenDocument", file, NULL),
-                            OLE_ERROR_OPEN);
+                if (!insert_next(o, ST_DOC_CONNECT, 0, NULL, 0) ||
+                    !insert_next(o, ST_SYS_EXEC, 0,
+                                 dde_exec_str("StdOpenDocument", file, NULL),
+                                 OLE_ERROR_OPEN)) {
+                    *err = OLE_ERROR_MEMORY;
+                    return R_FAIL;
+                }
                 return R_NEXT;
             }
             kill_window(&o->hsys);
@@ -450,7 +526,9 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
             }
             o->launched = h;
             o->hdoc = make_window(o, TRUE);
+            o->in_step = TRUE;
             r = initiate_retry(o->hdoc, buf, file, h);
+            o->in_step = FALSE;
             if (!r) {
                 kill_window(&o->hdoc);
                 *err = OLE_ERROR_OPEN;
@@ -462,6 +540,10 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
         }
 
     case ST_EXEC:
+        if (!s->data) {
+            *err = OLE_ERROR_MEMORY;
+            return R_FAIL;
+        }
         o->wait = W_ACK;
         if (!o->hsrvdoc || !PostMessage(o->hsrvdoc, WM_DDE_EXECUTE, (WPARAM)o->hdoc,
                                         MAKELONG(0, s->data))) {
@@ -513,12 +595,19 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
 
     case ST_POKE:
         {
-            ATOM item = GlobalAddAtom(item_name(o, s->arg, buf, sizeof buf));
+            ATOM item;
+            if (!s->data) {
+                *err = OLE_ERROR_MEMORY;
+                return R_FAIL;
+            }
+            item = GlobalAddAtom(item_name(o, s->arg, buf, sizeof buf));
             o->wait = W_ACK;
             if (!PostMessage(o->hsrvdoc, WM_DDE_POKE, (WPARAM)o->hdoc,
                              MAKELONG(s->data, item))) {
                 if (item)
                     GlobalDeleteAtom(item);
+                poke_free(s->fmt, s->data);     /* never sent: still ours */
+                s->data = NULL;
                 *err = OLE_ERROR_COMM;
                 return R_FAIL;
             }
@@ -557,8 +646,10 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
     case ST_MAYBE_TERMINATE:
         /* a server nobody can see (started hidden for us) is let go;
            one the user has open keeps the conversation (observed) */
-        if (!server_visible(o))
-            insert_next(o, ST_TERMINATE, 0, NULL, 0);
+        if (!server_visible(o) && !insert_next(o, ST_TERMINATE, 0, NULL, 0)) {
+            *err = OLE_ERROR_MEMORY;
+            return R_FAIL;
+        }
         return R_NEXT;
 
     case ST_DONE_CHANGED:
@@ -575,11 +666,18 @@ static int step_do(LPOBJ o, STEP FAR *s, OLESTATUS FAR *err)
            new document again (the object stays blank, no error) */
         if (o->advfail) {
             o->advfail = FALSE;
-            insert_next(o, ST_WAIT_SYSTERM, 0, NULL, 1);
-            insert_next(o, ST_WAIT_DOCTERM, 0, NULL, 0);
-            insert_next(o, ST_EXEC, 0, dde_exec_str("StdCloseDocument", NULL, NULL), 0);
-        } else if (s->arg)
-            insert_next(o, ST_EXEC, 0, dde_exec_str("StdShowItem", "", NULL), OLE_ERROR_SHOW);
+            if (!insert_next(o, ST_WAIT_SYSTERM, 0, NULL, 1) ||
+                !insert_next(o, ST_WAIT_DOCTERM, 0, NULL, 0) ||
+                !insert_next(o, ST_EXEC, 0, dde_exec_str("StdCloseDocument", NULL, NULL), 0)) {
+                *err = OLE_ERROR_MEMORY;
+                return R_FAIL;
+            }
+        } else if (s->arg && !insert_next(o, ST_EXEC, 0,
+                                          dde_exec_str("StdShowItem", "", NULL),
+                                          OLE_ERROR_SHOW)) {
+            *err = OLE_ERROR_MEMORY;
+            return R_FAIL;
+        }
         return R_NEXT;
 
     case ST_BECOME_EMBEDDED:
@@ -645,12 +743,20 @@ static OLESTATUS run(LPOBJ o, BOOL from_api)
             o->nsteps = o->cur = 0;
             o->wait = W_NONE;
             if (o->busy) {
+                /* what the operation was for is decided before the
+                   callback: one the client starts from it (an OleDelete,
+                   say) runs on its own */
+                BOOL fa = o->free_after;
+                o->free_after = FALSE;
                 o->busy = FALSE;
                 callback(o, OLE_RELEASE);
-                if (o->free_after) {
+                if (o->dead)
+                    return OLE_OK;
+                if (fa && !o->busy) {
                     dde_close_all(o);
                     obj_free(o);
-                }
+                } else if (fa)
+                    o->free_after = TRUE;
             }
             return OLE_OK;
         }
@@ -658,6 +764,8 @@ static OLESTATUS run(LPOBJ o, BOOL from_api)
         TRACE(("step %d/%d op %d arg %d launched_now %d open %d", o->cur, o->nsteps,
                s[o->cur].op, s[o->cur].arg, o->launched_now, o->open));
         r = step_do(o, &s[o->cur], &err);
+        if (o->dead)                    /* freed from a callback */
+            return OLE_OK;
         GlobalUnlock(o->hsteps);
         if (r == R_WAIT) {
             if (!o->busy) {
@@ -709,17 +817,23 @@ static void step_fail(LPOBJ o, OLESTATUS e)
 static void take_data(LPOBJ o, HGLOBAL h, ATOM item, BOOL FAR *saved, BOOL FAR *closed)
 {
     DDEDATA FAR *d = (DDEDATA FAR *)GlobalLock(h);
-    WORD flags = *(WORD FAR *)d;
-    WORD cf = d->cfFormat;
+    WORD flags, cf;
     char name[64];
-    BOOL release = (flags & 0x2000) != 0;
-    BOOL ackreq = (flags & 0x8000) != 0;
+    BOOL release, ackreq;
+    DWORD size = GlobalSize(h);
+    *saved = *closed = FALSE;
+    if (!d)
+        return;
+    flags = *(WORD FAR *)d;
+    cf = d->cfFormat;
+    release = (flags & 0x2000) != 0;
+    ackreq = (flags & 0x8000) != 0;
+    size = size > 4 ? size - 4 : 0;
     name[0] = 0;
     if (item)
         GlobalGetAtomName(item, name, sizeof name);
-    *saved = *closed = FALSE;
     if (cf == cf_native) {
-        DWORD n = GlobalSize(h) - 4;
+        DWORD n = size;
         /* a block of the DDE data's size less the header: its GlobalSize
            is what a stream gets (observed); the rounding is zeroed (in
            Microsoft's it is whatever memory held) */
@@ -734,9 +848,18 @@ static void take_data(LPOBJ o, HGLOBAL h, ATOM item, BOOL FAR *saved, BOOL FAR *
         if (release)
             GlobalFree(h);
     } else if (cf == cf_binary && !lstrcmp(name, "StdDocumentName")) {
-        /* the linked document was renamed: the new name is the data */
-        gfree(o->htopic);
-        o->htopic = gstr_new((LPSTR)d + 4);
+        /* the linked document was renamed: the new name is the data (at
+           most the block's: one without its NUL ends there) */
+        WORD cb = size < 0x7FFF ? (WORD)size + 1 : 0x7FFF;
+        HGLOBAL t = GlobalAlloc(GMEM_MOVEABLE, cb);
+        if (t) {
+            LPSTR p = (LPSTR)GlobalLock(t);
+            lstrcpyn(p, (LPSTR)d + 4, cb);
+            gfree(o->htopic);
+            o->htopic = gstr_new(p);
+            GlobalUnlock(t);
+            GlobalFree(t);
+        }
         GlobalUnlock(h);
         if (release)
             GlobalFree(h);
@@ -764,7 +887,7 @@ static void take_data(LPOBJ o, HGLOBAL h, ATOM item, BOOL FAR *saved, BOOL FAR *
                 GlobalFree(h);
             }
         } else {
-            DWORD n = GlobalSize(h) - 4;
+            DWORD n = size;
             keep = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, n);
             if (keep) {
                 hmemcpy(GlobalLock(keep), (BYTE FAR *)d + 4, n);
@@ -869,9 +992,15 @@ static void on_data(LPOBJ o, HWND w, HWND from, LPARAM lp)
     DDEDATA FAR *d;
     WORD flags, cf;
     BOOL saved, closed, response;
-    if (!h)
+    if (!h || !(d = (DDEDATA FAR *)GlobalLock(h))) {
+        /* no data (a warm link's notice; w16 asks for none) or a bad
+           handle: the atom goes; a REQUEST answered so fails */
+        if (item)
+            GlobalDeleteAtom(item);
+        if (o->wait == W_DATA)
+            step_fail(o, OLE_ERROR_COMM);
         return;
-    d = (DDEDATA FAR *)GlobalLock(h);
+    }
     flags = *(WORD FAR *)d;
     cf = d->cfFormat;
     GlobalUnlock(h);
@@ -881,6 +1010,8 @@ static void on_data(LPOBJ o, HWND w, HWND from, LPARAM lp)
     take_data(o, h, item, &saved, &closed);
     if (!(flags & 0x8000) && item)
         GlobalDeleteAtom(item);
+    if (o->dead)                        /* deleted on OLE_RENAMED */
+        return;
     if (response && o->wait == W_DATA) {
         step_next(o);
         return;
@@ -892,6 +1023,8 @@ static void on_data(LPOBJ o, HWND w, HWND from, LPARAM lp)
     if (!last_of_batch(o, cf))
         return;
     callback(o, saved ? OLE_SAVED : OLE_CHANGED);
+    if (o->dead)
+        return;
     if (closed && o->hdoc && o->hsrvdoc && o->wait == W_NONE) {
         /* observed: after the "/Close" data OLECLI sends
            [StdCloseDocument] and the client gets OLE_CLOSED at once, before
@@ -899,8 +1032,10 @@ static void on_data(LPOBJ o, HWND w, HWND from, LPARAM lp)
         HGLOBAL c = dde_exec_str("StdCloseDocument", NULL, NULL);
         if (!PostMessage(o->hsrvdoc, WM_DDE_EXECUTE, (WPARAM)o->hdoc, MAKELONG(0, c)))
             GlobalFree(c);
-        else
+        else {
             o->hloose = c;
+            o->hloose_to = o->hsrvdoc;
+        }
         o->closing = TRUE;
         callback(o, OLE_CLOSED);
     }
@@ -937,12 +1072,15 @@ static void on_terminate(LPOBJ o, HWND w, HWND from)
             step_next(o);
         else if (o->wait != W_NONE && (at = find_step(o, ST_WAIT_DOCTERM)) != 0xFFFF) {
             /* closing anyway: the server's end is the close's (observed:
-               no OLE_CLOSED then) */
+               no OLE_CLOSED then); the steps skipped are never sent */
+            drop_steps(o, o->cur + 1, at);
             o->cur = at;
             step_next(o);
         } else {
             if (o->type == OT_EMBEDDED && !o->closing)
                 callback(o, OLE_CLOSED);
+            if (o->dead)
+                return;
             o->closing = FALSE;
             if (o->wait != W_NONE)
                 step_fail(o, OLE_ERROR_TERMINATE);
@@ -991,6 +1129,7 @@ LRESULT OLEAPI OleWndProc(HWND w, UINT m, WPARAM wp, LPARAM lp)
             PostMessage((HWND)wp, WM_DDE_TERMINATE, (WPARAM)w, 0);
         return 0;
     }
+    o->depth++;
     switch (m) {
     case WM_DDE_ACK:
         on_ack(o, w, (HWND)wp, lp);
@@ -1010,6 +1149,8 @@ LRESULT OLEAPI OleWndProc(HWND w, UINT m, WPARAM wp, LPARAM lp)
         post_ack_neg((HWND)wp, w, HIWORD(lp));
         break;
     }
+    if (!--o->depth && o->dead)
+        obj_free_self(o);
     return 0;
 }
 
@@ -1050,10 +1191,21 @@ void dde_close_all(LPOBJ o)
             PostMessage(o->hsrvdoc, WM_DDE_TERMINATE, (WPARAM)o->hdoc, 0);
         kill_window(&o->hdoc);
     }
+    if (o->hloose && !IsWindow(o->hloose_to)) {
+        /* the server it went to is gone: nobody reads or returns it (one
+           whose window is there may still read it, its TERMINATE having
+           crossed the command) */
+        GlobalFree(o->hloose);
+        o->hloose = NULL;
+    }
     if (o->hsys) {
         if (o->hsrvsys && IsWindow(o->hsrvsys)) {
+            /* the window goes at once, as 3.1's (observed: the server
+               reads [StdExit] from a window already destroyed), so the
+               command its ACK would return is never freed */
             HGLOBAL h = dde_exec_str("StdExit", NULL, NULL);
-            if (!PostMessage(o->hsrvsys, WM_DDE_EXECUTE, (WPARAM)o->hsys, MAKELONG(0, h)))
+            if (h && !PostMessage(o->hsrvsys, WM_DDE_EXECUTE, (WPARAM)o->hsys,
+                                  MAKELONG(0, h)))
                 GlobalFree(h);
             PostMessage(o->hsrvsys, WM_DDE_TERMINATE, (WPARAM)o->hsys, 0);
         }
@@ -1062,4 +1214,100 @@ void dde_close_all(LPOBJ o)
     o->hsrvdoc = o->hsrvsys = NULL;
     o->open = FALSE;
     clear_steps(o);
+}
+
+/* ---- OleLockServer, OleUnlockServer (OLECLI.54, 55) ----
+   UNVERIFIED (not observed): a lock is a system conversation of OLECLI's
+   own with the server (started hidden if none runs), one per server
+   class, counted; it outlives the object it was taken through, and the
+   last unlock ends it. The LHSERVER is the lock's record. */
+
+typedef struct LOCK LOCK;
+struct LOCK {
+    WORD magic;                 /* LOCK_MAGIC */
+    HGLOBAL hself;
+    LOCK FAR *next;
+    HWND w;                     /* our system window (no object) */
+    HWND srv;                   /* the server's */
+    WORD count;
+    char cls[128];
+};
+#define LOCK_MAGIC 0x4C4F       /* "OL" */
+
+static LOCK FAR *g_locks;
+
+OLESTATUS dde_lock(LPOBJ o, LHSERVER FAR *lh)
+{
+    LOCK FAR *k;
+    HGLOBAL hk;
+    char cls[128];
+    HWND w, r;
+    lstrcpyn(cls, gstr(o->hclass), sizeof cls);
+    gstr_unlock(o->hclass);
+    for (k = g_locks; k; k = k->next)
+        if (!lstrcmpi(k->cls, cls) && IsWindow(k->srv)) {
+            k->count++;
+            *lh = (LHSERVER)k;
+            return OLE_OK;
+        }
+    w = make_window(NULL, FALSE);
+    if (!w)
+        return OLE_ERROR_MEMORY;
+    r = initiate(w, cls, "OLEsystem");
+    if (!r)
+        r = initiate(w, cls, "System");
+    if (!r) {
+        HINSTANCE h = launch(o, NULL, SW_HIDE);
+        if (!h) {
+            DestroyWindow(w);
+            return OLE_ERROR_LAUNCH;
+        }
+        /* o is not used after this: the client may free it meanwhile */
+        r = initiate_retry(w, cls, "OLEsystem", h);
+        if (!r) {
+            DestroyWindow(w);
+            return OLE_ERROR_COMM;
+        }
+    }
+    hk = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT | GMEM_DDESHARE, sizeof(LOCK));
+    if (!hk) {
+        PostMessage(r, WM_DDE_TERMINATE, (WPARAM)w, 0);
+        DestroyWindow(w);
+        return OLE_ERROR_MEMORY;
+    }
+    k = (LOCK FAR *)GlobalLock(hk);
+    k->magic = LOCK_MAGIC;
+    k->hself = hk;
+    k->w = w;
+    k->srv = r;
+    k->count = 1;
+    lstrcpy(k->cls, cls);
+    k->next = g_locks;
+    g_locks = k;
+    *lh = (LHSERVER)k;
+    return OLE_OK;
+}
+
+OLESTATUS dde_unlock(LHSERVER lh)
+{
+    LOCK FAR *k, FAR *FAR *pp;
+    HGLOBAL hk;
+    for (pp = &g_locks; *pp; pp = &(*pp)->next)
+        if (*pp == (LOCK FAR *)lh)
+            break;
+    k = *pp;
+    if (!k || k->magic != LOCK_MAGIC || !k->count)
+        return OLE_ERROR_HANDLE;
+    if (--k->count)
+        return OLE_OK;
+    *pp = k->next;
+    if (IsWindow(k->srv))
+        PostMessage(k->srv, WM_DDE_TERMINATE, (WPARAM)k->w, 0);
+    if (IsWindow(k->w))
+        DestroyWindow(k->w);
+    k->magic = 0;
+    hk = k->hself;
+    GlobalUnlock(hk);
+    GlobalFree(hk);
+    return OLE_OK;
 }

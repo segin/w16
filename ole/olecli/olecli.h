@@ -84,15 +84,20 @@ struct OBJ {
     BOOL changed;
     BOOL advfail;               /* the server refused an advise */
     HGLOBAL hloose;             /* a command posted without waiting */
+    HWND hloose_to;             /* the server window it went to */
     BOOL closing;               /* closed after "/Close" data; TERMINATE due */
     BOOL launched_now;          /* this operation started the server */
     BOOL free_after;            /* free the object after OLE_RELEASE */
     HGLOBAL hlinkdata;          /* OwnerLink/ObjectLink given by GetData */
     LONG objlong;               /* ObjectLong's slot */
-    WORD locked;                /* OleLockServer count */
     HGLOBAL hhost;              /* host names (client app, client doc) */
     RECT bounds;
     BOOL hasbounds;
+    BOOL in_step;               /* a step waits for a server to start (the
+                                   calls that change the object are busy) */
+    WORD depth;                 /* OleWndProc calls under way for it */
+    BOOL dead;                  /* freed while depth: the block goes when
+                                   the last of them returns */
 };
 
 #define OBJ_MAGIC 0x434F        /* "OC" */
@@ -117,6 +122,7 @@ extern WORD g_number;           /* the last #nnn given */
 LPOBJ obj_check(LPOLEOBJECT o);
 LPOBJ obj_new(LPOLECLIENT client, LPDOC doc, LPCSTR name);
 void obj_free(LPOBJ o);
+void obj_free_self(LPOBJ o);
 LPDOC doc_check(LHCLIENTDOC lh);
 void obj_set_number(LPOBJ o);
 LPSTR gstr(HGLOBAL h);
@@ -246,7 +252,8 @@ enum {                          /* DDE item names (step arg) */
 BOOL server_visible(LPOBJ o);
 HWND OLEAPI GetTaskVisibleWindow(HTASK t);
 OLESTATUS dde_start(LPOBJ o, OLE_RELEASE_METHOD m);
-void dde_add(LPOBJ o, WORD op, WORD fmt, HGLOBAL data, WORD arg);
+BOOL dde_add(LPOBJ o, WORD op, WORD fmt, HGLOBAL data, WORD arg);
+void poke_free(WORD cf, HGLOBAL b);
 OLESTATUS dde_run(LPOBJ o);
 void dde_close_all(LPOBJ o);
 void dde_set_arg(LPOBJ o, WORD i, WORD arg);
@@ -254,6 +261,8 @@ BOOL file_exists(LPCSTR f);
 BOOL dde_register(HINSTANCE inst);
 HGLOBAL dde_exec_str(LPCSTR cmd, LPCSTR a, LPCSTR b);
 HGLOBAL dde_exec_str3(LPCSTR cmd, LPCSTR a, LPCSTR b, LPCSTR c);
+OLESTATUS dde_lock(LPOBJ o, LHSERVER FAR *lh);
+OLESTATUS dde_unlock(LHSERVER lh);
 
 /* ---- clip.c ---- */
 OLESTATUS clip_copy(LPOBJ o);
