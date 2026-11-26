@@ -405,6 +405,20 @@
 #              the shell (tests/apps/tk64.c, its InitApp cases) end with
 #              no FAIL against 3.1's table; parts k286 (w16's KRNL286),
 #              k386 (w16's KRNL386), userk (w16's KRNL286 and USER)
+#   nametable  FindResource by the names of a name table (resource type
+#              15): TK70 as the shell (tests/apps/tk70.c), its log on
+#              w16's KRNL286 (part k286) and KRNL386 (k386) the same as
+#              on Microsoft's KRNL386
+#   dlgfocus   the focus after CreateDialog of a dialog not shown or shown
+#              without activation, Return on a focused push button,
+#              DM_GETDEFID: US37 as the shell (tests/apps/us37.c), its log
+#              with w16's USER the same as with Microsoft's
+#   installers third-party installers on w16's install tree in 386
+#              Enhanced mode, against Windows 3.1 (tests/installers.sh):
+#              the files each installs the same as on 3.1; one part per
+#              installer (WEP1 WEP2 WEP3 BW W4 JOHNNY WP3), each skipped
+#              when $W16_INSTDIR (default ~/Downloads/w16-installers) does
+#              not hold it: they are never part of w16
 #   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
 #              (tests/timer/tpr.c) under Microsoft's MMSYSTEM with
 #              Microsoft's TIMER.DRV and with w16's, plain and with the
@@ -975,7 +989,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr}
+cases=${*:-kernel dosx dosxaudit kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -3694,6 +3708,47 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   sb16"
         else echo "FAIL sb16: $r ($out)"; fails=$((fails + 1)); fi ;;
+    nametable|dlgfocus)
+        # a probe as the shell on 3.1 and with w16's KERNEL or USER: the
+        # logs (TK.LOG) must be equal
+        r=ok
+        if [ "$c" = nametable ]; then pr=TK70 p=${part:-k286}; else pr=US37 p=${part:-user}; fi
+        # pbrun NAME [dropin.sh options]: the probe's TK.LOG in NAME.log
+        pbrun() {
+            _pn=$1; shift
+            rm -rf "$out/$_pn"
+            "$root/tests/dropin.sh" -t 120 -o "$out/$_pn" -f "$root/build/dos/$pr.EXE=$pr.EXE" \
+                -i "boot:shell=C:\\$pr.EXE" -W WINDOWS/TK.LOG "$@" > "$out/$_pn.out" 2>&1 || true
+            tr -d '\r' < "$out/$_pn/c/WINDOWS/TK.LOG" > "$out/$_pn.log" 2>/dev/null || : > "$out/$_pn.log"
+            rm -rf "$out/$_pn/c"
+        }
+        case $p in
+        k386) set -- -3 ;;
+        user) set -- -r -f "$user=WINDOWS/SYSTEM/USER.EXE" ;;
+        *) set -- ;;
+        esac
+        pbrun "$c-$p-ref" -r
+        pbrun "$c-$p-w16" "$@"
+        for l in ref w16; do
+            grep -q "^$pr end" "$out/$c-$p-$l.log" || { r="$p: $pr did not end ($l: $out/$c-$p-$l.log)"; break; }
+        done
+        if [ "$r" = ok ] && ! diff "$out/$c-$p-ref.log" "$out/$c-$p-w16.log" > "$out/$c-$p.diff"; then
+            r="$p: $(grep -m1 '^>' "$out/$c-$p.diff") ($out/$c-$p.diff)"
+        fi
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   $c"
+        else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    installers)
+        # third-party installers on the install tree against 3.1
+        # (tests/installers.sh); skipped where $W16_INSTDIR lacks them
+        p=${part:-WEP1}
+        "$root/tests/installers.sh" "$out/installers-$p" "$p" > "$out/installers-$p.txt" 2>&1
+        if grep -q "^PASS $p" "$out/installers-$p.txt"; then r=ok
+        elif grep -q "^skip $p" "$out/installers-$p.txt"; then r=ok
+        else r="$p: $(grep -m1 "^FAIL" "$out/installers-$p.txt" || echo 'no result') ($out/installers-$p.txt)"; fi
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   installers"
+        else echo "FAIL installers: $r ($out)"; fails=$((fails + 1)); fi ;;
     filecdr)
         # KERNEL's FileCdr with Windows running (tests/apps/tk64.c; make
         # test runs TK64 without USER): TK64 as the shell (its "helper Q":
@@ -5997,6 +6052,8 @@ caseparts() {
     sb16) echo "$1@dev $1@audio $1@prog $1@enh $1@cont" ;;
     bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;
     filecdr) echo "$1@k286 $1@k386 $1@userk" ;;
+    nametable) echo "$1@k286 $1@k386" ;;
+    installers) echo "$1@WEP1 $1@WEP2 $1@WEP3 $1@BW $1@W4 $1@JOHNNY $1@WP3" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
@@ -6077,6 +6134,12 @@ partsummary() {
     bigmem)
         if [ $pbad = 0 ]; then echo "ok   bigmem: 128 and 256 MB used and written in Standard and 386 Enhanced mode (w16's DOSX, WIN386, KRNL386, under w16's and Microsoft's WSWAP); LargeMemory=0 as Windows 3.1 itself: all of it, 0500h's largest block at most 64 MB in Standard mode"
         else echo "FAIL bigmem: $pfirst ($out)"; fi ;;
+    nametable)
+        if [ $pbad = 0 ]; then echo "ok   nametable: TK70's FindResource through a name table as on 3.1 (w16's KRNL286, KRNL386)"
+        else echo "FAIL nametable: $pfirst ($out)"; fi ;;
+    installers)
+        if [ $pbad = 0 ]; then echo "ok   installers: each installer at hand installed the same files on w16's tree as on 3.1 (those missing skipped)"
+        else echo "FAIL installers: $pfirst ($out)"; fi ;;
     filecdr)
         if [ $pbad = 0 ]; then echo "ok   filecdr: TK64 and TK64M (FileCdr with USER's InitApp) as on 3.1 (w16's KRNL286, KRNL386; w16's USER)"
         else echo "FAIL filecdr: $pfirst ($out)"; fi ;;

@@ -1,0 +1,21 @@
+; The Best of Microsoft Entertainment Pack (tests/installers.sh): Microsoft
+; Setup (_MSTEST, MS*STF.DLL): its dialogs are made with CreateDialog and
+; shown without activation, Return must reach them (Continue, then
+; Continue in Get Destination Path); the files are expanded with
+; LZEXPAND (SZDD), and Setup ends with "Setup Succeeded!"
+; dest BOWEP
+; expect BOWEP/TUTSTOMB.EXE BOWEP/FREECELL.EXE BOWEP/CARDS.DLL
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\INST\BW\DISK1\SETUP.EXE
+key Return
+settle 120 5
+shot welcome
+key Return
+settle 60 5
+shot path
+key Return
+settle 400 12
+shot done

@@ -1,0 +1,16 @@
+; Screen Antics, Johnny Castaway (tests/installers.sh): Sierra's setup asks
+; for the directory (Ok), copies the files with a progress gauge, then
+; opens Control Panel's Desktop dialog and an Information box
+; dest SIERRA
+; expect SIERRA/SCRANTIC/RESOURCE.001 SIERRA/SCRANTIC/RESOURCE.MAP
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\INST\JOHNNY\SETUP.EXE
+key Return
+settle 90 5
+shot path
+key Return
+settle 180 8
+shot done

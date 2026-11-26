@@ -1,0 +1,22 @@
+; Microsoft Entertainment Pack 3 (tests/installers.sh): its SETUP.EXE
+; starts BINXZ.EXE, which finds its dialogs through a name table (resource
+; type 15) and asks DOS for the free space of the drive in its destination
+; path; OK, the files are copied, Program Manager is told through DDE to
+; make the group (WM_DDE_ACK awaited with a filtered GetMessage), then the
+; "complete" box
+; dest WEP
+; expect WEP/CARDS.DLL
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\INST\WEP3\SETUP.EXE
+key Return
+settle 90 5
+shot path
+key Return
+settle 180 8
+shot done
+key Return
+settle 30 3
+shot end
