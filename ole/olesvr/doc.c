@@ -464,8 +464,6 @@ void item_notify(ITEM FARP *it, int kind)
     }
 }
 
-static void term_now(DOC FARP *d, HWND client);
-
 /* OLE_RENAMED (observed): the object's ObjectLink is fetched, and every
    conversation that used the object is terminated */
 static void item_renamed(ITEM FARP *it)
@@ -477,9 +475,16 @@ static void item_renamed(ITEM FARP *it)
         GlobalFree(h);
     if (!item_alive(it))
         return;
-    /* one TERMINATE per conversation, also when renamed again */
-    for (u = it->users; u; u = u->next)
-        term_now(d, u->client);
+    /* each renamed object terminates its conversations, also one that
+       already got a TERMINATE (observed: notify scenario, three objects
+       of one conversation give three) */
+    for (u = it->users; u; u = u->next) {
+        CONV FARP *c = conv_find(d->convs, u->client);
+        if (c) {
+            c->terminating = c->term_posted = TRUE;
+            PostMessage(c->client, WM_DDE_TERMINATE, (WPARAM)d->hwnd, 0);
+        }
+    }
 }
 
 int FAR PASCAL __loadds ITEMCALLBACK(LPOLECLIENT cl, OLE_NOTIFICATION n, LPOLEOBJECT obj)
