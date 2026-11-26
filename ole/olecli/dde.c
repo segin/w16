@@ -1032,8 +1032,10 @@ static void on_data(LPOBJ o, HWND w, HWND from, LPARAM lp)
         HGLOBAL c = dde_exec_str("StdCloseDocument", NULL, NULL);
         if (!PostMessage(o->hsrvdoc, WM_DDE_EXECUTE, (WPARAM)o->hdoc, MAKELONG(0, c)))
             GlobalFree(c);
-        else
+        else {
             o->hloose = c;
+            o->hloose_to = o->hsrvdoc;
+        }
         o->closing = TRUE;
         callback(o, OLE_CLOSED);
     }
@@ -1066,12 +1068,6 @@ static void on_terminate(LPOBJ o, HWND w, HWND from)
         kill_window(&o->hdoc);
         o->hsrvdoc = NULL;
         o->open = FALSE;
-        if (o->hloose) {
-            /* a command posted without waiting: the server has ended the
-               conversation without returning it */
-            GlobalFree(o->hloose);
-            o->hloose = NULL;
-        }
         if (o->wait == W_TERM || o->wait == W_DOCTERM)
             step_next(o);
         else if (o->wait != W_NONE && (at = find_step(o, ST_WAIT_DOCTERM)) != 0xFFFF) {
@@ -1127,22 +1123,7 @@ LRESULT OLEAPI OleWndProc(HWND w, UINT m, WPARAM wp, LPARAM lp)
     }
     if (m == WM_DDE_INITIATE)
         return 0;
-    {
-        LONG l = GetWindowLong(w, 0);
-        if (l && !HIWORD(l)) {
-            /* a system window left after [StdExit] (dde_close_all): the
-               server's ACK returns the command, or its TERMINATE ends the
-               conversation without it; either way the command and the
-               window go (the TERMINATE was sent already) */
-            if (m == WM_DDE_ACK || m == WM_DDE_TERMINATE) {
-                GlobalFree((HGLOBAL)LOWORD(l));
-                SetWindowLong(w, 0, 0);
-                DestroyWindow(w);
-            }
-            return 0;
-        }
-        o = (LPOBJ)l;
-    }
+    o = (LPOBJ)GetWindowLong(w, 0);
     if (!o || o->magic != OBJ_MAGIC) {
         if (m == WM_DDE_TERMINATE)
             PostMessage((HWND)wp, WM_DDE_TERMINATE, (WPARAM)w, 0);
@@ -1210,24 +1191,23 @@ void dde_close_all(LPOBJ o)
             PostMessage(o->hsrvdoc, WM_DDE_TERMINATE, (WPARAM)o->hdoc, 0);
         kill_window(&o->hdoc);
     }
-    if (o->hloose && !(o->hsrvdoc && IsWindow(o->hsrvdoc))) {
-        GlobalFree(o->hloose);          /* nobody to return it */
+    if (o->hloose && !IsWindow(o->hloose_to)) {
+        /* the server it went to is gone: nobody reads or returns it (one
+           whose window is there may still read it, its TERMINATE having
+           crossed the command) */
+        GlobalFree(o->hloose);
         o->hloose = NULL;
     }
     if (o->hsys) {
         if (o->hsrvsys && IsWindow(o->hsrvsys)) {
+            /* the window goes at once, as 3.1's (observed: the server
+               reads [StdExit] from a window already destroyed), so the
+               command its ACK would return is never freed */
             HGLOBAL h = dde_exec_str("StdExit", NULL, NULL);
-            BOOL sent = h && PostMessage(o->hsrvsys, WM_DDE_EXECUTE, (WPARAM)o->hsys,
-                                         MAKELONG(0, h));
-            if (!sent)
-                gfree(h);
+            if (h && !PostMessage(o->hsrvsys, WM_DDE_EXECUTE, (WPARAM)o->hsys,
+                                  MAKELONG(0, h)))
+                GlobalFree(h);
             PostMessage(o->hsrvsys, WM_DDE_TERMINATE, (WPARAM)o->hsys, 0);
-            if (sent) {
-                /* the window stays for the answer, which brings the
-                   command back to be freed (OleWndProc) */
-                SetWindowLong(o->hsys, 0, MAKELONG(h, 0));
-                o->hsys = NULL;
-            }
         }
         kill_window(&o->hsys);
     }

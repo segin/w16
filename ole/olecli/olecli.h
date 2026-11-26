@@ -84,6 +84,7 @@ struct OBJ {
     BOOL changed;
     BOOL advfail;               /* the server refused an advise */
     HGLOBAL hloose;             /* a command posted without waiting */
+    HWND hloose_to;             /* the server window it went to */
     BOOL closing;               /* closed after "/Close" data; TERMINATE due */
     BOOL launched_now;          /* this operation started the server */
     BOOL free_after;            /* free the object after OLE_RELEASE */
