@@ -117,7 +117,22 @@ standard output. The tree has no _DEFAULT.PIF (3.1's has): compare with
 Manager File > Run and File Manager double-click (what the user did) on
 both, and CSERVE.OS2's 330K file.
 
-### CD drive, not yet checked
+### CD drive: checked (branch staroff-mdi2)
 
-File Manager's drive icon and tree for D:, the common dialogs' drive
-list, a DOS box's access to D: (`dir d:` in Command Prompt) against 3.1.
+Runs: installation-05 /mnt/build/w16-staroff/so2/cdrun.sh ref|tree NAME
+PROG SCRIPT (tests/inputrun.sh, DROPIN_CDROM; scripts fm.txt, dlg.txt,
+dos2.txt beside it; results in so2/out/cd-NAME-ref|tree).
+- File Manager (Ctrl+D, Ctrl+*): the tree and file list of D: as 3.1's.
+  3.1 shows the CD-ROM picture and "D: CD-ROM" in the drive bar; w16's
+  showed the network picture and the volume label "[960801_1625]".
+  Fixed: a remote drive MSCDEX has (INT 2Fh 150Bh) is a CD-ROM drive
+  (shell/winfile/drives.c, IDS_DRIVECDROM).
+- Notepad's File > Open on D:: the folder list as 3.1's; 3.1 lists the
+  drive as "d:", w16's COMMDLG added the label. Fixed
+  (shell/commdlg/file.c).
+- Command Prompt (WIN.INI run=COMMAND.COM): `dir d:\`, `dir
+  d:\english`, `d:`, `cd \english` into C:\DIRD.TXT: identical on 3.1
+  and the tree.
+Left: w16's own pictures differ from Microsoft's (the CD-ROM drive
+picture in both, yellow folders where 3.1's look white in these runs;
+not looked into).
