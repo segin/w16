@@ -255,7 +255,7 @@ HBRUSH GDIAPI CreateBrushIndirect(const LOGBRUSH __far *lb)        /* GDI.50 */
     if (!lb)
         return 0;
     /* BS_DIBPATTERN: lbHatch the packed DIB, lbColor its usage (SDK,
-       LOGBRUSH); as CreateDIBPatternBrush (GD14 on 3.1: the same
+       LOGBRUSH); as CreateDIBPatternBrush (GD15 on 3.1: the same
        pattern, the same GetObject; StarWriter's page surround) */
     if (lb->lbStyle == 5)
         return CreateDIBPatternBrush((HGLOBAL)lb->lbHatch, LOWORD(lb->lbColor));
@@ -309,7 +309,7 @@ HBRUSH GDIAPI CreatePatternBrush(HBITMAP hbm)                      /* GDI.60 */
    the brush keeps a copy of the whole block (GD9: a metafile records the
    block's GlobalSize) in lbHatch, DIB_RGB_COLORS or DIB_PAL_COLORS in
    lbColor, and draws as the pattern brush of the DIB made a bitmap of the
-   screen's format, 1-bit DIBs too (GD14 on 3.1: a 2-colour DIB's own
+   screen's format, 1-bit DIBs too (GD15 on 3.1: a 2-colour DIB's own
    colours on a colour DC whatever the text and background colours; on a
    monochrome DC each colour's own black or white, as a colour pattern
    bitmap there, not the text and background colours the SDK names) */

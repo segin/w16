@@ -85,7 +85,7 @@ StarDraw, StarImage, StarChart, the StarOffice Manager on the tree, `WIN
 Found by swapping Microsoft's module into the tree (`-f`): GDI for the
 toolbars, page surround and ruler; USER for the chart, the Stylist and
 the style tree. Each pinned with a probe on 3.1 (ARCHITECTURE.md 11.4,
-GD14; 10.4, TK75) and fixed:
+GD15; 10.4, TK75) and fixed:
 - disabled toolbar buttons (gray boxes): colour -> mono BitBlt used the
   destination DC's colours, 3.1 the source's (GDI, blt.c);
 - page surround black, checked buttons without pattern: CreateBrushIndirect
@@ -111,7 +111,7 @@ EnumFontFamilies (GDI.70, GDI.330), which StarWriter, StarCalc, StarDraw
 and StarChart call, are still stubs (font lists empty). w16's GDI with
 Microsoft's VGA.DRV faults in DISPLAY (DS 0) at StarWriter's start: not
 looked into. Microsoft's VGA.DRV draws a solid gray brush as black in a
-colour -> mono BitBlt with a pattern ROP (GD14, unchecked case).
+colour -> mono BitBlt with a pattern ROP (GD15, unchecked case).
 
 Boot test (2026-11-26, this branch): 171 ok; holdbtn, lzexpand, swapesc
 and vdmad fail on master 5a637f5 as well; scrnsave passed on a rerun;

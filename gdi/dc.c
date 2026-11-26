@@ -144,7 +144,7 @@ LPVOID dc_pbrush(LPDC dc)
             lb.lbHatch = 0;
         /* the origin: the DC's brush origin when the brush is first
            realized, then kept, in this DC and others of the same kind,
-           until UnrealizeObject (GD14 on 3.1: SetBrushOrg alone changed
+           until UnrealizeObject (GD15 on 3.1: SetBrushOrg alone changed
            nothing for a brush already used, nor did another window's DC;
            a memory DC realized it again at its own origin) */
         if (!(b->wOrgLock & BRUSH_ORGLOCK) || (b->wOrgLock & BRUSH_ORGMEM) != kind)
@@ -1474,7 +1474,7 @@ void GDIAPI SetDCState(HDC hdc, HANDLE hs)                         /* GDI.180 */
     dc = dc_get(hdc);
     s = dc_get(hs);
     {
-        /* the brush origin stays (GD14 on 3.1: Microsoft's USER sets a
+        /* the brush origin stays (GD15 on 3.1: Microsoft's USER sets a
            window DC's brush origin to its corner with SetBrushOrg right
            after SetDCOrg, then calls SetDCState, and GetBrushOrg still
            gives the corner) */

@@ -1,5 +1,5 @@
 /*
- * gd14.c - colour conversions in BitBlt and pattern brushes on the
+ * gd15.c - colour conversions in BitBlt and pattern brushes on the
  * 16-colour VGA, as StarOffice 3.1's StarView draws them:
  * - colour -> monochrome BitBlt: which DC's background colour picks the
  *   white pixels (the source's or the destination's), with SRCCOPY,
@@ -23,13 +23,13 @@
  * Each result is read back with GetPixel and hashed (one checked value a
  * case; the rows as letters unchecked, to see where two runs part). Run
  * as the shell of Windows 3.1 with Microsoft's GDI and VGA.DRV (the
- * reference: tools/obsref.py of its log is gd14ref.h), and with w16's GDI,
- * VGA.DRV or both (tests/gdiheap.sh -p build/dos/GD14.EXE [-r] [-v]; the
+ * reference: tools/obsref.py of its log is gd15ref.h), and with w16's GDI,
+ * VGA.DRV or both (tests/gdiheap.sh -p build/dos/GD15.EXE [-r] [-v]; the
  * boot-test case gdiconv).
  */
 #include <windows.h>
 
-#define TK_REF "gd14ref.h"
+#define TK_REF "gd15ref.h"
 #include "tklog.h"
 
 extern WORD FAR PASCAL WaitEvent(HTASK);
@@ -671,7 +671,7 @@ int __cdecl tmain(void)
     hinst = (HINSTANCE)init_regs[5];
     WaitEvent(0);
     InitApp(hinst);
-    out("GD14 start\r\n");
+    out("GD15 start\r\n");
     hscr = GetDC(NULL);
     cdc = CreateCompatibleDC(hscr);
     cbm = CreateCompatibleBitmap(hscr, CW, CH);
@@ -682,15 +682,15 @@ int __cdecl tmain(void)
     sdc = CreateCompatibleDC(hscr);
     sbm = CreateCompatibleBitmap(hscr, CW, CH);
     sold = SelectObject(sdc, sbm);
-    out("GD14 c2m\r\n");
+    out("GD15 c2m\r\n");
     sec_c2m();
-    out("GD14 m2c\r\n");
+    out("GD15 m2c\r\n");
     sec_m2c();
-    out("GD14 disabled\r\n");
+    out("GD15 disabled\r\n");
     sec_disabled();
-    out("GD14 brushes\r\n");
+    out("GD15 brushes\r\n");
     sec_brushes();
-    out("GD14 screen\r\n");
+    out("GD15 screen\r\n");
     sec_screen();
     SelectObject(sdc, sold);
     DeleteObject(sbm);
@@ -702,6 +702,6 @@ int __cdecl tmain(void)
     DeleteObject(cbm);
     DeleteDC(cdc);
     ReleaseDC(NULL, hscr);
-    out("GD14 done\r\n");
+    out("GD15 done\r\n");
     return failures;
 }

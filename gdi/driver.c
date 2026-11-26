@@ -115,7 +115,7 @@ WORD GDIAPI GetPaletteEntries(HPALETTE, WORD, WORD, PALENTRY __far *);
 
 /* a logical colour to the DC's physical one (ColorInfo). On the VGA (no
    palette) PALETTEINDEX(i) is the DC's palette's entry i (entry 0 past
-   its end: UNVERIFIED) and PALETTERGB the plain RGB (GD14 on 3.1: a
+   its end: UNVERIFIED) and PALETTERGB the plain RGB (GD15 on 3.1: a
    source DC's background colour PALETTEINDEX(7) picks the default
    palette's silver in a colour -> monochrome BitBlt). */
 DWORD dev_colorinfo(LPDC dc, COLORREF c)

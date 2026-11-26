@@ -37,7 +37,7 @@ static int dc_mono(LPDC dc)
 /* the driver BitBlt over the clip region; dest rect in screen coords.
    A colour source on a monochrome destination is converted with the
    source DC's colours (SDK, BitBlt: "the foreground and background colors
-   of the source (color) device context"); GD14 on 3.1: the pixels of the
+   of the source (color) device context"); GD15 on 3.1: the pixels of the
    source's background colour become 1 whatever the destination's, and a
    monochrome pattern brush of the destination takes the source's text
    and background colours too, so the driver gets the destination's

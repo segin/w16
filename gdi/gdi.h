@@ -394,7 +394,7 @@ typedef struct {                        /* 16h */
                                         /* brush's copy of the bits here (PBITMAP + bits) */
     WORD wOrgLock;                      /* w16: BRUSH_ORGLOCK | BRUSH_ORGMEM | the origin
                                            (x & 7, (y & 7) << 3) of its first realization,
-                                           kept until UnrealizeObject (GD14) */
+                                           kept until UnrealizeObject (GD15) */
 } BRUSHOBJ;
 typedef BRUSHOBJ __far *LPBRUSHOBJ;
 #define BRUSH_ORGLOCK 0x8000

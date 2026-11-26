@@ -169,7 +169,7 @@ static void setup_dc(PDCE d, PWND w)
     }
     /* the brush origin at the same corner, as Microsoft's USER sets it
        (SetBrushOrg right after SetDCOrg, seen in w16's import trace;
-       GD14: GetBrushOrg of a window's DC is its corner, so patterns start
+       GD15: GetBrushOrg of a window's DC is its corner, so patterns start
        at the window's corner, not the screen's) */
     if (window) {
         G_SETDCORG(d->hdc, w->rcWindow.left, w->rcWindow.top);

@@ -93,7 +93,7 @@
 #              w16's: no FAIL
 #   gdidib     GD7 (DIBs: every format, colour use and call; RLE) with
 #              Microsoft's GDI and VGA.DRV, w16's GDI, w16's VGA.DRV, both: no FAIL
-#   gdiconv    GD14 (colour <-> monochrome BitBlt, StarView's disabled icons,
+#   gdiconv    GD15 (colour <-> monochrome BitBlt, StarView's disabled icons,
 #              pattern and DIB pattern brushes, brush origins) with Microsoft's
 #              GDI and VGA.DRV, w16's GDI, w16's VGA.DRV, both: no FAIL
 #   gdifont    GD10 (raster font simulations: italic, underline, strike-out,
@@ -1634,25 +1634,25 @@ runcase() {
         if [ "$r" = ok ]; then echo "ok   gdimeta: GD9's metafiles with w16's GDI as with Microsoft's"
         else echo "FAIL gdimeta: $r"; fails=$((fails + 1)); fi ;;
     gdiconv)
-        # GD14 (tests/apps/gd14.c: colour <-> monochrome BitBlt, StarView's
+        # GD15 (tests/apps/gd15.c: colour <-> monochrome BitBlt, StarView's
         # disabled toolbar icons, pattern and DIB pattern brushes, brush
         # origins; StarOffice 3.1's toolbars and page surround) as the shell
         # of Windows 3.1: Microsoft's GDI and VGA.DRV (the table's own run),
         # w16's GDI, w16's VGA.DRV and both; every log must end with
-        # "GD14 done" and have no FAIL
+        # "GD15 done" and have no FAIL
         r=ok
         for k in ms gdi vga both; do
             case $k in ms) set -- -r ;; gdi) set -- ;; vga) set -- -r -v "$root/build/dos/VGA.DRV" ;;
                 both) set -- -v "$root/build/dos/VGA.DRV" ;; esac
-            "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD14.EXE" > "$out/gdiconv-$k.log" 2>&1 &
+            "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD15.EXE" > "$out/gdiconv-$k.log" 2>&1 &
         done
         wait
         for k in ms gdi vga both; do
             f=$out/gdiconv-$k.log
-            grep -q '^GD14 done' "$f" || { r="$k: GD14 did not finish ($f)"; break; }
+            grep -q '^GD15 done' "$f" || { r="$k: GD15 did not finish ($f)"; break; }
             if grep -q '^FAIL' "$f"; then r="$k: $(grep -m1 '^FAIL' "$f" | tr -d '\r') ($f)"; break; fi
         done
-        if [ "$r" = ok ]; then echo "ok   gdiconv: GD14's colour conversions and brushes with w16's GDI and VGA.DRV as with Microsoft's"
+        if [ "$r" = ok ]; then echo "ok   gdiconv: GD15's colour conversions and brushes with w16's GDI and VGA.DRV as with Microsoft's"
         else echo "FAIL gdiconv: $r"; fails=$((fails + 1)); fi ;;
     gdidib)
         # GD7 (tests/apps/gd7.c: DIBs drawn as programs draw them, read
