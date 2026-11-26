@@ -69,6 +69,7 @@ typedef struct DOC {
     ITEM FARP *items;
     ADV FARP *renames;                  /* StdDocumentName advises */
     BOOL revoking, pending, released;
+    BOOL destroying;                    /* inside doc_destroy (Release) */
     ATOM atom;                          /* the topic: documents are found
                                            by atom, as Windows 3.1's are */
     HGLOBAL target;                     /* StdTargetDevice, for GetData */
@@ -113,7 +114,8 @@ void mem_free(void FARP *p);
 char FARP *str_dup(const char FARP *s);
 char FARP *tmp_dup(const char FARP *s);
 void tmp_free(char FARP *p);
-int str_len(const char FARP *s);
+#define STR_MAX 0xFFFFu                 /* longest string, with its NUL */
+WORD str_len(const char FARP *s);
 void str_cpy(char FARP *d, const char FARP *s);
 BOOL str_ieq(const char FARP *a, const char FARP *b);
 CONV FARP *conv_find(CONV FARP *l, HWND client);
@@ -126,7 +128,11 @@ void conv_propname(HWND client, char *n);
 void huge_copy(void FAR *dst, const void FAR *src, DWORD n);
 HGLOBAL data_block(WORD flags, WORD cf, HGLOBAL h);
 HGLOBAL data_value(HGLOBAL block, WORD cf);
-void ack(HWND to, HWND from, WORD status, WORD hi);
+BOOL by_handle(WORD cf);
+void data_free(WORD cf, HANDLE h);
+void data_block_free(HGLOBAL b, WORD cf);
+BOOL ack(HWND to, HWND from, WORD status, WORD hi);
+void ack_lost(ATOM atom, HGLOBAL block);
 
 /* svr.c */
 SRV FARP *srv_from(LHSERVER lh);
@@ -153,6 +159,7 @@ OLESTATUS item_show(ITEM FARP *it, BOOL focus);
 void item_notify(ITEM FARP *it, int kind);
 LRESULT doc_dde(DOC FARP *d, HWND w, UINT msg, WPARAM wp, LPARAM lp);
 void conv_post_terms(HWND from, CONV FARP *l);
+void conv_post_all(HWND from, CONV FARP *l);
 
 LRESULT FAR PASCAL __loadds SRVRWNDPROC(HWND, UINT, WPARAM, LPARAM);
 LRESULT FAR PASCAL __loadds DOCWNDPROC(HWND, UINT, WPARAM, LPARAM);

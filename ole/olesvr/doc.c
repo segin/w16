@@ -39,6 +39,18 @@ DOC FARP *doc_find(SRV FARP *s, const char FARP *name)
     return NULL;
 }
 
+/* d is still a document of some server (also while it is released) */
+static BOOL doc_listed(DOC FARP *d)
+{
+    SRV FARP *s;
+    DOC FARP *e;
+    for (s = svr_list; s; s = s->next)
+        for (e = s->docs; e; e = e->next)
+            if (e == d)
+                return TRUE;
+    return FALSE;
+}
+
 static ITEM FARP *item_from(LPOLECLIENT cl)
 {
     SRV FARP *s;
@@ -151,6 +163,13 @@ void doc_destroy(DOC FARP *d)
 {
     SRV FARP *s = d->srv;
     DOC FARP *FARP *pp;
+    if (d->destroying)
+        return;                         /* again, from inside its Release */
+    /* it stays in the server's list during Release, so that a revoke of
+       the server there waits for it; revoking, so that the revoke leaves
+       it to this */
+    d->destroying = TRUE;
+    d->revoking = TRUE;
     if (d->lpdoc && !d->released) {
         d->released = TRUE;
         d->lpdoc->lpvtbl->Release(d->lpdoc);
@@ -203,6 +222,18 @@ void conv_post_terms(HWND from, CONV FARP *l)
         }
 }
 
+/* every conversation that has not had its TERMINATE gets it now (the
+   window goes) */
+void conv_post_all(HWND from, CONV FARP *l)
+{
+    for (; l; l = l->next)
+        if (!l->term_posted) {
+            l->terminating = l->term_posted = TRUE;
+            if (IsWindow(l->client))
+                PostMessage(l->client, WM_DDE_TERMINATE, (WPARAM)from, 0);
+        }
+}
+
 /* Revokes a document: its objects are released at once, its clients get
    WM_DDE_TERMINATE once the message being handled is done (observed: the
    ACK of a StdCloseDocument comes first), and the document is released
@@ -235,6 +266,7 @@ ITEM FARP *item_get(DOC FARP *d, const char FARP *name, HWND client, OLESTATUS F
 {
     ITEM FARP *it, FARP *FARP *pp;
     LPOLEOBJECT obj = NULL;
+    BOOL was;
     for (it = d->items; it; it = it->next)
         if (str_ieq(it->name, name))
             break;
@@ -243,7 +275,11 @@ ITEM FARP *item_get(DOC FARP *d, const char FARP *name, HWND client, OLESTATUS F
             *st = OLE_ERROR_OBJECT;
             return NULL;
         }
-        it = mem_alloc(sizeof *it + str_len(name));
+        if ((DWORD)sizeof *it + str_len(name) > 0xFFF0L) {
+            *st = OLE_ERROR_MEMORY;     /* UNVERIFIED: names that long */
+            return NULL;
+        }
+        it = mem_alloc((DWORD)sizeof *it + str_len(name));
         if (!it) {
             *st = OLE_ERROR_MEMORY;
             return NULL;
@@ -251,7 +287,13 @@ ITEM FARP *item_get(DOC FARP *d, const char FARP *name, HWND client, OLESTATUS F
         it->cl.lpvtbl = &item_vtbl;
         it->doc = d;
         str_cpy(it->name, name);
+        was = d->revoking;
         *st = d->lpdoc->lpvtbl->GetObject(d->lpdoc, (LPSTR)name, &obj, &it->cl);
+        if (doc_from((LHSERVERDOC)d) != d || (d->revoking && !was)) {
+            *st = OLE_ERROR_OBJECT;     /* GetObject revoked the document */
+            mem_free(it);
+            return NULL;
+        }
         if (*st != OLE_OK || !obj) {
             if (*st == OLE_OK)
                 *st = OLE_ERROR_OBJECT;
@@ -275,6 +317,12 @@ ITEM FARP *item_get(DOC FARP *d, const char FARP *name, HWND client, OLESTATUS F
     return it;
 }
 
+/* the object has not been revoked (by the server's callback just made) */
+static BOOL item_alive(ITEM FARP *it)
+{
+    return item_from(&it->cl) == it;
+}
+
 /* whether the object renders format cf: EnumFormats from the start
    until cf or the end (as observed, every time) */
 static BOOL item_has_format(ITEM FARP *it, WORD cf)
@@ -282,6 +330,8 @@ static BOOL item_has_format(ITEM FARP *it, WORD cf)
     OLECLIPFORMAT f = 0, n;
     for (;;) {
         n = it->obj->lpvtbl->EnumFormats(it->obj, f);
+        if (!item_alive(it))
+            return FALSE;               /* EnumFormats revoked it */
         if (n == cf)
             return cf != 0;
         if (!n || n == f)
@@ -296,6 +346,7 @@ static BOOL item_has_format(ITEM FARP *it, WORD cf)
 static OLESTATUS item_data(ITEM FARP *it, WORD cf, HANDLE FAR *h)
 {
     DOC FARP *d = it->doc;
+    OLESTATUS r;
     *h = NULL;
     if (d->target && it->target_gen != d->target_gen) {
         DWORD n = GlobalSize(d->target);
@@ -303,15 +354,25 @@ static OLESTATUS item_data(ITEM FARP *it, WORD cf, HANDLE FAR *h)
         void FAR *dst = t ? GlobalLock(t) : NULL;
         const void FAR *src = GlobalLock(d->target);
         it->target_gen = d->target_gen;
-        if (dst && src) {
+        if (dst && src)
             huge_copy(dst, src, n);
+        GlobalUnlock(d->target);
+        if (dst && src) {
             GlobalUnlock(t);
             it->obj->lpvtbl->SetTargetDevice(it->obj, t);
+            if (!item_alive(it))
+                return OLE_ERROR_OBJECT;    /* SetTargetDevice revoked it */
         } else if (t)
             GlobalFree(t);
-        GlobalUnlock(d->target);
     }
-    return it->obj->lpvtbl->GetData(it->obj, cf, h);
+    r = it->obj->lpvtbl->GetData(it->obj, cf, h);
+    if (!item_alive(it)) {
+        if (r == OLE_OK)
+            data_free(cf, *h);          /* GetData revoked it */
+        *h = NULL;
+        return OLE_ERROR_OBJECT;
+    }
+    return r;
 }
 
 OLESTATUS item_show(ITEM FARP *it, BOOL focus)
@@ -332,13 +393,14 @@ static void send_notify(ITEM FARP *it, HWND client, WORD cf, BOOL defer, const c
         if (item_data(it, cf, &h) != OLE_OK)
             return;
         b = data_block(0x2000, cf, h);
-        if (!b)
+        if (!b) {
+            data_free(cf, h);
             return;
+        }
     }
     at = GlobalAddAtom(text);
     if (!PostMessage(client, WM_DDE_DATA, (WPARAM)d->hwnd, MAKELPARAM(b, at))) {
-        if (b)
-            GlobalFree(b);
+        data_block_free(b, cf);
         if (at)
             GlobalDeleteAtom(at);
     }
@@ -349,6 +411,14 @@ static void send_notify(ITEM FARP *it, HWND client, WORD cf, BOOL defer, const c
    the object, whichever kind of advise named it, under the item name
    ("item", "item/Save", "item/Close"), deferred or not as its latest
    advise of that kind said. */
+static BOOL adv_in(ADV FARP *l, ADV FARP *a)
+{
+    for (; l; l = l->next)
+        if (l == a)
+            return TRUE;
+    return FALSE;
+}
+
 void item_notify(ITEM FARP *it, int kind)
 {
     ADV FARP *a, FARP *b, FARP *opt;
@@ -371,7 +441,7 @@ void item_notify(ITEM FARP *it, int kind)
                 opt = b;
         if (!opt)
             continue;
-        if (str_len(it->name) + 8 > (int)sizeof text)
+        if ((DWORD)str_len(it->name) + 8 > sizeof text)
             continue;                   /* UNVERIFIED: names that long */
         str_cpy(text, it->name);
         str_cpy(text + str_len(text), suffix[kind]);
@@ -386,9 +456,15 @@ void item_notify(ITEM FARP *it, int kind)
             if (e != b)
                 continue;
             send_notify(it, a->client, b->cf, (opt->flags & 0x4000) != 0, text);
+            /* the server's GetData may have revoked the object, or a
+               message it let through ended an advise */
+            if (!item_alive(it) || !adv_in(it->advs, a) || !adv_in(it->advs, b))
+                return;
         }
     }
 }
+
+static void term_now(DOC FARP *d, HWND client);
 
 /* OLE_RENAMED (observed): the object's ObjectLink is fetched, and every
    conversation that used the object is terminated */
@@ -399,13 +475,11 @@ static void item_renamed(ITEM FARP *it)
     HANDLE h = NULL;
     if (item_has_format(it, cf_objectlink) && item_data(it, cf_objectlink, &h) == OLE_OK && h)
         GlobalFree(h);
-    for (u = it->users; u; u = u->next) {
-        CONV FARP *c = conv_find(d->convs, u->client);
-        if (c) {
-            c->terminating = c->term_posted = TRUE;
-            PostMessage(c->client, WM_DDE_TERMINATE, (WPARAM)d->hwnd, 0);
-        }
-    }
+    if (!item_alive(it))
+        return;
+    /* one TERMINATE per conversation, also when renamed again */
+    for (u = it->users; u; u = u->next)
+        term_now(d, u->client);
 }
 
 int FAR PASCAL __loadds ITEMCALLBACK(LPOLECLIENT cl, OLE_NOTIFICATION n, LPOLEOBJECT obj)
@@ -466,7 +540,7 @@ static BOOL split_item(char FARP *name, WORD FARP *kind)
 
 static ADV FARP *adv_new(HWND client, WORD kind, WORD cf, WORD flags, const char FARP *text)
 {
-    ADV FARP *a = mem_alloc(sizeof *a + str_len(text));
+    ADV FARP *a = mem_alloc((DWORD)sizeof *a + str_len(text));
     if (a) {
         a->client = client;
         a->kind = kind;
@@ -611,7 +685,10 @@ static WORD doc_poke(DOC FARP *d, HWND client, const char FARP *name, HGLOBAL bl
         it = item_get(d, name, client, &r);
         if (it) {
             HGLOBAL h = data_value(block, cf);
-            r = it->obj->lpvtbl->SetData(it->obj, cf, h);
+            if (!h && !by_handle(cf))
+                r = OLE_ERROR_MEMORY;   /* no copy of the bytes */
+            else
+                r = it->obj->lpvtbl->SetData(it->obj, cf, h);
         }
         return r == OLE_OK ? 0x8000 : 0;
     }
@@ -639,14 +716,17 @@ LRESULT doc_dde(DOC FARP *d, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         atom_name(atom, name, sizeof name);
         it = item_get(d, name, client, &r);
         if (!it || !item_has_format(it, cf) || item_data(it, cf, &h) != OLE_OK || !h) {
-            ack(client, w, 0, atom);
+            if (!ack(client, w, 0, atom))
+                ack_lost(atom, NULL);
             return 0;
         }
         b = data_block(0x3000, cf, h);
+        if (!b)
+            data_free(cf, h);
         if (!b || !PostMessage(client, WM_DDE_DATA, (WPARAM)w, MAKELPARAM(b, atom))) {
-            if (b)
-                GlobalFree(b);
-            ack(client, w, 0, atom);
+            data_block_free(b, cf);
+            if (!ack(client, w, 0, atom))
+                ack_lost(atom, NULL);
         }
         return 0;
     }
@@ -660,8 +740,8 @@ LRESULT doc_dde(DOC FARP *d, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         }
         atom_name(atom, name, sizeof name);
         st = doc_poke(d, client, name, block);
-        if (IsWindow(w))
-            ack(client, w, st, atom);
+        if (IsWindow(w) && !ack(client, w, st, atom))
+            ack_lost(atom, st && (flags & 0x2000) ? NULL : block);
         if (st && (flags & 0x2000))     /* fRelease: ours once acknowledged */
             GlobalFree(block);
         return 0;
@@ -699,9 +779,12 @@ LRESULT doc_dde(DOC FARP *d, HWND w, UINT msg, WPARAM wp, LPARAM lp)
         }
         /* observed: a successful advise is acknowledged only when it has
            fAckReq set; a failed one always */
-        if (!st || (flags & 0x8000))
-            ack(client, w, st, atom);
-        if (st && (flags & 0x8000) && opt)
+        if (!st || (flags & 0x8000)) {
+            if (!ack(client, w, st, atom))
+                ack_lost(atom, st ? NULL : opt);
+        } else if (atom)
+            GlobalDeleteAtom(atom);     /* no ACK takes it back */
+        if (st && opt)                  /* taken: the options are ours */
             GlobalFree(opt);
         return 0;
     }
@@ -720,13 +803,14 @@ LRESULT doc_dde(DOC FARP *d, HWND w, UINT msg, WPARAM wp, LPARAM lp)
                 st = 0x8000;
             }
         }
-        ack(client, w, st, atom);
+        if (!ack(client, w, st, atom))
+            ack_lost(atom, NULL);
         return 0;
     }
     case WM_DDE_EXECUTE: {
         WORD st = doc_execute(d, client, (HGLOBAL)HIWORD(lp));
-        if (IsWindow(w))
-            ack(client, w, st, HIWORD(lp));
+        if (IsWindow(w) && !ack(client, w, st, HIWORD(lp)))
+            ack_lost(0, (HGLOBAL)HIWORD(lp));
         return 0;
     }
     case WM_DDE_TERMINATE: {
@@ -793,6 +877,7 @@ LRESULT FAR PASCAL __loadds DOCWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_DESTROY:
         if (!d->released) {             /* the server's task ends */
+            conv_post_all(w, d->convs);
             SetWindowLong(w, 0, 0);
             d->hwnd = NULL;
             d->released = TRUE;
@@ -823,6 +908,8 @@ OLESTATUS FAR PASCAL __loadds OLEREGISTERSERVERDOC(LHSERVER lhs, LPCSTR name,
     DOC FARP *d;
     if (!s)
         return OLE_ERROR_HANDLE;
+    if (s->revoking)
+        return OLE_ERROR_HANDLE;        /* UNVERIFIED: a revoked server */
     if (!name || !lplh || IsBadReadPtr(name, 1) || IsBadWritePtr(lplh, sizeof *lplh))
         return OLE_ERROR_ADDRESS;
     *lplh = 0;
@@ -863,24 +950,31 @@ OLESTATUS FAR PASCAL __loadds OLERENAMESERVERDOC(LHSERVERDOC lh, LPCSTR name)
     /* the clients that advised on StdDocumentName get the new name */
     for (a = d->renames; a; a = a->next) {
         CONV FARP *c = conv_find(d->convs, a->client);
-        int n = str_len(nn);
+        WORD n = str_len(nn);
         HGLOBAL h, b;
         char FAR *p;
         ATOM at;
         if (!c || c->terminating)
             continue;
-        h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, n + 1);
+        h = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, (DWORD)n + 1);
         p = h ? (char FAR *)GlobalLock(h) : NULL;
-        if (!p)
+        if (!p) {
+            if (h)
+                GlobalFree(h);
             continue;
+        }
         str_cpy(p, nn);
         GlobalUnlock(h);
         b = data_block(0x2000, a->cf, h);
-        if (!b)
+        if (!b) {
+            GlobalFree(h);
             continue;
+        }
         at = GlobalAddAtom(a->text);
         if (!PostMessage(a->client, WM_DDE_DATA, (WPARAM)d->hwnd, MAKELPARAM(b, at))) {
             GlobalFree(b);
+            if (by_handle(a->cf))
+                GlobalFree(h);          /* the block names the text */
             if (at)
                 GlobalDeleteAtom(at);
         }
@@ -891,11 +985,16 @@ OLESTATUS FAR PASCAL __loadds OLERENAMESERVERDOC(LHSERVERDOC lh, LPCSTR name)
 OLESTATUS FAR PASCAL __loadds OLESAVEDSERVERDOC(LHSERVERDOC lh)
 {
     DOC FARP *d = doc_from(lh);
-    ITEM FARP *it;
+    ITEM FARP *it, FARP *n;
     if (!d)
         return OLE_ERROR_HANDLE;
-    for (it = d->items; it; it = it->next)
+    for (it = d->items; it; it = n) {
+        n = it->next;
         item_notify(it, ADV_SAVE);
+        /* the server's GetData may have revoked objects or the document */
+        if (doc_from(lh) != d || (n && !item_alive(n)))
+            break;
+    }
     return OLE_OK;
 }
 
@@ -934,11 +1033,13 @@ OLESTATUS FAR PASCAL __loadds OLEREVOKEOBJECT(LPOLECLIENT cl)
     if (it->obj)
         it->obj->lpvtbl->Release(it->obj);
     /* each client of the object gets its TERMINATE now, object by
-       object (observed order) */
-    for (u = it->users; u; u = u->next)
-        term_now(d, u->client);
-    for (a = it->advs; a; a = a->next)
-        term_now(d, a->client);
+       object (observed order); not when Release freed the document */
+    if (doc_listed(d)) {
+        for (u = it->users; u; u = u->next)
+            term_now(d, u->client);
+        for (a = it->advs; a; a = a->next)
+            term_now(d, a->client);
+    }
     item_free(it);
     return OLE_OK;
 }

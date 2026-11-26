@@ -24,8 +24,8 @@ static BOOL reg_has(const char FARP *cls, const char *sub)
 {
     char key[300], val[16];
     LONG n = sizeof val;
-    int l = str_len(cls);
-    if (l + 40 > (int)sizeof key)
+    WORD l = str_len(cls);
+    if ((DWORD)l + 40 > sizeof key)
         return FALSE;                   /* UNVERIFIED: class names that long */
     str_cpy(key, cls);
     str_cpy(key + l, sub);
@@ -59,6 +59,32 @@ static BOOL any_conv(SRV FARP *s)
     return FALSE;
 }
 
+/* A DDE message queued while the server was blocked that will never be
+   handled (its window or server is gone): the client gets the negative
+   ACK it would have had, so that it frees its data as DDE says; if that
+   cannot be posted, the atom and blocks are freed here. TERMINATE and
+   ACK carry nothing of the client's. */
+static void qmsg_discard(QMSG FARP *q)
+{
+    HWND client = (HWND)q->wp;
+    WORD lo = LOWORD(q->lp), hi = HIWORD(q->lp);
+    switch (q->msg) {
+    case WM_DDE_EXECUTE:
+    case WM_DDE_REQUEST:
+    case WM_DDE_UNADVISE:
+    case WM_DDE_POKE:
+    case WM_DDE_ADVISE:
+        if (IsWindow(client) && ack(client, q->hwnd, 0, hi))
+            break;
+        if (q->msg == WM_DDE_EXECUTE)
+            ack_lost(0, (HGLOBAL)hi);
+        else
+            ack_lost((ATOM)hi, q->msg == WM_DDE_POKE || q->msg == WM_DDE_ADVISE ?
+                     (HGLOBAL)lo : NULL);
+        break;
+    }
+}
+
 static void srv_free(SRV FARP *s)
 {
     SRV FARP *FARP *pp;
@@ -72,6 +98,7 @@ static void srv_free(SRV FARP *s)
         conv_unlink(s->hwnd, &s->convs, s->convs->client);
     while ((q = s->queue) != NULL) {
         s->queue = q->next;
+        qmsg_discard(q);
         mem_free(q);
     }
     if (s->hwnd && IsWindow(s->hwnd)) {
@@ -135,6 +162,8 @@ OLESTATUS FAR PASCAL __loadds OLEREGISTERSERVER(LPCSTR cls, LPOLESERVER lpsrv,
     if (!s->cls || !s->hwnd) {
         if (s->hwnd)
             DestroyWindow(s->hwnd);
+        if (s->atom)
+            GlobalDeleteAtom(s->atom);
         mem_free(s->cls);
         mem_free(s);
         return OLE_ERROR_MEMORY;
@@ -149,7 +178,7 @@ OLESTATUS FAR PASCAL __loadds OLEREGISTERSERVER(LPCSTR cls, LPOLESERVER lpsrv,
 OLESTATUS FAR PASCAL __loadds OLEREVOKESERVER(LHSERVER lh)
 {
     SRV FARP *s = srv_from(lh);
-    DOC FARP *d, FARP *n;
+    DOC FARP *d;
     CONV FARP *c;
     if (!s)
         return OLE_ERROR_HANDLE;
@@ -157,10 +186,14 @@ OLESTATUS FAR PASCAL __loadds OLEREVOKESERVER(LHSERVER lh)
         return OLE_WAIT_FOR_RELEASE;    /* UNVERIFIED: revoked twice */
     s->revoking = TRUE;
     s->busy = TRUE;                     /* documents finish quietly */
-    for (d = s->docs; d; d = n) {
-        n = d->next;
-        if (!d->revoking)
-            doc_revoke(d);
+    /* the list is read again after each revoke: a Release may revoke
+       (and so free) another document */
+    for (;;) {
+        for (d = s->docs; d && d->revoking; d = d->next)
+            ;
+        if (!d)
+            break;
+        doc_revoke(d);
     }
     s->busy = FALSE;
     conv_close_now(s->hwnd, &s->convs);
@@ -220,11 +253,10 @@ DWORD FAR PASCAL __loadds OLEQUERYSERVERVERSION(void)
 static void dispatch(SRV FARP *s, QMSG FARP *q)
 {
     LONG p;
-    if (!IsWindow(q->hwnd))
+    if (!IsWindow(q->hwnd) || (p = GetWindowLong(q->hwnd, 0)) == 0) {
+        qmsg_discard(q);                /* its document is gone */
         return;
-    p = GetWindowLong(q->hwnd, 0);
-    if (!p)
-        return;
+    }
     if (q->hwnd == s->hwnd)
         srv_dde(s, q->hwnd, q->msg, q->wp, q->lp);
     else
@@ -263,7 +295,7 @@ static BOOL is_name(const char FARP *a, const char *b)
    EXECUTE, spaces, a missing bracket are refused without a callback) */
 BOOL one_command(const char FARP *t)
 {
-    int n = str_len(t), i;
+    WORD n = str_len(t), i;
     if (n < 3 || t[0] != '[' || t[n - 1] != ']')
         return FALSE;
     for (i = 1; i < n - 1; i++)
@@ -384,6 +416,21 @@ static DOC FARP *new_doc(SRV FARP *s, const char FARP *name)
     return doc_new(s, name, NULL);
 }
 
+/* After the server's Create, Open and the like: FALSE when the server
+   revoked the new document (or itself) meanwhile. A document revoked
+   but still waiting for a client keeps the server's document, so that
+   its Release comes when it ends. */
+static BOOL made_doc_alive(DOC FARP *d, OLESTATUS r, LPOLESERVERDOC lpdoc)
+{
+    if (doc_from((LHSERVERDOC)d) != d)
+        return FALSE;
+    if (!d->revoking)
+        return TRUE;
+    if (r == OLE_OK)
+        d->lpdoc = lpdoc;
+    return FALSE;
+}
+
 static WORD sys_execute(SRV FARP *s, HWND client, HGLOBAL hcmd)
 {
     char FARP *t, FARP *rest;
@@ -421,6 +468,8 @@ static WORD sys_execute(SRV FARP *s, HWND client, HGLOBAL hcmd)
                                                          arg[1], arg[2], (LPOLESERVERDOC)&lpdoc);
             else
                 r = s->lpsrv->lpvtbl->Create(s->lpsrv, (LHSERVERDOC)d, arg[0], arg[1], (LPOLESERVERDOC)&lpdoc);
+            if (!made_doc_alive(d, r, lpdoc))
+                goto done;
             if (r != OLE_OK) {
                 doc_destroy(d);
                 goto done;
@@ -450,6 +499,8 @@ static WORD sys_execute(SRV FARP *s, HWND client, HGLOBAL hcmd)
                 r = s->lpsrv->lpvtbl->Open(s->lpsrv, (LHSERVERDOC)d, arg[0], (LPOLESERVERDOC)&lpdoc);
             else
                 r = s->lpsrv->lpvtbl->Edit(s->lpsrv, (LHSERVERDOC)d, s->cls, arg[0], (LPOLESERVERDOC)&lpdoc);
+            if (!made_doc_alive(d, r, lpdoc))
+                goto done;
             if (r != OLE_OK) {
                 doc_destroy(d);
                 goto done;
@@ -508,13 +559,14 @@ LRESULT srv_dde(SRV FARP *s, HWND w, UINT msg, WPARAM wp, LPARAM lp)
             return 0;                   /* UNVERIFIED: no conversation */
         st = sys_execute(s, client, (HGLOBAL)HIWORD(lp));
         /* the server may be gone (StdExit, revoke): the window too */
-        if (IsWindow(w))
-            ack(client, w, st, HIWORD(lp));
+        if (IsWindow(w) && !ack(client, w, st, HIWORD(lp)))
+            ack_lost(0, (HGLOBAL)HIWORD(lp));
         return 0;
     }
     case WM_DDE_REQUEST:
         /* observed: a positive ACK, no data */
-        ack(client, w, 0x8000, HIWORD(lp));
+        if (!ack(client, w, 0x8000, HIWORD(lp)))
+            ack_lost((ATOM)HIWORD(lp), NULL);
         return 0;
     case WM_DDE_POKE:
     case WM_DDE_ADVISE:
@@ -609,19 +661,37 @@ LRESULT FAR PASCAL __loadds SRVRWNDPROC(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             srv_try_finish(s);
         return 0;
     case WM_DESTROY:
-        /* the server's task ends without having revoked it: forget it
-           (UNVERIFIED: what Windows 3.1's OLESVR does then) */
+        /* the server's task ends without having revoked it: forget it;
+           its clients get their TERMINATE (DDE: a window posts one before
+           it goes; UNVERIFIED: what Windows 3.1's OLESVR does then) */
         if (!s->released) {
+            DOC FARP *d, FARP *n;
+            BOOL busy = FALSE;
             SetWindowLong(w, 0, 0);
             s->hwnd = NULL;
             s->released = TRUE;
-            conv_post_terms(w, s->convs);
-            while (s->docs) {
-                DOC FARP *d = s->docs;
+            conv_post_all(w, s->convs);
+            for (d = s->docs; d; d = n) {
+                n = d->next;
+                conv_post_all(d->hwnd, d->convs);
+                if (d->destroying) {
+                    /* its Release (in doc_destroy, which goes on using
+                       it and the server) destroyed this window: its
+                       windows go with this one; it and the server stay */
+                    ITEM FARP *it;
+                    busy = TRUE;
+                    if (d->hwnd && IsWindow(d->hwnd))
+                        SetWindowLong(d->hwnd, 0, 0);
+                    d->hwnd = NULL;
+                    for (it = d->items; it; it = it->next)
+                        it->hwnd = NULL;
+                    continue;
+                }
                 d->released = TRUE;
                 doc_destroy(d);
             }
-            srv_free(s);
+            if (!busy)
+                srv_free(s);
         }
         return 0;
     }
