@@ -110,10 +110,25 @@ void dev_close(NPDEVICE d)
     LocalFree((HLOCAL)d);
 }
 
-/* a logical colour to the DC's physical one (ColorInfo) */
+typedef struct { BYTE peRed, peGreen, peBlue, peFlags; } PALENTRY;
+WORD GDIAPI GetPaletteEntries(HPALETTE, WORD, WORD, PALENTRY __far *);
+
+/* a logical colour to the DC's physical one (ColorInfo). On the VGA (no
+   palette) PALETTEINDEX(i) is the DC's palette's entry i (entry 0 past
+   its end: UNVERIFIED) and PALETTERGB the plain RGB (GD14 on 3.1: a
+   source DC's background colour PALETTEINDEX(7) picks the default
+   palette's silver in a colour -> monochrome BitBlt). */
 DWORD dev_colorinfo(LPDC dc, COLORREF c)
 {
     DWORD pc = 0;
+    if ((BYTE)(c >> 24) == 1) {
+        PALENTRY e;
+        HPALETTE pal = dc->hPal;
+        if (!GetPaletteEntries(pal, LOWORD(c), 1, &e) && !GetPaletteEntries(pal, 0, 1, &e))
+            e.peRed = e.peGreen = e.peBlue = 0;
+        c = RGB(e.peRed, e.peGreen, e.peBlue);
+    } else if ((BYTE)(c >> 24) == 2)
+        c &= 0xFFFFFFL;
     if (dc->dev->fn[DRV_COLORINFO])
         ((DRVCOLORINFO)dc->dev->fn[DRV_COLORINFO])(dc->lpPDevice, c, &pc);
     return pc;

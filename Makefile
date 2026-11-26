@@ -2045,6 +2045,15 @@ $(DOS)/GD11.EXE: $(B)/tests/start.o $(B)/tests/gd11.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd11.map file { $(B)/tests/start.o $(B)/tests/gd11.o }
+# GD14.EXE: colour conversions in BitBlt and pattern brushes (tests/apps/gd14.c;
+# tests/gdiheap.sh -p, the boot-test case gdiconv)
+gdprobes: $(DOS)/GD14.EXE
+dos: $(DOS)/GD14.EXE
+$(B)/tests/gd14.o: tests/apps/gd14ref.h tests/apps/tklog.h
+$(DOS)/GD14.EXE: $(B)/tests/start.o $(B)/tests/gd14.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd14.map file { $(B)/tests/start.o $(B)/tests/gd14.o }
 # GD13.EXE: the TrueType probe (tests/apps/gd13.c; tests/gd13.sh)
 gdprobes: $(DOS)/GD13.EXE
 dos: $(DOS)/GD13.EXE

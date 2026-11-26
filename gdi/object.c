@@ -245,6 +245,8 @@ HPEN GDIAPI CreatePen(int style, int width, COLORREF color)        /* GDI.61 */
    delete the bitmap), a global block made as a bitmap's is, PBITMAP and
    bits, in what Schulman's BRUSHOBJ calls crHatchBk (GD4: 3.1's pattern
    brush took no more of DGROUP than a solid one) */
+HBRUSH GDIAPI CreateDIBPatternBrush(HGLOBAL hdib, WORD usage);
+
 HBRUSH GDIAPI CreateBrushIndirect(const LOGBRUSH __far *lb)        /* GDI.50 */
 {
     HANDLE h;
@@ -252,6 +254,11 @@ HBRUSH GDIAPI CreateBrushIndirect(const LOGBRUSH __far *lb)        /* GDI.50 */
     LPBRUSHOBJ b;
     if (!lb)
         return 0;
+    /* BS_DIBPATTERN: lbHatch the packed DIB, lbColor its usage (SDK,
+       LOGBRUSH); as CreateDIBPatternBrush (GD14 on 3.1: the same
+       pattern, the same GetObject; StarWriter's page surround) */
+    if (lb->lbStyle == 5)
+        return CreateDIBPatternBrush((HGLOBAL)lb->lbHatch, LOWORD(lb->lbColor));
     if (lb->lbStyle == 3) {
         pat = bm_pattern_copy(lb->lbHatch);
         if (!pat)
@@ -301,7 +308,11 @@ HBRUSH GDIAPI CreatePatternBrush(HBITMAP hbm)                      /* GDI.60 */
 /* BS_DIBPATTERN (SDK: the DIB is copied, the program may free its own):
    the brush keeps a copy of the whole block (GD9: a metafile records the
    block's GlobalSize) in lbHatch, DIB_RGB_COLORS or DIB_PAL_COLORS in
-   lbColor, and draws as the pattern brush of the DIB made a bitmap */
+   lbColor, and draws as the pattern brush of the DIB made a bitmap of the
+   screen's format, 1-bit DIBs too (GD14 on 3.1: a 2-colour DIB's own
+   colours on a colour DC whatever the text and background colours; on a
+   monochrome DC each colour's own black or white, as a colour pattern
+   bitmap there, not the text and background colours the SDK names) */
 HBRUSH GDIAPI CreateDIBPatternBrush(HGLOBAL hdib, WORD usage)       /* GDI.445 */
 {
     DWORD n = hdib ? GlobalSize(hdib) : 0;
@@ -339,7 +350,7 @@ HBRUSH GDIAPI CreateDIBPatternBrush(HGLOBAL hdib, WORD usage)       /* GDI.445 *
         ht = -ht;
     t = CreateCompatibleDC(0);
     if (t && w > 0 && ht > 0 && hd < n) {
-        hb = bpp == 1 ? bm_create((int)w, (int)ht, 1, 1, 0, 0) : bm_screen((int)w, (int)ht);
+        hb = bm_screen((int)w, (int)ht);
         if (hb)
             SetDIBits(t, hb, 0, (WORD)ht, s + hd, s, usage);
     }
@@ -581,8 +592,10 @@ BOOL GDIAPI UnrealizeObject(HGDIOBJ h)                              /* GDI.150 *
     WORD m = obj_magic(h);
     if (!m)
         return FALSE;
-    if ((m & MAGIC_MASK) == BRUSH_MAGIC)
+    if ((m & MAGIC_MASK) == BRUSH_MAGIC) {
+        ((LPBRUSHOBJ)obj_get(h, BRUSH_MAGIC))->wOrgLock = 0;
         dc_brush_changed(h);
+    }
     return TRUE;
 }
 

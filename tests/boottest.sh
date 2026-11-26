@@ -91,6 +91,9 @@
 #              w16's: no FAIL
 #   gdidib     GD7 (DIBs: every format, colour use and call; RLE) with
 #              Microsoft's GDI and VGA.DRV, w16's GDI, w16's VGA.DRV, both: no FAIL
+#   gdiconv    GD14 (colour <-> monochrome BitBlt, StarView's disabled icons,
+#              pattern and DIB pattern brushes, brush origins) with Microsoft's
+#              GDI and VGA.DRV, w16's GDI, w16's VGA.DRV, both: no FAIL
 #   gdifont    GD10 (raster font simulations: italic, underline, strike-out,
 #              emboldening, integer scaling; metrics and pixels) and GD11
 #              (the font mapper: every mapping and metric as in 3.1's log,
@@ -1024,7 +1027,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1628,6 +1631,27 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   gdimeta: GD9's metafiles with w16's GDI as with Microsoft's"
         else echo "FAIL gdimeta: $r"; fails=$((fails + 1)); fi ;;
+    gdiconv)
+        # GD14 (tests/apps/gd14.c: colour <-> monochrome BitBlt, StarView's
+        # disabled toolbar icons, pattern and DIB pattern brushes, brush
+        # origins; StarOffice 3.1's toolbars and page surround) as the shell
+        # of Windows 3.1: Microsoft's GDI and VGA.DRV (the table's own run),
+        # w16's GDI, w16's VGA.DRV and both; every log must end with
+        # "GD14 done" and have no FAIL
+        r=ok
+        for k in ms gdi vga both; do
+            case $k in ms) set -- -r ;; gdi) set -- ;; vga) set -- -r -v "$root/build/dos/VGA.DRV" ;;
+                both) set -- -v "$root/build/dos/VGA.DRV" ;; esac
+            "$root/tests/gdiheap.sh" "$@" -p "$root/build/dos/GD14.EXE" > "$out/gdiconv-$k.log" 2>&1 &
+        done
+        wait
+        for k in ms gdi vga both; do
+            f=$out/gdiconv-$k.log
+            grep -q '^GD14 done' "$f" || { r="$k: GD14 did not finish ($f)"; break; }
+            if grep -q '^FAIL' "$f"; then r="$k: $(grep -m1 '^FAIL' "$f" | tr -d '\r') ($f)"; break; fi
+        done
+        if [ "$r" = ok ]; then echo "ok   gdiconv: GD14's colour conversions and brushes with w16's GDI and VGA.DRV as with Microsoft's"
+        else echo "FAIL gdiconv: $r"; fails=$((fails + 1)); fi ;;
     gdidib)
         # GD7 (tests/apps/gd7.c: DIBs drawn as programs draw them, read
         # back pixel by pixel; QuickTime's installer banner, an RLE4 DIB,
