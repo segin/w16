@@ -746,6 +746,41 @@ _mod_call:
         pop bp
         retf
 
+; u32 __cdecl pascal_call3(u16 cs, u16 ip, u16 ds, u16 nargs, u16 a0,
+;                          u16 a1, u16 a2)
+; Far-call the Pascal procedure cs:ip with DS = ds and nargs (0-3) word
+; arguments, a0 pushed first; returns DX:AX. A self-loading program's
+; BootApp and LoadAppSeg (loader.c). Relies on the callee keeping BP.
+global _pascal_call3
+_pascal_call3:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push es
+        push word [bp + 6]              ; far call target: cs
+        push word [bp + 8]              ;                   ip
+        mov bx, sp
+        mov cx, [bp + 12]
+        lea si, [bp + 14]
+.arg:   jcxz .go
+        push word [ss:si]
+        add si, 2
+        dec cx
+        jmp .arg
+.go:    mov ds, [bp + 10]
+        xor ax, ax
+        mov es, ax
+        call far [ss:bx]
+        lea sp, [bp - 8]
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf
+
 ; DOS3Call (KERNEL.102): issue INT 21h with the caller's registers.
 global DOS3CALL
 DOS3CALL:

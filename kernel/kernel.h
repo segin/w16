@@ -266,6 +266,10 @@ void     rsrc_free(module FAR *m);
    returns AX (kentry.asm) */
 extern u16 __cdecl mod_call(u16 cs, u16 ip, u16 ds, u16 cx, u16 di,
                             u16 nargs, u16 arg);
+/* far-call the Pascal procedure cs:ip with DS = ds and nargs (0-3) word
+   arguments, a0 pushed first; returns DX:AX (kentry.asm) */
+extern u32 __cdecl pascal_call3(u16 cs, u16 ip, u16 ds, u16 nargs,
+                                u16 a0, u16 a1, u16 a2);
 
 /* ---- procinst.c ---- */
 void procinst_init_tdb(u16 t);
