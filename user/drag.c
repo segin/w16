@@ -87,8 +87,9 @@ static HCURSOR no_drop(void)
    its items with their icons so): white where the colour is light, more
    than half the full intensity on average (yellow, cyan, light grey,
    white), black elsewhere - UNVERIFIED beyond the Read Me item's pen. A
-   cursor is used as it is. */
-static HCURSOR mono_cursor(HCURSOR h)
+   cursor is used as it is. Also the cursor of an icon being dragged
+   (track.c). */
+HCURSOR mono_cursor(HCURSOR h)
 {
     typedef struct { int hotx, hoty, cx, cy, wbytes; BYTE planes, bpp; } HDR;
     HDR __far *p = h ? (HDR __far *)GlobalLock(h) : 0;

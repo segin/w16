@@ -597,6 +597,12 @@
 #   pmitems    an item dragged in Program Manager's Main group, the minimised
 #              Accessories group restored (tests/scripts/input/pmitems.txt):
 #              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's
+#   pmarrange  Program Manager's Arrange Icons saved: an item dragged and the
+#              Main group arranged, the Games icon dragged and the group
+#              icons arranged, a click on an icon (its system menu), Windows
+#              ended and started again (tests/scripts/input/pmarrange.txt):
+#              w16 USER+GDI, and with w16 PROGMAN, against Microsoft's; the
+#              group files and PROGMAN.INI identical
 #   w16groups  w16's install tree alone (build/w16 as C:\W16, dropin.sh -T;
 #              no file of Microsoft's but, in its first run, PROGMAN.EXE;
 #              WSWAP is w16's): its default
@@ -1024,7 +1030,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -4794,6 +4800,50 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         done
         if [ "$r" = ok ]; then echo "ok   pmitems: item moved, group restored in front; MAIN.GRP identical (w16 USER+GDI; and w16 PROGMAN)"
         else echo "FAIL pmitems: $r ($out)"; fails=$((fails + 1)); fi ;;
+    pmarrange)
+        # Arrange Icons in a group and of the group icons, a click on an
+        # icon, Windows ended with Save Settings on Exit and started again
+        # (INPUTRUN_STAY: the script types WIN at the DOS prompt):
+        # Microsoft's Program Manager on w16's USER and GDI pixel for
+        # pixel; w16's on them with the pictures of its own group and
+        # program icons left out (the icon row and Program Manager's own
+        # icon); the group files and PROGMAN.INI identical to all-
+        # Microsoft's in both
+        scr=$root/tests/scripts/input/pmarrange.txt
+        m="rectangle 60,305 460,342"
+        refrun pmarrange-ref pmarrange env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 40 -t 300 "$scr" "$out/pmarrange-ref" -r
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -e "$out/pmarrange-ref/boot.png" -E "$out/pmarrange-ref" -b 40 -t 300 "$scr" "$out/pmarrange-us" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/pmarrange-us.txt" 2>&1 || true
+        INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -E "$out/pmarrange-ref" -M "$m" -b 40 -t 300 "$scr" "$out/pmarrange-pm" -r \
+            -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" \
+            -f "$root/build/dos/PROGMAN.EXE=WINDOWS/PROGMAN.EXE" > "$out/pmarrange-pm.txt" 2>&1 || true
+        r=ok
+        win=work/c/WINDOWS
+        grep -q '^script done' "$out/pmarrange-ref/input.log" 2>/dev/null || r="the reference's script did not run to its end"
+        [ "$r" = ok ] && cmp -s "$root/.tools/ref/win31/cdrive/WINDOWS/GAMES.GRP" "$out/pmarrange-ref/$win/GAMES.GRP" && r="the reference saved no icon place"
+        for k in us pm; do
+            [ "$r" = ok ] || break
+            grep -q '^script done' "$out/pmarrange-$k/input.log" 2>/dev/null || { r="$k: the script did not run to its end"; break; }
+            for f in MAIN.GRP ACCESSOR.GRP GAMES.GRP STARTUP.GRP PROGMAN.INI; do
+                cmp -s "$out/pmarrange-ref/$win/$f" "$out/pmarrange-$k/$win/$f" || { r="$k: $f differs"; break; }
+            done
+            [ "$r" = ok ] || break
+            for f in "$out/pmarrange-ref"/[0-9]*.png; do
+                s=$(basename "$f")
+                [ -f "$out/pmarrange-$k/$s" ] || { r="$k: no $s"; break; }
+                mk="rectangle 0,0 0,0"
+                # w16's pictures: the group icons, the dragged one's
+                # pointer, Program Manager's own icon after the restart
+                [ $k = pm ] && mk="$m rectangle 0,400 70,445"
+                magick "$f" -fill black -draw "$mk" "$out/pmarrange-a.png"
+                magick "$out/pmarrange-$k/$s" -fill black -draw "$mk" "$out/pmarrange-b.png"
+                n=$(magick compare -metric AE "$out/pmarrange-b.png" "$out/pmarrange-a.png" "$out/pmarrange-$k-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$k: $s: $n pixels differ"; break; }
+            done
+        done
+        if [ "$r" = ok ]; then echo "ok   pmarrange: arranged items and group icons saved, icon menu on a click; files identical (w16 USER+GDI; and w16 PROGMAN)"
+        else echo "FAIL pmarrange: $r ($out)"; fails=$((fails + 1)); fi ;;
     w16groups)
         # w16's install tree alone, with its default groups; Microsoft's
         # Program Manager and w16's on it (not cached: the tree is w16's)

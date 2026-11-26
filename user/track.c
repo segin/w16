@@ -20,6 +20,9 @@ extern HBRUSH hbrGray;
 extern HDC hdcScreen;
 void minmax(PWND w, MINMAXINFO __far *mm);
 BOOL journal_active(void);
+HCURSOR mono_cursor(HCURSOR h);
+void icon_drag_hide(HWND h, BOOL hide);
+extern int menu_mode;
 
 /* 3.1 sends these around the tracking (probe US31: 231h after
    WM_GETMINMAXINFO, 232h after the window was placed, also when Esc left
@@ -98,7 +101,27 @@ static void new_rect(RECT *r, const RECT *r0, UINT hit, int dx, int dy, POINT mn
     }
 }
 
-void track_window(HWND h, UINT hit, BOOL keyboard)
+/* An icon moved with the mouse (3.1, Program Manager's group icons and
+   its own on the desktop): nothing shows while the button is held still;
+   at the first move the icon and its title go from their place and the
+   pointer becomes the icon's picture, black and white, its middle at the
+   pointer; released, the icon goes to its new place. Released where it
+   was pressed, nothing moves and the caller shows the icon's system menu
+   (track_window returns TRUE). The picture: the class icon, else
+   WM_QUERYDRAGICON's (3.1 SDK); with neither, the gray frame as for a
+   window. */
+static HCURSOR drag_icon_cursor(HWND h, PWND w)
+{
+    HICON i = ((PCLS)w->cls)->hIcon;
+    if (!i) {
+        i = (HICON)(WORD)send_message(h, WM_QUERYDRAGICON, 0, 0);
+        if (!valid_wnd(h))
+            return 0;
+    }
+    return i ? mono_cursor((HCURSOR)i) : 0;
+}
+
+BOOL track_window(HWND h, UINT hit, BOOL keyboard)
 {
     PWND w = valid_wnd(h);
     RECT r0, r, shown;
@@ -107,15 +130,18 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
     MSG m;
     int t;
     BOOL done = FALSE, ok = FALSE, drawn = FALSE;
+    BOOL icon, moved = FALSE, hidden = FALSE;
+    HCURSOR icur = 0, made = 0;
     if (!w || (w->style & (WS_MAXIMIZE | WS_MINIMIZE)) && hit != HTCAPTION)
-        return;
+        return FALSE;
     if (w->style & WS_MAXIMIZE)
-        return;
+        return FALSE;
+    icon = (w->style & WS_MINIMIZE) && !keyboard;
     /* WH_CBT's HCBT_MOVESIZE with the window's rectangle (3.1 SDK; US30
        on 3.1: none for MoveWindow); nonzero: no tracking */
     r0 = w->rcWindow;
     if (cbt_hook(HCBT_MOVESIZE, (WPARAM)h, (LPARAM)(RECT __far *)&r0) || !(w = valid_wnd(h)))
-        return;
+        return FALSE;
     r0 = w->rcWindow;
     /* the frame as thick as the window's border less its black line
        (dragging Program Manager with BorderWidth=3: 3 pixels; UNVERIFIED
@@ -124,12 +150,12 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
     minmax(w, &mm);
     send_message(h, WM_GETMINMAXINFO, 0, (LPARAM)(MINMAXINFO __far *)&mm);
     if (!(w = valid_wnd(h)))
-        return;
+        return FALSE;
     mn = mm.ptMinTrackSize;
     mx = mm.ptMaxTrackSize;
     send_message(h, WM_ENTERSIZEMOVE_, 0, 0);
     if (!(w = valid_wnd(h)))
-        return;
+        return FALSE;
     GetCursorPos(&porig);
     if (keyboard) {
         POINT c;
@@ -151,8 +177,10 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
     GetCursorPos(&p0);
     SetCapture(h);
     shown = r0;
-    xor_frame(&shown, t);
-    drawn = TRUE;
+    if (!icon) {
+        xor_frame(&shown, t);
+        drawn = TRUE;
+    }
     while (!done) {
         POINT p;
         next_input(&m);
@@ -164,11 +192,38 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
         case WM_LBUTTONUP:
         case WM_NCMOUSEMOVE:
             GetCursorPos(&p);
-            new_rect(&r, &r0, hit, p.x - p0.x, p.y - p0.y, mn, mx);
+            if (icon && !moved && (p.x != p0.x || p.y != p0.y)) {
+                moved = TRUE;
+                icur = drag_icon_cursor(h, w);
+                if ((w = valid_wnd(h)) == 0)
+                    return FALSE;
+                if (icur) {
+                    made = icur != ((PCLS)w->cls)->hIcon ? icur : 0;
+                    icon_drag_hide(h, TRUE);
+                    hidden = TRUE;
+                    menu_mode++;        /* the pointer is the drag's */
+                    SetCursor(icur);
+                } else {
+                    xor_frame(&shown, t);
+                    drawn = TRUE;
+                }
+            }
+            if (hidden) {
+                /* the icon goes where its picture is: centred on the
+                   pointer (3.1: Program Manager's icon pressed 17 pixels
+                   in from its left came down 1 pixel left of where the
+                   move alone would have put it) */
+                r = r0;
+                OffsetRect(&r, p.x - (r0.right - r0.left) / 2 - r0.left,
+                           p.y - (r0.bottom - r0.top) / 2 - r0.top);
+            } else
+                new_rect(&r, &r0, hit, p.x - p0.x, p.y - p0.y, mn, mx);
             if (!EqualRect(&r, &shown)) {
-                xor_frame(&shown, t);
+                if (drawn)
+                    xor_frame(&shown, t);
                 shown = r;
-                xor_frame(&shown, t);
+                if (drawn)
+                    xor_frame(&shown, t);
             }
             if (m.message == WM_LBUTTONUP)
                 done = ok = TRUE;
@@ -222,11 +277,18 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
         default:
             break;                      /* other input: taken by the tracking */
         }
-        if (!valid_wnd(h))
-            return;
+        if (!valid_wnd(h)) {
+            if (hidden)
+                menu_mode--;
+            return FALSE;
+        }
     }
     if (drawn)
         xor_frame(&shown, t);
+    if (hidden) {
+        menu_mode--;
+        SetCursor(load_icon_cursor(0, IDC_ARROW, TRUE));
+    }
     ReleaseCapture();
     /* from the keyboard, the pointer goes back where it was (3.1: at the
        screen's centre again after File Manager was sized) */
@@ -242,8 +304,13 @@ void track_window(HWND h, UINT hit, BOOL keyboard)
                      SWP_NOZORDER | SWP_NOACTIVATE |
                      (hit == HTCAPTION ? SWP_NOSIZE : 0));
     }
+    if (hidden && valid_wnd(h))
+        icon_drag_hide(h, FALSE);
+    if (made)
+        DestroyCursor(made);
     /* (when Esc left the window where it was, 3.1 sent it a
        WM_WINDOWPOSCHANGING alone before this, US31; w16 places nothing) */
     if (valid_wnd(h))
         send_message(h, WM_EXITSIZEMOVE_, 0, 0);
+    return icon && ok && !moved && valid_wnd(h);
 }

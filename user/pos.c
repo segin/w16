@@ -801,7 +801,18 @@ BOOL WINAPI GetWindowPlacement(HWND h, WINDOWPLACEMENT __far *p)
     p->flags = 0;
     p->showCmd = (w->style & WS_MINIMIZE) ? SW_SHOWMINIMIZED :
                  (w->style & WS_MAXIMIZE) ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
-    if (pl && pl->hasicon) {
+    if (w->style & WS_MINIMIZE) {
+        /* an icon: where it is now, moved or arranged since it was
+           minimised (3.1: Program Manager saves a group icon dragged or
+           arranged with Window > Arrange Icons at its new place, read
+           from here; w16 gave the place it was minimised to) */
+        p->ptMinPosition.x = w->rcWindow.left;
+        p->ptMinPosition.y = w->rcWindow.top;
+        if (w->style & WS_CHILD) {
+            p->ptMinPosition.x -= PW(w->hwndParent)->rcClient.left;
+            p->ptMinPosition.y -= PW(w->hwndParent)->rcClient.top;
+        }
+    } else if (pl && pl->hasicon) {
         p->ptMinPosition = pl->icon;
     } else
         p->ptMinPosition.x = p->ptMinPosition.y = -1;
@@ -884,6 +895,45 @@ static void show_icon_title(PLACE *pl, HWND h)
     move_icon_title(pl->title, h);
     set_window_pos(pl->title, h, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW |
                    SWP_NOACTIVATE);
+}
+
+/* the title window under an icon (menu.c places an icon's system menu
+   by it), or 0 */
+HWND icon_title_of(HWND h)
+{
+    PLACE *p = place_of(h, FALSE);
+    return p && p->title && valid_wnd(p->title) ? p->title : 0;
+}
+
+/* an icon being dragged with the mouse: it and its title hidden while
+   its picture is the pointer, shown again at the end (track.c; 3.1: the
+   Games icon and its title gone from their place while it was dragged).
+   The focus it had comes back with it. */
+void icon_drag_hide(HWND h, BOOL hide)
+{
+    PLACE *pl = place_of(h, FALSE);
+    static HWND hadfocus;
+    if (!valid_wnd(h))
+        return;
+    if (hide) {
+        hadfocus = hwndFocus;
+        if (pl)
+            hide_icon_title(pl);
+        set_window_pos(h, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                       SWP_NOACTIVATE | SWP_HIDEWINDOW);
+        /* the place painted now: the drag's loop dispatches nothing */
+        if (valid_wnd(h))
+            RedrawWindow((PW(h)->style & WS_CHILD) ? PW(h)->hwndParent : hwndDesktop, NULL, 0,
+                         RDW_UPDATENOW | RDW_ERASENOW | RDW_ALLCHILDREN);
+    } else {
+        set_window_pos(h, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                       SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        if ((pl = place_of(h, FALSE)) != 0 && valid_wnd(h) && (PW(h)->style & WS_MINIMIZE))
+            show_icon_title(pl, h);
+        if (hadfocus && hadfocus != hwndFocus && valid_wnd(hadfocus) && is_visible(PW(hadfocus)))
+            set_focus(hadfocus);
+        hadfocus = 0;
+    }
 }
 
 /* a window going away: its placement record and icon title */
