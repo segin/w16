@@ -99,7 +99,7 @@ static long get_num(HWND dlg, int id, BOOL *ok)
 
 static int nports;
 static int port_no[4];          /* COM number of list item k */
-static int port_val[4];         /* -1 never, 0 always, n idle */
+static int port_val[4];         /* -1 always, 0 never, n idle */
 static int cur;
 
 static void find_ports(void)
@@ -133,7 +133,7 @@ static void keep_port(HWND dlg)
         port_val[cur] = -1;
     else {
         v = get_num(dlg, IDC_EN_IDLESEC, &ok);
-        port_val[cur] = ok && v > 0 ? (int)v : 2;
+        port_val[cur] = ok && v > 0 ? (int)(v > 32767L ? 32767L : v) : 2;
     }
 }
 
@@ -154,7 +154,12 @@ extern void FAR PASCAL DOS3Call(void);
 static long free_kb(char drive)
 {
     WORD spc = 0, freec = 0, bps = 0;
-    BYTE d = (BYTE)(drive - 'A' + 1);
+    BYTE d;
+    if (drive >= 'a' && drive <= 'z')
+        drive -= 'a' - 'A';
+    if (drive < 'A' || drive > 'Z')
+        return -1;              /* not a drive letter (DL 0 is the current drive) */
+    d = (BYTE)(drive - 'A' + 1);
     _asm {
         mov ah, 36h
         mov dl, d
@@ -179,8 +184,9 @@ static long avail_kb(char drive)
         return f;
     get_ini("PagingFile", "", t, sizeof t);
     if (!t[0]) {
-        cpl_windir(t, sizeof t);
-        lstrcat(t, "WIN386.SWP");
+        char d[160];
+        cpl_windir(d, sizeof d);
+        cpl_join(t, sizeof t, d, "WIN386.SWP");
     }
     AnsiUpper(t);
     if (t[0] == drive && t[1] == ':' && (n = cpl_file_size(t)) > 0)
@@ -196,7 +202,7 @@ static long recommended(char drive)
         return 0;
     f /= 2;
     get_ini("MaxPagingFileSize", "", t, sizeof t);
-    if (t[0] && cpl_atol(t, &max) && max < f)
+    if (t[0] && cpl_atol(t, &max) && max >= 0 && max < f)
         f = max;
     return f;
 }
@@ -228,10 +234,11 @@ static void read_swap(SWAP *s)
         if (t[0] && t[1] == ':')
             w[0] = t[0];
         s->drive = w[0];
-        s->size = recommended(s->drive);
     }
     if (s->drive >= 'a' && s->drive <= 'z')
         s->drive -= 'a' - 'A';
+    if (s->type == 1)
+        s->size = recommended(s->drive);
 }
 
 static void set_num(HWND dlg, int id, long n)
@@ -428,7 +435,8 @@ BOOL FAR PASCAL __loadds VmemProc(HWND dlg, UINT m, WPARAM wp, LPARAM lp)
         BOOL sel = (d->itemState & ODS_SELECTED) != 0;
         if ((int)d->itemID < 0)
             return TRUE;
-        SendMessage(d->hwndItem, CB_GETLBTEXT, d->itemID, (LPARAM)(LPSTR)t);
+        if (SendMessage(d->hwndItem, CB_GETLBTEXT, d->itemID, (LPARAM)(LPSTR)t) == CB_ERR)
+            t[0] = 0;
         SetBkColor(d->hDC, GetSysColor(sel ? COLOR_HIGHLIGHT : COLOR_WINDOW));
         SetTextColor(d->hDC, GetSysColor(sel ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT));
         /* observed: a drive picture, the name 22 pixels in (w16's own
@@ -532,7 +540,7 @@ static void init_enh(HWND dlg)
         SendDlgItemMessage(dlg, IDC_EN_PORTS, LB_ADDSTRING, 0, (LPARAM)(LPSTR)t);
         wsprintf(key, "Com%dAutoAssign", port_no[i]);
         get_ini(key, "2", t, sizeof t);
-        port_val[i] = cpl_atol(t, &v) ? (v < 0 ? -1 : (int)v) : 2;
+        port_val[i] = cpl_atol(t, &v) ? (v < 0 ? -1 : (int)(v > 32767L ? 32767L : v)) : 2;
     }
     cur = 0;
     SendDlgItemMessage(dlg, IDC_EN_PORTS, LB_SETCURSEL, 0, 0);
@@ -669,7 +677,7 @@ LONG FAR PASCAL __loadds CPlApplet(HWND hwnd, UINT m, LPARAM l1, LPARAM l2)
         return 1;
     case CPL_INQUIRE: {
         LPCPLINFO p = (LPCPLINFO)l2;
-        if (l1 != 0)
+        if (l1 != 0 || p == NULL)
             return 1;
         p->idIcon = IDI_ENH386;
         p->idName = IDS_NAME;
