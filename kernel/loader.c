@@ -170,6 +170,37 @@ static void f_close(u16 fh)
     dos21(&r);
 }
 
+/* A module's non-resident name table read from its file into a new
+   fixed block (the caller frees it), ended by a zero byte; 0 if it has
+   none or the file cannot be read. For KERNEL, whose module the
+   bootstrap builds without it (module_register_kernel): mod_find_name
+   reads it for each lookup, as Pietrek describes 3.1 doing for every
+   module (Windows Internals ch. 8, GetProcAddress: the non-resident
+   names are loaded from the file when the resident ones fail). */
+u16 loader_read_nonres(module FAR *m)
+{
+    const ne_header FAR *h = NE_HDR(m);
+    u16 fh, err, sel;
+    int ok;
+
+    if (!h->nonres_len || !h->nonres_off || !m->path[0])
+        return 0;
+    if (!f_open(m->path, &fh, &err))
+        return 0;
+    if (!galloc(GMEM_FIXED, h->nonres_len + 1UL, 0, &sel)) {
+        f_close(fh);
+        return 0;
+    }
+    ok = f_seek(fh, h->nonres_off) && f_read(fh, MK_FP(sel, 0), h->nonres_len);
+    f_close(fh);
+    if (!ok) {
+        GlobalFree(sel);
+        return 0;
+    }
+    *(u8 FAR *)MK_FP(sel, h->nonres_len) = 0;
+    return sel;
+}
+
 /* ---- directories and the search ---- */
 
 static void str_copy(char *d, const char FAR *s, u16 max)

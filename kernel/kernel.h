@@ -255,6 +255,7 @@ int      mod_base_name(const char FAR *name, char *base);
 
 /* ---- loader.c ---- */
 void     loader_init(const char FAR *kernel_path);
+u16      loader_read_nonres(module FAR *m);  /* a temporary copy, or 0 */
 void     module_end_instance(module FAR *m, u16 dg_hnd, u16 dg_sel);
 int      module_init_dll(u16 hmod);
 

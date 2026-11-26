@@ -124,6 +124,7 @@ probes() {
     run TK17A 0
     run TK19 0
     run TK58 0
+    run TK76 0          # KERNEL's own exports by name (non-resident too)
     run TK50 0
     run GD6 0           # GDI's 32-bit arithmetic (gdi/i4.asm)
     run TK2 255 "w16: call to unimplemented KERNEL.27"

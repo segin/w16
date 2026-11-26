@@ -38,7 +38,7 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
-           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62 TK64 TK65 TK66 \
+           TK11 TK12 TK13 TK14 TK15 TK16 TK17 TK17A TK19 TK54 TK58 TK60 TK61 TK62 TK64 TK65 TK66 TK76 \
            TK67P1 TK67P2 TK67P3 TK67P4 TK67P5 TK67P6 TK67P7 TK67P8 TK67P9 TK67P10 TK67P11 TK67P12 TK67P13
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
@@ -716,6 +716,13 @@ $(TK65I:%=$(DOS)/%): $(DOS)/TK65I%.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tk6
 	    option modname=TK65I$* \
 	    import TKIMP TK65D.\'$(word $*,$(TK65IMP))\' \
 	    option map=$(B)/tests/tk65i$*.map file { $(B)/tests/dllstart.o $(B)/tests/dll/tk65i.o }
+# TK76.EXE: KERNEL's own exports by name (tests/apps/tk76.c); tk76.lnk
+# imports KERNEL's SETERRORMODE by name
+$(B)/tests/tk76.o: tests/apps/tk76ref.h tests/apps/tklog.h
+$(DOS)/TK76.EXE: $(B)/tests/start.o $(B)/tests/tk76.o tests/apps/app.lnk tests/apps/tk76.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tk76.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk76.map file { $(B)/tests/start.o $(B)/tests/tk76.o }
 # TK58.EXE: the KRNL386 global heap probe (KERNEL imports by ordinal: tk58k.lnk)
 $(B)/tests/tk58.o: tests/apps/tk58ref.h tests/apps/tklog.h
 $(DOS)/TK58.EXE: $(B)/tests/start.o $(B)/tests/tk58.o tests/apps/app.lnk tests/apps/tk58k.lnk
