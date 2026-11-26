@@ -1,5 +1,5 @@
 /*
- * tk69.c - TK69.EXE: what an installer's start-up asks of KERNEL before
+ * tk73.c - TK73.EXE: what an installer's start-up asks of KERNEL before
  * it looks at the disk (the Entertainment Pack setups said there were
  * zero bytes free, 2026-11-25). Run as the shell (tests/dropin.sh).
  * Writes to TK.LOG:
@@ -14,11 +14,11 @@
  *                            '#' before; GetSystemDirectory the same (gsd)
  *   OBS free36(D)=...        INT 21h AH=36h for drive D (0, 3, 1Bh, C0h),
  *                            AX BX CX DX and the carry, through DOS3Call
- * then "TK69 end".
+ * then "TK73 end".
  */
 #include <windows.h>
 
-#define TK_REF "tk69ref.h"
+#define TK_REF "tk73ref.h"
 #include "tklog.h"
 
 static char buf[300];
@@ -52,7 +52,7 @@ static void outdec(WORD v)
     out(b + n);
 }
 
-/* INT 21h AH=36h through DOS3Call (KERNEL.102): tk69s.asm */
+/* INT 21h AH=36h through DOS3Call (KERNEL.102): tk73s.asm */
 extern void __cdecl __far free36(BYTE drive, WORD __far *out);
 static WORD r[5];
 
@@ -101,7 +101,7 @@ int __cdecl tmain(void)
     WORD i;
     static const BYTE drives[] = { 0, 3, 0x1B, 0xC0 };
 
-    out("TK69 start\r\n");
+    out("TK73 start\r\n");
     /* the environment's end: the double NUL, then (DOS) a word and the
        program's path */
     for (i = 0; i < 0x7FF0 && (env[i] || env[i + 1]); i++)
@@ -115,7 +115,7 @@ int __cdecl tmain(void)
     out("OBS ~cmd=");
     outstr(cmd, 80);
     out("\r\n");
-    GetModuleFileName(GetModuleHandle("TK69"), buf, sizeof buf);
+    GetModuleFileName(GetModuleHandle("TK73"), buf, sizeof buf);
     out("OBS ~modname=");
     outstr(buf, 128);
     out("\r\n");
@@ -136,6 +136,6 @@ int __cdecl tmain(void)
         out(r[4] ? " C" : " NC");
         out("\r\n");
     }
-    out("TK69 end\r\n");
+    out("TK73 end\r\n");
     return 0;
 }

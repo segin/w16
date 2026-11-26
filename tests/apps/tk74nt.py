@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""tk70nt.py OUT - TK70's name table (resource type 15, RT_NAMETABLE).
+"""tk74nt.py OUT - TK74's name table (resource type 15, RT_NAMETABLE).
 
 The entries as Windows 3.0's resource compiler wrote them (seen in the
 Entertainment Pack's setup program's file, read as data): a word with the
 entry's length, the resource type (an integer), the resource's id (with
 8000h for an integer id), then a NUL-terminated type name and the
-NUL-terminated resource name; a zero length word ends the table. TK70
-(tests/apps/tk70.c) asks FindResource for these names.
+NUL-terminated resource name; a zero length word ends the table. TK74
+(tests/apps/tk74.c) asks FindResource for these names.
 """
 import struct
 import sys

@@ -1910,7 +1910,7 @@ u16 KAPI FreeModule(u16 h)                                     /* KERNEL.46 */
 
 /* Observed: "C:\WINDOWS" and "C:\WINDOWS\SYSTEM" (no trailing backslash).
    A buffer too small for the path and its NUL (0 up to the length):
-   the length + 1 and the buffer untouched (TK69, 386 Enhanced mode). */
+   the length + 1 and the buffer untouched (TK73, 386 Enhanced mode). */
 static u16 copy_dir(const char *dir, char FAR *buf, u16 n)
 {
     u16 len = kstrlen(dir), i;

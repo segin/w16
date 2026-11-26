@@ -1,10 +1,10 @@
 /*
- * tk70.c - TK70.EXE: FindResource by name through a name table (resource
+ * tk74.c - TK74.EXE: FindResource by name through a name table (resource
  * type 15, RT_NAMETABLE; Pietrek and Schulman list the type as
  * "eliminated in Windows 3.1 NE files", but programs linked for Windows
  * 3.0 have one: the Entertainment Pack setups ask for their dialogs by
  * the names in it, and on w16 DialogBox failed, 2026-11-25). Its
- * resources (tk70.rc, the table from tk70nt.py): RCDATA 1 "one", 2 "two",
+ * resources (tk74.rc, the table from tk74nt.py): RCDATA 1 "one", 2 "two",
  * 3 "three", RCDATA "REAL" "real", DIALOG 1, and table entries
  *   FIRST -> RCDATA 1, second -> RCDATA 2, NOBIT -> RCDATA 3 (id without
  *   8000h), MENUONLY -> MENU 1, TNAMED -> RCDATA 1 with the type name
@@ -14,7 +14,7 @@
  */
 #include <windows.h>
 
-#define TK_REF "tk70ref.h"
+#define TK_REF "tk74ref.h"
 #include "tklog.h"
 
 static HINSTANCE hinst;
@@ -45,7 +45,7 @@ static void query(const char *name, LPCSTR type, const char *tname)
 int __cdecl tmain(void)
 {
     hinst = (HINSTANCE)init_regs[5];    /* InitTask's DI */
-    out("TK70 start\r\n");
+    out("TK74 start\r\n");
     query("FIRST", RT_RCDATA, "rcdata");
     query("first", RT_RCDATA, "rcdata");
     query("First", RT_RCDATA, "rcdata");
@@ -62,6 +62,6 @@ int __cdecl tmain(void)
     query("NONE", RT_RCDATA, "rcdata");
     query("#2", RT_RCDATA, "rcdata");
     query("FIRST", "XYZ", "xyz");
-    out("TK70 end\r\n");
+    out("TK74 end\r\n");
     return 0;
 }

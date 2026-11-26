@@ -1,4 +1,4 @@
-; tk69s.asm - TK69's INT 21h AH=36h through DOS3Call (KERNEL.102):
+; tk73s.asm - TK73's INT 21h AH=36h through DOS3Call (KERNEL.102):
 ; void __cdecl __far free36(u8 drive, u16 __far *out) stores AX, BX, CX,
 ; DX and the carry (0 or FFFFh) at out[0..4]. BX and CX are EEEEh before
 ; the call.

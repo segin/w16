@@ -406,7 +406,7 @@
 #              no FAIL against 3.1's table; parts k286 (w16's KRNL286),
 #              k386 (w16's KRNL386), userk (w16's KRNL286 and USER)
 #   nametable  FindResource by the names of a name table (resource type
-#              15): TK70 as the shell (tests/apps/tk70.c), its log on
+#              15): TK74 as the shell (tests/apps/tk74.c), its log on
 #              w16's KRNL286 (part k286) and KRNL386 (k386) the same as
 #              on Microsoft's KRNL386
 #   dlgfocus   the focus after CreateDialog of a dialog not shown or shown
@@ -3712,7 +3712,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         # a probe as the shell on 3.1 and with w16's KERNEL or USER: the
         # logs (TK.LOG) must be equal
         r=ok
-        if [ "$c" = nametable ]; then pr=TK70 p=${part:-k286}; else pr=US37 p=${part:-user}; fi
+        if [ "$c" = nametable ]; then pr=TK74 p=${part:-k286}; else pr=US37 p=${part:-user}; fi
         # pbrun NAME [dropin.sh options]: the probe's TK.LOG in NAME.log
         pbrun() {
             _pn=$1; shift
@@ -6135,7 +6135,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   bigmem: 128 and 256 MB used and written in Standard and 386 Enhanced mode (w16's DOSX, WIN386, KRNL386, under w16's and Microsoft's WSWAP); LargeMemory=0 as Windows 3.1 itself: all of it, 0500h's largest block at most 64 MB in Standard mode"
         else echo "FAIL bigmem: $pfirst ($out)"; fi ;;
     nametable)
-        if [ $pbad = 0 ]; then echo "ok   nametable: TK70's FindResource through a name table as on 3.1 (w16's KRNL286, KRNL386)"
+        if [ $pbad = 0 ]; then echo "ok   nametable: TK74's FindResource through a name table as on 3.1 (w16's KRNL286, KRNL386)"
         else echo "FAIL nametable: $pfirst ($out)"; fi ;;
     installers)
         if [ $pbad = 0 ]; then echo "ok   installers: each installer at hand installed the same files on w16's tree as on 3.1 (those missing skipped)"

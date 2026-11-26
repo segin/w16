@@ -1,17 +1,17 @@
-/* tk70.rc - TK70.EXE's resources (tests/apps/tk70.c): three RCDATA by
+/* tk74.rc - TK74.EXE's resources (tests/apps/tk74.c): three RCDATA by
    number, one by name, a dialog, and the name table (resource type 15)
-   that tests/apps/tk70nt.py makes */
+   that tests/apps/tk74nt.py makes */
 #include <windows.h>
 
 1 RCDATA { "one\0" }
 2 RCDATA { "two\0" }
 3 RCDATA { "three\0" }
 REAL RCDATA { "real\0" }
-1 15 "tk70nt.bin"
+1 15 "tk74nt.bin"
 
 1 DIALOG 10, 10, 120, 40
 STYLE WS_POPUP | WS_CAPTION
-CAPTION "TK70"
+CAPTION "TK74"
 BEGIN
     DEFPUSHBUTTON "OK", IDOK, 40, 20, 40, 14
 END

@@ -334,14 +334,14 @@ void rsrc_free(module FAR *m)
    in it: the Entertainment Pack setups' dialogs). Its entries: a length
    word (the whole entry), the resource's integer type, its id (8000h
    set for an integer id), a NUL-terminated type name, the NUL-terminated
-   resource name; a length of 0 ends it. Observed on 3.1 (TK70): a name
+   resource name; a length of 0 ends it. Observed on 3.1 (TK74): a name
    asked for with an integer type is looked up there first, before the
    module's named resources ("REAL" in both found the table's); names
    match whatever their case on either side; the entry's type must be
    the type asked for; its type name does not matter; the id is taken as
    it stands, so one without 8000h finds nothing, nor does one the
    module does not have. Returns the integer id (8000h | n), or 0.
-   UNVERIFIED: a named type (TK70 had no named type to find). */
+   UNVERIFIED: a named type (TK74 had no named type to find). */
 static u16 nametable_id(module FAR *m, const char FAR *name, u16 type)
 {
     u16 t, r, sel, len, pos = 0, id = 0;
