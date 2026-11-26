@@ -466,9 +466,15 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
            then shown with SWP_NOACTIVATE as Microsoft Setup's are, has
            the focus and is active; w16 left the focus where it was, and
            Return never reached Setup's dialogs) */
+        /* (a modal one keeps w16's way, the focus given when it is
+           shown: giving it here too left Program Manager's Run box's
+           focus on Browse... after Microsoft's COMMDLG Open box, where
+           3.1 has it in the command line, boot-test case runbrowse.
+           UNVERIFIED how 3.1 tells the two apart) */
         if (focus) {
             SetWindowWord(h, DW_FOCUS, (WORD)focus);
-            set_dlg_focus(h, focus);
+            if (!modal || (hwndFocus && IsChild(h, hwndFocus)))
+                set_dlg_focus(h, focus);
         }
     }
     if (!valid_wnd(h))
