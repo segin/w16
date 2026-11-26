@@ -454,14 +454,26 @@ HWND create_dialog(HINSTANCE hinst, const BYTE __far *t, HWND owner, DLGPROC pro
        3.1: a dialog of its own class made with a NULL procedure gets no
        WM_INITDIALOG, and the first tab stop has the focus once it is
        shown; w16 sent it to the class's procedure) */
-    if (proc && send_message(h, WM_INITDIALOG, (WPARAM)focus, param) && valid_wnd(h)) {
+    /* a BOOL: AX alone (a dialog procedure leaves DX as it happens to be) */
+    if (proc && LOWORD(send_message(h, WM_INITDIALOG, (WPARAM)focus, param)) && valid_wnd(h)) {
         /* TRUE: the focus goes to the first tab stop even where the
            procedure set it elsewhere meanwhile (3.1: Program Manager's
            Exit dialog sets it to Cancel and answers TRUE, and OK has
            it) */
+        /* also when the focus is not in the dialog yet: the first tab
+           stop gets it, and with it the dialog becomes the active
+           window, shown or not (US37 on 3.1: a dialog made hidden, or
+           then shown with SWP_NOACTIVATE as Microsoft Setup's are, has
+           the focus and is active; w16 left the focus where it was, and
+           Return never reached Setup's dialogs) */
+        /* (a modal one keeps w16's way, the focus given when it is
+           shown: giving it here too left Program Manager's Run box's
+           focus on Browse... after Microsoft's COMMDLG Open box, where
+           3.1 has it in the command line, boot-test case runbrowse.
+           UNVERIFIED how 3.1 tells the two apart) */
         if (focus) {
             SetWindowWord(h, DW_FOCUS, (WORD)focus);
-            if (hwndFocus && IsChild(h, hwndFocus))
+            if (!modal || (hwndFocus && IsChild(h, hwndFocus)))
                 set_dlg_focus(h, focus);
         }
     }
@@ -845,6 +857,12 @@ BOOL WINAPI IsDialogMessage(HWND dlg, MSG __far *m)
         case VK_RETURN: {
             DWORD def = send_message(dlg, DM_GETDEFID, 0, 0);
             UINT id = HIWORD(def) == DC_HASDEFID ? LOWORD(def) : IDOK;
+            /* a push button with the focus is the one pressed, whatever
+               the default (US37 on 3.1: Return with the focus on the
+               first of two buttons, the second the DEFPUSHBUTTON, gave
+               the first's id; w16 gave the default's) */
+            if (code & (DLGC_DEFPUSHBUTTON | DLGC_UNDEFPUSHBUTTON))
+                id = GetWindowWord(m->hwnd, GWW_ID);
             c = GetDlgItem(dlg, id);
             if (!(code & DLGC_WANTALLKEYS)) {
                 if (!c || IsWindowEnabled(c))

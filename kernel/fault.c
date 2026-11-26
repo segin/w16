@@ -525,3 +525,80 @@ void __cdecl dos_exit_note(u16 FAR *sp)
     kputs("\r\n");
     trace_print();
 }
+
+/* [w16] int21log=1 (kentry.asm i21_logcall): one debuglog line per INT 21h
+   call that goes on to DOS: the calling task's module, CS:IP, the
+   registers before (AX BX CX DX SI DI DS ES) and after (AX BX CX DX, C
+   for the carry), and the path of the calls that take one. A debugging
+   aid: what a program asks of DOS. */
+extern u16 __cdecl i21_log;
+u16 KAPI_ES IsBadReadPtr(void FAR *p, u16 n);
+void dos_psp_note(u16 *real, u16 *task);         /* task.c */
+void dos_psp_restore(u16 seg);
+
+static void i21_hex(char *b, u16 *n, u16 v)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    u16 i;
+    for (i = 0; i < 4; i++)
+        b[(*n)++] = hex[(v >> (12 - 4 * i)) & 15];
+}
+
+void __cdecl __far i21_note(u16 FAR *in, u16 FAR *out)
+{
+    static const u8 path_calls[] = { 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x41,
+                                     0x43, 0x4B, 0x4E, 0x56, 0x5A, 0x5B,
+                                     0x6C };
+    char b[200];
+    u16 n = 0, i, k, real, task;
+    u16 ah = in[0] >> 8;
+    const char FAR *s = 0;
+    module FAR *m;
+    if (!i21_log)
+        return;
+    /* in: AX BX CX DX SI DI DS ES, then the saved BP and the caller's
+       IRET frame (IP CS FLAGS); out: AX BX CX DX SI DI DS ES FLAGS */
+    m = cur_task ? module_of(*(u16 FAR *)MK_FP(cur_task, 0x1E)) : 0;
+    for (i = 0; m && m->name[i] && i < 8; i++)
+        b[n++] = m->name[i];
+    b[n++] = ' ';
+    i21_hex(b, &n, in[10]);
+    b[n++] = ':';
+    i21_hex(b, &n, in[9]);
+    for (k = 0; k < 8; k++) {
+        b[n++] = ' ';
+        i21_hex(b, &n, in[k]);
+    }
+    b[n++] = ' ';
+    b[n++] = '>';
+    for (k = 0; k < 4; k++) {
+        b[n++] = ' ';
+        i21_hex(b, &n, out[k]);
+    }
+    b[n++] = (out[8] & 1) ? 'C' : ' ';
+    dos_psp_note(&real, &task);
+    {
+        b[n++] = ' ';
+        b[n++] = 'P';
+        i21_hex(b, &n, real);
+        if (real != task) {
+            b[n++] = '!';
+            i21_hex(b, &n, task);
+        }
+    }
+    for (i = 0; i < sizeof path_calls; i++)
+        if (ah == path_calls[i])
+            s = (const char FAR *)MK_FP(in[6], ah == 0x6C ? in[4] : in[3]);
+    if (s && !IsBadReadPtr((void FAR *)s, 1)) {
+        b[n++] = ' ';
+        b[n++] = '"';
+        for (i = 0; i < 80 && !IsBadReadPtr((void FAR *)(s + i), 1) && s[i]; i++)
+            b[n++] = s[i];
+        b[n++] = '"';
+    }
+    b[n++] = '\r';
+    b[n++] = '\n';
+    b[n] = 0;
+    kdbg_file(b);
+    dos_psp_restore(real);
+}

@@ -43,7 +43,7 @@ TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8 DX9
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63 TK68 TK68W TK69 TK69A TK70
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63 TK68 TK68W TK73 TK74 TK69 TK69A TK70
 # TK65's import DLLs (TK65IMP below)
 TK65I   := TK65I1.DLL TK65I2.DLL TK65I3.DLL TK65I4.DLL TK65I5.DLL TK65I6.DLL TK65I7.DLL TK65I8.DLL TK65I9.DLL
 # DLLs and files TK5 uses
@@ -316,6 +316,28 @@ $(DOS)/TK33.EXE: $(B)/tests/start.o $(B)/tests/tk33.o tests/apps/app.lnk tests/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/tk33.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk33.map file { $(B)/tests/start.o $(B)/tests/tk33.o }
+
+# TK73.EXE: what installers' start-up code asks of KERNEL (tk73s.asm)
+$(B)/tests/tk73.o: tests/apps/tk73ref.h tests/apps/tklog.h
+$(DOS)/TK73.EXE: $(B)/tests/start.o $(B)/tests/tk73.o $(B)/tests/tk73s.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk73.map file { $(B)/tests/start.o $(B)/tests/tk73.o $(B)/tests/tk73s.o }
+
+# TK74.EXE: FindResource through a name table (resource type 15; tk74.rc,
+# the table made by tk74nt.py)
+$(B)/tests/tk74.o: tests/apps/tk74ref.h tests/apps/tklog.h
+$(B)/tests/tk74nt.bin: tests/apps/tk74nt.py
+	@mkdir -p $(@D)
+	python3 -I $< $@
+$(B)/tests/tk74.res: tests/apps/tk74.rc $(B)/tests/tk74nt.bin
+	@mkdir -p $(@D)
+	cd $(B)/tests && $(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=tk74.res $(CURDIR)/tests/apps/tk74.rc
+$(DOS)/TK74.EXE: $(B)/tests/start.o $(B)/tests/tk74.o $(B)/tests/tk74.res tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk74.map option resource=$(B)/tests/tk74.res \
+	    file { $(B)/tests/start.o $(B)/tests/tk74.o }
 
 # TK68W.EXE: stands in for WINOLDAP.MOD for TK68 (long command lines)
 $(DOS)/TK68W.EXE: $(B)/tests/start.o $(B)/tests/tk68w.o tests/apps/app.lnk
@@ -2655,6 +2677,14 @@ $(DOS)/US35.EXE: $(B)/tests/start.o $(B)/tests/us35.o $(B)/tests/us29s.o $(B)/te
 	    option map=$(B)/tests/us35.map \
 	    file { $(B)/tests/start.o $(B)/tests/us35.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
 dos: $(DOS)/US35.EXE
+# US37: the focus after CreateDialog of a dialog shown without activation;
+# DM_GETDEFID (tests/apps/us37.c)
+$(B)/tests/us37.o: tests/apps/us37ref.h tests/apps/tklog.h
+$(DOS)/US37.EXE: $(B)/tests/start.o $(B)/tests/us37.o $(B)/tests/us29s.o tests/apps/app.lnk tests/apps/us37.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us37.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us37.map file { $(B)/tests/start.o $(B)/tests/us37.o $(B)/tests/us29s.o }
+dos: $(DOS)/US37.EXE
 # US36: text past 32767 characters; counts and positions of 32768 or more (tests/apps/us36.c)
 $(B)/tests/us36.o: tests/apps/us36ref.h tests/apps/tklog.h
 $(DOS)/US36.EXE: $(B)/tests/start.o $(B)/tests/us36.o tests/apps/app.lnk
@@ -2954,7 +2984,17 @@ $(B)/shelldll/%.o: shell/shelldll/%.c shell/shelldll/shell.h
 $(B)/shelldll/shlogo.bmp: tools/mkaboutlogo.py tools/mklogo.py
 	@mkdir -p $(@D)
 	python3 -B tools/mkaboutlogo.py $@
-$(B)/shelldll/shell.res: shell/shelldll/shell.rc shell/shelldll/shell.h $(B)/shelldll/shlogo.bmp
+# the version resource (3.1's numbers, w16's texts; setups compare it
+# before they replace a library)
+$(B)/shelldll/shellver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" "FileDescription=Shell library" \
+	    FileVersion=3.10 InternalName=SHELL \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
+	    OriginalFilename=SHELL.DLL ProductName=w16 ProductVersion=3.10
+$(B)/shelldll/shell.res: shell/shelldll/shell.rc shell/shelldll/shell.h $(B)/shelldll/shlogo.bmp \
+                         $(B)/shelldll/shellver.bin
 	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/shelldll -i=$(B)/shelldll \
 	    -fo=$@ $<
 $(DOS)/SHELL.DLL: $(SHDLL_O) $(B)/shelldll/shell.res shell/shelldll/shell.lnk tools/nenoname.py
@@ -3820,8 +3860,22 @@ $(B)/olesvr/%.o: ole/olesvr/%.asm
 $(B)/olesvr/%.o: ole/olesvr/%.c ole/olesvr/olesvr.h
 	@mkdir -p $(@D)
 	$(WCC) $(OSVCFLAGS) -fo=$@ $<
-$(DOS)/OLESVR.DLL: $(OSVOBJS) ole/olesvr/olesvr.lnk tools/nemark.py
+# the version resource (3.1's numbers, 1.10.0.0 as its OLECLI's, w16's
+# texts; setups compare it before they replace a library)
+$(B)/olesvr/olesvrver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 1.10.0.0 --product 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" \
+	    "FileDescription=Object Linking and Embedding Server Library" \
+	    FileVersion=1.10.000 InternalName=OLESVR \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
+	    OriginalFilename=OLESVR.DLL ProductName=w16 ProductVersion=3.10
+$(B)/olesvr/olesvr.res: ole/olesvr/olesvr.rc $(B)/olesvr/olesvrver.bin
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=$(B)/olesvr -fo=$@ $<
+$(DOS)/OLESVR.DLL: $(OSVOBJS) $(B)/olesvr/olesvr.res ole/olesvr/olesvr.lnk tools/nemark.py
 	@mkdir -p $(@D)
 	$(WLINK) @ole/olesvr/olesvr.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/olesvr/olesvr.map file { $(OSVOBJS) }
+	    option map=$(B)/olesvr/olesvr.map option resource=$(B)/olesvr/olesvr.res \
+	    file { $(OSVOBJS) }
 	python3 tools/nemark.py $@ 3.10

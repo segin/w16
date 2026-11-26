@@ -319,6 +319,12 @@ u16 winboot(void)
         GetPrivateProfileString("w16", "debuglog", "", dbg, sizeof dbg, sysini);
         kdbg_init(dbg);
     }
+    {
+        /* [w16] int21log=1: every INT 21h call to DOS into the debuglog
+           (fault.c i21_note) */
+        extern u16 __cdecl i21_log;
+        i21_log = GetPrivateProfileInt("w16", "int21log", 0, sysini);
+    }
     if (take_switch_b())
         diag_init();
     booting = 1;

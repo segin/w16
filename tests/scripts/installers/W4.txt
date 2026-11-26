@@ -1,0 +1,22 @@
+; Microsoft Entertainment Pack 4 (tests/installers.sh): Microsoft
+; Setup (_MSTEST, MS*STF.DLL): its dialogs are made with CreateDialog and
+; shown without activation, Return must reach them (Continue, then
+; Continue in Get Destination Path); the files (KWAJ-compressed) are
+; expanded, Disk 2 read from ..\DISK2, COMMDLG.DLL left alone (its
+; version is 3.1's), and Setup ends with "Setup Succeeded!"
+; dest WEP
+; expect WEP/CHESS.EXE WEP/CHIPS.EXE WEP/MAXWELL.EXE
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\INST\W4\DISK1\SETUP.EXE
+key Return
+settle 120 5
+shot welcome
+key Return
+settle 60 5
+shot path
+key Return
+settle 400 12
+shot done

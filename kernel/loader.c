@@ -8,8 +8,8 @@
  * mode agree) with tests/apps/tk5.c and its DLLs; ARCHITECTURE.md 9.2
  * lists the findings. The module table (hModule) is built by mdb.c.
  * Starting programs (LoadModule, WinExec; tests/apps/tk15.c) makes tasks
- * through task.c. Not yet: demand loading and discarding, self-loading
- * modules.
+ * through task.c. Self-loading programs: boot_app. Not yet: demand
+ * loading and discarding.
  *
  * NE format source: see include/w16/ne.h.
  */
@@ -895,6 +895,180 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
     return m;
 }
 
+/* ---- self-loading programs ----
+   A program whose header has flag 0800h loads its own segments (Windows
+   3.1 SDK, Programmer's Reference Vol. 1 ch. 24, "Self-Loading Windows
+   Applications"; Pietrek, Windows Internals ch. 3, BootApplication and
+   LoadApplSegment): KERNEL loads segment 1 as usual, with its fixups;
+   segment 1 begins with the loader data table: "A0" at 0, the program's
+   BootApp at 4, LoadAppSeg at 8 and ExitProc at 18h, and KERNEL fills in
+   MyAlloc at 10h, EntryAddrProc at 14h and SetOwner at 24h before it
+   calls BootApp(hBlock, hFile) (hBlock: the module table, hFile: a DOS
+   handle of the program's file). BootApp allocates the segments with
+   MyAlloc, stores their handles in the module table's segment entries
+   (offset 8 of each) and loads the PRELOAD ones with LoadAppSeg(hBlock,
+   hFile, segment) (it returns the selector), which sets bits 1 and 2 of
+   the entry's flags (allocated, loaded). Pietrek: 3.1 never calls
+   ExitProc. w16 discards nothing and loads on no fault, so it calls
+   LoadAppSeg itself after BootApp for every segment not loaded yet.
+   UNVERIFIED (no 3.1 probe yet): the selector type MyAlloc gives (w16:
+   data; code segments become code once all are loaded, as w16's own
+   loading does) and the fourth table pointer Pietrek mentions. */
+#define SL_MAX 64
+static module FAR *sl_mod;              /* the module BootApp is loading */
+static u16 sl_hnd[SL_MAX], sl_sel[SL_MAX], sl_n;
+
+/* the segment handles the program stored in the module table into seg[] */
+static void sl_sync(module FAR *m)
+{
+    u16 i, k;
+    for (i = 0; i < m->seg_count; i++) {
+        u16 v = MOD_SEGHND(m, i);
+        if (!v || v == m->seg[i].hnd)
+            continue;
+        m->seg[i].hnd = m->seg[i].sel = v;
+        for (k = 0; k < sl_n; k++)
+            if (sl_hnd[k] == v || sl_sel[k] == v) {
+                m->seg[i].hnd = sl_hnd[k];
+                m->seg[i].sel = sl_sel[k];
+            }
+    }
+}
+
+/* with [w16] int21log=1: the loader-table calls (debuglog) */
+static void sl_trace(const char *what, u16 a, u16 b, u16 c, u16 d, u16 e)
+{
+    extern u16 __cdecl i21_log;
+    static const char hx[] = "0123456789ABCDEF";
+    char t[40];
+    u16 n = 0, k, j, v;
+    if (!i21_log)
+        return;
+    for (k = 0; k < 5; k++) {
+        v = k == 0 ? a : k == 1 ? b : k == 2 ? c : k == 3 ? d : e;
+        for (j = 0; j < 4; j++)
+            t[n++] = hx[(v >> (12 - 4 * j)) & 15];
+        t[n++] = ' ';
+    }
+    t[n++] = '\r';
+    t[n++] = '\n';
+    t[n] = 0;
+    kdbg_file(what);
+    kdbg_file(t);
+}
+
+/* MyAlloc (table 10h): memory for a segment of wSize << wElem bytes,
+   the handle in the low word and the selector in the high word; for 0
+   bytes only a handle (a discarded block): 0 in the low word and the
+   handle in the high word (SDK). WinPlay3's installer asks for 0 bytes
+   and gives the segment its memory with GlobalReAlloc in LoadAppSeg. */
+static u32 KAPI sl_myalloc(u16 flags, u16 size, u16 elem)
+{
+    u32 n = elem < 16 ? (u32)size << elem : 0;
+    u16 h, sel;
+    if (n > 0x10000UL)
+        n = 0x10000UL;
+    h = galloc((flags & NESEG_MOVABLE) || !n ? GMEM_MOVEABLE : GMEM_FIXED, n,
+               sl_mod ? sl_mod->ne_sel : 0, &sel);
+    if (!h)
+        return 0;
+    if (!n) {
+        sl_trace("MyAlloc flags size elem hnd (handle only): ", flags, size, elem, h, 0);
+        return (u32)h << 16;
+    }
+    if (sl_n < SL_MAX) {
+        sl_hnd[sl_n] = h;
+        sl_sel[sl_n++] = sel;
+    }
+    sl_trace("MyAlloc flags size elem hnd sel: ", flags, size, elem, h, sel);
+    return ((u32)sel << 16) | h;
+}
+
+/* EntryAddrProc (table 14h): the far address of entry wEntryNo */
+static u32 KAPI sl_entryaddr(u16 hblock, u16 entry)
+{
+    module FAR *m = module_of(hblock);
+    u16 sel, off;
+    int is_const;
+    if (!m)
+        return 0;
+    sl_sync(m);
+    if (!module_entry(m, entry, &sel, &off, &is_const) || is_const)
+        sel = off = 0;
+    sl_trace("EntryAddrProc block entry sel off: ", hblock, entry, sel, off, 0);
+    return ((u32)sel << 16) | off;
+}
+
+/* SetOwner (table 24h) */
+static void KAPI sl_setowner(u16 h, u16 owner)
+{
+    sl_trace("SetOwner h owner: ", h, owner, 0, 0, 0);
+    FarSetOwner(h, owner);
+}
+
+/* with [w16] int21log=1: each segment after BootApp (debuglog) */
+static void sl_note(module FAR *m, u16 i, u16 ret)
+{
+    extern u16 __cdecl i21_log;
+    static const char hx[] = "0123456789ABCDEF";
+    char b[48];
+    u16 n = 0, k, j, v;
+    if (!i21_log)
+        return;
+    for (k = 0; k < 5; k++) {
+        v = k == 0 ? i + 1 : k == 1 ? MOD_SEG(m, i)->flags : k == 2 ? MOD_SEGHND(m, i) :
+            k == 3 ? m->seg[i].sel : ret;
+        for (j = 0; j < 4; j++)
+            b[n++] = hx[(v >> (12 - 4 * j)) & 15];
+        b[n++] = ' ';
+    }
+    b[n++] = '\r';
+    b[n++] = '\n';
+    b[n] = 0;
+    kdbg_file("selfload seg flags hnd sel ret: ");
+    kdbg_file(b);
+}
+
+static int boot_app(module FAR *m)
+{
+    u8 FAR *t = MK_FP(m->seg[0].sel, 0);
+    u16 fh, err, i, hb = m->ne_sel;
+    u32 boot, load;
+    module FAR *outer = sl_mod;
+    int ok = 1;
+
+    if (gsize_of_sel(m->seg[0].sel) < 0x28 || t[0] != 'A' || t[1] != '0')
+        return 0;
+    *(u32 FAR *)(t + 0x10) = (u32)(void __far *)sl_myalloc;
+    *(u32 FAR *)(t + 0x14) = (u32)(void __far *)sl_entryaddr;
+    *(u32 FAR *)(t + 0x24) = (u32)(void __far *)sl_setowner;
+    boot = *(u32 FAR *)(t + 4);
+    load = *(u32 FAR *)(t + 8);
+    if (!(MOD_SEG(m, 0)->flags & NESEG_DATA))
+        gset_code(m->seg[0].sel);
+    if (!f_open(m->path, &fh, &err))
+        return 0;
+    sl_mod = m;
+    pascal_call3((u16)(boot >> 16), (u16)boot, hb, 2, hb, fh, 0);
+    sl_sync(m);
+    for (i = 1; ok && i < m->seg_count; i++) {
+        u16 sel = 0;
+        if (!(MOD_SEG(m, i)->flags & NESEG_LOADED) || !m->seg[i].sel) {
+            sel = (u16)pascal_call3((u16)(load >> 16), (u16)load, hb, 3,
+                                    hb, fh, i + 1);
+            sl_sync(m);
+            if (!m->seg[i].sel && sel)
+                m->seg[i].hnd = m->seg[i].sel = sel;
+        }
+        sl_note(m, i, sel);
+        if (!m->seg[i].sel)
+            ok = 0;
+    }
+    f_close(fh);
+    sl_mod = outer;
+    return ok;
+}
+
 static module FAR *load_body(const char FAR *name, const char *ext, int program,
                              u16 *err)
 {
@@ -955,10 +1129,6 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         defer_sel = dsel;
     }
     *err = LE_BADFORMAT;
-    if (h.flags & NEF_SELFLOAD) {
-        f_close(fh);
-        return load_fail(NULL, path, "self-loading modules are not supported yet");
-    }
     /* the tables in their order, inside what is read below: a file whose
        offsets wrap past 64K or run backwards had the table copies read
        past the block (KERNEL audit, H9); it is a bad format instead
@@ -1081,6 +1251,20 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
             if (size < flen)
                 size = flen;
         }
+        if ((h.flags & NEF_SELFLOAD) && i) {
+            /* BootApp allocates and loads it (boot_app); the automatic
+               data segment's minimum allocation includes the heap and
+               the stack, as below */
+            m->seg[i].hnd = m->seg[i].sel = 0;
+            MOD_SEGHND(m, i) = 0;
+            s->flags &= ~(NESEG_DPL | NESEG_ALLOCED | NESEG_LOADED);
+            if (i + 1 == h.auto_data) {
+                m->dg_min = s->min_alloc;
+                if (size < 0x10000UL)
+                    s->min_alloc = (u16)size;
+            }
+            continue;
+        }
         /* observed (KRNL286, tests/apps/tk11.c): a program's fixed
            segments are loaded moveable (even handles, hInstance = DS &
            ~1). UNVERIFIED: a DLL's fixed segments stay fixed. */
@@ -1142,7 +1326,7 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     *err = LE_BADFORMAT;
     if (!f_open(path, &fh, err))
         return load_fail(m, path, "cannot reopen");
-    for (i = 0; i < h.seg_count; i++) {
+    for (i = 0; i < ((h.flags & NEF_SELFLOAD) ? 1 : h.seg_count); i++) {
         const ne_segment FAR *s = MOD_SEG(m, i);
         if ((s->flags & NESEG_RELOCS) && s->sector) {
             u32 flen = s->file_len ? s->file_len : 0x10000UL;
@@ -1156,12 +1340,16 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     f_close(fh);
     GlobalFree(m->ft_sel);
     m->ft_sel = 0;
+    if ((h.flags & NEF_SELFLOAD) && !boot_app(m)) {
+        *err = LE_BADFORMAT;
+        return load_fail(m, path, "the program's BootApp failed");
+    }
     if (!(h.flags & NEF_LIBRARY) && !snapshot(m)) {
         *err = LE_NOMEM;
         return load_fail(m, path, "out of memory");
     }
     patch_prologues(m);
-    for (i = 0; i < h.seg_count; i++)
+    for (i = (h.flags & NEF_SELFLOAD) ? 1 : 0; i < h.seg_count; i++)
         if (!(MOD_SEG(m, i)->flags & NESEG_DATA))
             gset_code(m->seg[i].sel);
     th_loadsegs(m);                     /* toolhelp.c: 50h each */
@@ -1720,6 +1908,14 @@ u16 KAPI WinExec(const char FAR *cmd, u16 show)                /* KERNEL.166 */
     while (cmd[n])
         if (++n > 0xFF)
             return 0;
+    {
+        extern u16 __cdecl i21_log;     /* [w16] int21log: the command too */
+        if (i21_log) {
+            kdbg_file("WinExec \"");
+            kdbg_file(cmd);
+            kdbg_file("\"\r\n");
+        }
+    }
     n = 0;
     while (cmd[i] == ' ')
         i++;
@@ -1771,8 +1967,8 @@ u16 KAPI FreeModule(u16 h)                                     /* KERNEL.46 */
 }
 
 /* Observed: "C:\WINDOWS" and "C:\WINDOWS\SYSTEM" (no trailing backslash).
-   UNVERIFIED: the result when the buffer is too small (the documented
-   behaviour, the size needed, is used). */
+   A buffer too small for the path and its NUL (0 up to the length):
+   the length + 1 and the buffer untouched (TK73, 386 Enhanced mode). */
 static u16 copy_dir(const char *dir, char FAR *buf, u16 n)
 {
     u16 len = kstrlen(dir), i;

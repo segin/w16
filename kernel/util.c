@@ -100,8 +100,12 @@ void kdbg_file(const char FAR *s)
 {
     regs16 r;
     u16 h;
+    extern u16 __cdecl i21_in;          /* its own INT 21h calls are not
+                                           [w16] int21log's (kentry.asm) */
+    u16 was_in = i21_in;
     if (!dbg_path[0])
         return;
+    i21_in = 1;
     kmemset(&r, 0, sizeof r);           /* (KERNEL audit, L35) */
     kernel_psp(1);
     r.ax = 0x3D01;                      /* open for writing */
@@ -116,6 +120,7 @@ void kdbg_file(const char FAR *s)
         r.es = 0;
         if (dos21(&r)) {
             kernel_psp(0);
+            i21_in = was_in;
             return;
         }
     }
@@ -137,6 +142,7 @@ void kdbg_file(const char FAR *s)
     r.ds = r.es = 0;
     dos21(&r);
     kernel_psp(0);
+    i21_in = was_in;
 }
 
 void kdbg(const char FAR *s)

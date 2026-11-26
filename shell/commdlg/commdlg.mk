@@ -24,10 +24,21 @@ $(B)/commdlg/%.o: shell/commdlg/%.c $(CDHDRS)
 $(B)/commdlg/%.o: shell/commdlg/%.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -o $@ $<
-$(B)/commdlg/commdlg.res: shell/commdlg/commdlg.rc $(CDHDRS) $(CDART)
+# the version resource (3.1's numbers, w16's texts): setups compare it
+# before they replace the library (Entertainment Pack 4's took w16's,
+# which had none, for an older one and tried to write over it while it
+# was in use: "Could not write to the file ... shared application file")
+$(B)/commdlg/cdver.bin: tools/mkver.py
+	@mkdir -p $(@D)
+	python3 tools/mkver.py $@ --file 3.10.0.103 --type 2 \
+	    "CompanyName=w16 project" "FileDescription=Common dialog library" \
+	    FileVersion=3.10 InternalName=COMMDLG \
+	    "LegalCopyright=Public domain (CC0 1.0), see the w16 repository" \
+	    OriginalFilename=COMMDLG.DLL ProductName=w16 ProductVersion=3.10
+$(B)/commdlg/commdlg.res: shell/commdlg/commdlg.rc $(CDHDRS) $(CDART) $(B)/commdlg/cdver.bin
 	@mkdir -p $(@D)
 	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=shell/commdlg -i=$(B)/commdlg/art \
-	    -fo=$@ $<
+	    -i=$(B)/commdlg -fo=$@ $<
 $(DOS)/COMMDLG.DLL: $(CDOBJS) $(B)/commdlg/commdlg.res shell/commdlg/commdlg.lnk tools/nemark.py
 	@mkdir -p $(@D)
 	$(WLINK) @shell/commdlg/commdlg.lnk name $@ libpath $(WATCOM)/lib286/win \

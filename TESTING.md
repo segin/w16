@@ -153,6 +153,16 @@ PIFs against Microsoft's: file reads, SHELL's block, the switcher's
 record, what the program got; fixtures `tests/scripts/pifread/mkpifs.py`),
 `tests/grabber.sh` (w16's VGACOLOR.2GR against Microsoft's),
 `tests/grabber3cmp.sh` (w16's VGA.3GR against Microsoft's, 386 Enhanced mode),
+`tests/installers.sh OUTDIR [NAME...]` (third-party Windows 3.x
+installers on w16's install tree in 386 Enhanced mode, driven by keys
+from `tests/scripts/installers/NAME.txt`, the files each installs
+compared with the same run on Windows 3.1; the installers are never in
+the repository: put each in its own directory under `$W16_INSTDIR`,
+default `~/Downloads/w16-installers` (WEP1, WEP2, WEP3: each pack's disks
+merged; BW/DISK1; W4/DISK1, W4/DISK2; JOHNNY), missing
+ones are skipped; the boot-test case `installers`, one part per
+installer; ARCHITECTURE.md 9.12; `[w16] int21log=1` logs every INT 21h
+call and the traced imports into the debuglog),
 `tests/lzexpand/lzscen.sh` (w16's LZEXPAND.DLL against Microsoft's, the
 probe's log section by section; the boot-test case `lzexpand` runs it),
 `tests/ver/vscen.sh` (w16's VER.DLL against Microsoft's, the probe's log
