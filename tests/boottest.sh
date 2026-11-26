@@ -177,9 +177,11 @@
 #              VXCU.386, which calls a VMM service w16 lacks: WIN ends with
 #              a message naming the device and the service
 #   msvc       Visual C++ 1.52's DOSXNT, MMD, CVW1 and VMB.386 loaded from
-#              C:\MSVC\BIN (tests/msvcvxd.sh boot cvw; skipped without
+#              C:\MSVC\BIN (tests/msvcvxd.sh boot cvw wx; skipped without
 #              $W16_MSVC_DIR): w16's tree comes up with them as without;
-#              CodeView for Windows comes up as under Windows 3.1
+#              CodeView for Windows comes up as under Windows 3.1; with
+#              WXSRVR.EXE on VMB.386 Program Manager is painted and its
+#              menus open as under 3.1
 #   win386doscad  a DOS program's #GP (VX12 G: the stop box) and Ctrl+Alt+Del
 #              with the MS-DOS Prompt full screen (its screen; Return closes
 #              the box, vx12gc.txt; Escape goes back, dosbox386cad.txt)
@@ -1915,12 +1917,12 @@ runcase() {
         else echo "FAIL win386vxc: $(grep -m1 '^FAIL' "$out/win386vxc.txt" || echo 'no result') ($out/win386vxc.txt)"; fails=$((fails + 1)); fi ;;
     msvc)
         # Visual C++ 1.52's devices (tests/msvcvxd.sh; skip without $W16_MSVC_DIR)
-        "$root/tests/msvcvxd.sh" -o "$out/msvc" boot cvw > "$out/msvc.txt" 2>&1 || true
+        "$root/tests/msvcvxd.sh" -o "$out/msvc" boot cvw wx > "$out/msvc.txt" 2>&1 || true
         if grep -q '^FAIL' "$out/msvc.txt"; then
             echo "FAIL msvc: $(grep -m1 '^FAIL' "$out/msvc.txt") ($out/msvc.txt)"; fails=$((fails + 1))
         elif grep -q '^skip' "$out/msvc.txt"; then echo "ok   msvc: $(grep -m1 '^skip' "$out/msvc.txt")"
-        elif [ "$(grep -c '^ok' "$out/msvc.txt")" = 2 ]; then
-            echo "ok   msvc: w16's tree with Visual C++'s four devices comes up; CodeView for Windows as under 3.1"
+        elif [ "$(grep -c '^ok' "$out/msvc.txt")" = 3 ]; then
+            echo "ok   msvc: w16's tree with Visual C++'s four devices comes up; CodeView, WXSRVR on VMB and Program Manager as under 3.1"
         else echo "FAIL msvc: no result ($out/msvc.txt)"; fails=$((fails + 1)); fi ;;
     vdmad)
         # the Virtual DMA Device: tests/vdmadprobe.sh (SBD.COM's DMA in a

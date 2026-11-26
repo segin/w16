@@ -89,6 +89,7 @@ static void api_shell(struct cregs *r)
 /* devices loaded from SYSTEM.INI whose DDB has a PM API procedure: their
  * own procedure answers (vxd.c), through entries after w16's own */
 static u32 ext_id[PMBP_API_END - PMBP_API], next_ext;
+static u32 ext_seen;                    /* devices whose API has been called (traced once) */
 
 void vxdapi_get(struct cregs *r, u32 *sel, u32 *off)
 {
@@ -164,8 +165,14 @@ void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs)
         /* the loaded device's own API procedure */
         u32 ax = AX(r), bx = BX(r), cx = CX(r), dx = DX(r), si = SI(r), di = DI(r), ds = r->ds, es = r->es;
         vxd_call_api(vxd_pm_api(ext_id[n - NAPIS]), r);
-        /* a call the device refused (carry): traced, as for w16's own APIs */
-        if (r->eflags & EFL_CF)
+        /* a call the device refused (carry): traced, as for w16's own APIs;
+         * each device's first call, and with [w16] vmmtrace=1 every call,
+         * with its caller */
+        if (info->trace == 1 || !(ext_seen & (1u << ((n - NAPIS) & 31)))) {
+            ext_seen |= 1u << ((n - NAPIS) & 31);
+            trace("VxD API device %x from %x:%x: ax=%x bx=%x cx=%x dx=%x si=%x di=%x ds=%x es=%x -> ax=%x cf=%d\n",
+                  ext_id[n - NAPIS], retcs, retip, ax, bx, cx, dx, si, di, ds, es, AX(r), r->eflags & EFL_CF);
+        } else if (r->eflags & EFL_CF)
             trace("VxD API device %x: ax=%x bx=%x cx=%x dx=%x si=%x di=%x ds=%x es=%x -> carry\n",
                   ext_id[n - NAPIS], ax, bx, cx, dx, si, di, ds, es);
         return;

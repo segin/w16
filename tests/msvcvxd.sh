@@ -22,12 +22,20 @@
 #   cvw    CVW.EXE from WIN.INI run= with the four devices on the
 #          reference install under Windows 3.1's WIN386 and w16's: CVW's
 #          screen (its Load dialog over Windows) must be the same.
+#   wx     WXSRVR.EXE (Visual C++'s WX server, which calls VMB.386's API
+#          over and over) from WIN.INI load= with the four devices on the
+#          reference install, then Program Manager's File and Help menus
+#          from the keyboard (tests/scripts/input/msvcwx.txt): the screens
+#          under w16's WIN386 must equal Windows 3.1's, and VMB's API must
+#          have been called (the user's hang: VMB.386's _HeapAllocate, a
+#          service w16 lacked, halted Windows while Program Manager
+#          painted its groups).
 # Visual C++ is not w16's: nothing of it is committed. boot and cvw take
 # the installed C:\MSVC directory from $W16_MSVC_DIR (default
 # ~/Downloads/msvc152/MSVC; boot needs BIN's four .386 files, cvw BIN's
 # CVW.EXE and its DLLs too); without it they say so and pass ("skip").
 #
-#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw)
+#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx)
 set -u
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -40,7 +48,7 @@ while getopts o: opt; do
     esac
 done
 shift $((OPTIND - 1))
-parts=${*:-vxc boot cvw}
+parts=${*:-vxc boot cvw wx}
 [ -n "$out" ] || out=$(mktemp -d)
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
@@ -98,7 +106,7 @@ vxc)
         r="Windows started with a device whose service w16 lacks ($out/vxcu-w16.txt)"
     if [ "$r" = ok ]; then echo "ok   vxc: PM vectors, callbacks, Log_Proc_Call, pages, selector 40h as 3.1's; the missing service named"
     else echo "FAIL vxc: $r"; fails=$((fails + 1)); fi ;;
-boot|cvw)
+boot|cvw|wx)
     set --
     for x in DOSXNT MMD CVW1 VMB; do
         f=$(mfile BIN "$x.386")
@@ -126,14 +134,37 @@ boot|cvw)
         else echo "FAIL boot: $r"; fails=$((fails + 1)); fi
         continue
     fi
-    cvw=$(mfile BIN CVW.EXE)
-    [ -n "$cvw" ] || { echo "skip cvw: no CVW.EXE in $msvc/BIN"; continue; }
-    # CVW and the libraries it loads from its own directory
+    prog=CVW.EXE
+    [ "$part" = wx ] && prog=WXSRVR.EXE
+    [ -n "$(mfile BIN $prog)" ] || { echo "skip $part: no $prog in $msvc/BIN"; continue; }
+    # the program and the libraries it loads from its own directory
     for f in "$msvc"/BIN/*; do
         case $(basename "$f" | tr a-z A-Z) in
         *.EXE|*.DLL) set -- "$@" -f "$f=MSVC/BIN/$(basename "$f" | tr a-z A-Z)" ;;
         esac
     done
+    if [ "$part" = wx ]; then
+        set -- -r -3 -p 386 -c "WIN /3 /B" -i 'WIN.INI:windows:load=C:\MSVC\BIN\WXSRVR.EXE' "$@"
+        scr=$root/tests/scripts/input/msvcwx.txt
+        rm -rf "$out/wx-ref" "$out/wx-w16" "$out/wx-w16.com1"
+        DROPIN_MACHINE=svga_s3 timeout 600 "$root/tests/inputrun.sh" -s -b 120 -t 300 "$scr" "$out/wx-ref" "$@" \
+            > "$out/wx-ref.txt" 2>&1
+        DROPIN_MACHINE=svga_s3 DROPIN_CONF="[serial]
+serial1=file file:$out/wx-w16.com1" timeout 600 "$root/tests/inputrun.sh" -s -b 120 -t 300 -E "$out/wx-ref" "$scr" "$out/wx-w16" \
+            "$@" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE" > "$out/wx-w16.txt" 2>&1
+        { tr -d '\r' < "$out/wx-w16.com1"; } 2>/dev/null > "$out/wx-w16.log"
+        r=ok
+        for n in 01-boot 02-file 03-help; do
+            d=$(pixdiff "$out/wx-ref/$n.png" "$out/wx-w16/$n.png")
+            [ "$d" = 0 ] || { r="$n differs from Windows 3.1's: $d pixels ($out/wx-w16/$n.png)"; break; }
+        done
+        [ "$r" != ok ] || grep -q 'VxD API device 1021 ' "$out/wx-w16.log" || r="VMB's API was not called ($out/wx-w16.log)"
+        [ "$r" != ok ] || ! grep -q 'not in w16\|panic\|fatal' "$out/wx-w16.log" ||
+            r="$(grep -m1 'not in w16\|panic\|fatal' "$out/wx-w16.log")"
+        if [ "$r" = ok ]; then echo "ok   wx: Program Manager with WXSRVR on VMB.386 painted and answering as under Windows 3.1"
+        else echo "FAIL wx: $r"; fails=$((fails + 1)); fi
+        continue
+    fi
     set -- -r -3 -c "WIN /3" -t 90 -i 'WIN.INI:windows:run=C:\MSVC\BIN\CVW.EXE' "$@"
     DROPIN_FIXED=1 run cvw-ref "$@" -t 60 -s "$out/cvw-ref.png"
     run cvw-w16 "$@" -s "$out/cvw-w16.png" -e "$out/cvw-ref.png" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE"

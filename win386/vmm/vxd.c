@@ -1395,10 +1395,54 @@ static struct pgh *nul_handle(void)
     return &nul_pgh;
 }
 
+/* the heap (the DDK's _HeapAllocate, _HeapReAllocate, _HeapFree,
+ * _HeapGetSize): the VMM's own blocks (kmalloc, always zeroed), the size
+ * asked kept in the block's header (its third dword). Visual C++ 1.52's
+ * VMB.386 allocates so once Windows runs; w16 stopped there before */
+#define HeapZeroReInit 0x00000002u      /* (HeapZeroInit 1: kmalloc zeroes anyway) */
+#define HeapNoCopy     0x00000004u
+static u32 heap_alloc(u32 n)
+{
+    u32 *p;
+    if (!n || n > 0x01000000u || (p = kmalloc(n)) == NULL) return 0;
+    p[-2] = n;
+    return (u32)p;
+}
+
+static int heap_service(u32 svc, struct svcregs *s)
+{
+    u32 *arg = (u32 *)(s + 1) + 1;
+    switch (svc) {
+    case 0x4F:                          /* _HeapAllocate(nbytes, flags) */
+        s->eax = heap_alloc(arg[0]);
+        return 1;
+    case 0x50: {                        /* _HeapReAllocate(hAddress, nbytes, flags) */
+        u32 old = arg[0], n = arg[1], nu, os;
+        if (!old) { s->eax = 0; return 1; }
+        os = ((u32 *)old)[-2];
+        nu = heap_alloc(n);
+        if (nu && !(arg[2] & HeapNoCopy)) memcpy((void *)nu, (void *)old, os < n ? os : n);
+        if (nu && (arg[2] & HeapZeroReInit)) memset((void *)nu, 0, n);
+        if (nu) kfree((void *)old);
+        s->eax = nu;
+        return 1;
+    }
+    case 0x51:                          /* _HeapFree(hAddress, flags) */
+        if (arg[0]) kfree((void *)arg[0]);
+        s->eax = arg[0] != 0;
+        return 1;
+    case 0x52:                          /* _HeapGetSize(hAddress, flags) */
+        s->eax = arg[0] ? ((u32 *)arg[0])[-2] : 0;
+        return 1;
+    }
+    return 0;
+}
+
 static int page_service(u32 svc, struct svcregs *s)
 {
     u32 *arg = (u32 *)(s + 1) + 1;      /* after the return address */
     struct pgh *h;
+    if (heap_service(svc, s)) return 1;
     switch (svc) {
     case 0x53: {                        /* _PageAllocate(nPages, pType, VM, AlignMask, minPhys, maxPhys, PhysAddr, flags) */
         u32 flags = arg[7], align = 1, maxp = 0, phys = 0, hh;
@@ -1738,4 +1782,7 @@ static void svc_unknown(u32 dev, u32 svc, struct svcregs *s)
               who, svc, dev);
     }
     s->eflags |= EFL_CF;
+    /* the C-convention services (the names with a leading '_') fail with
+     * EAX 0, not carry: a caller must not take what EAX held for a result */
+    if (dev == 1 && *vmm_svc_name(svc) == '_') s->eax = 0;
 }
