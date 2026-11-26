@@ -215,6 +215,11 @@ void fatal(const char *fmt, ...)
     for (;;) hlt();
 }
 
+int vmm_running(void)                   /* the System VM has run */
+{
+    return vm_started;
+}
+
 void panic(const char *fmt, ...)
 {
     trace("VMM panic: ");
@@ -485,6 +490,16 @@ void v86_reflect(struct cregs *r, int vec)
  * (interrupts, nested calls) work as usual. Depth is limited only by the
  * ring-0 stack. */
 static struct cregs *hw_r;              /* the VM's state VPICD delivers into (trap()) */
+
+/* [w16] vmmtrace=1: where the current VM was interrupted, every 5 s
+ * (vm_tick), to see a VM that loops without trapping */
+void vmm_sample(void)
+{
+    static u32 n;
+    if (info->trace != 1 || ++n % 91 || !hw_r) return;
+    trace("\nVMM: VM %d at %x:%x%s fl %x ss:sp %x:%x ax %x\n", cur_vm->id, hw_r->cs, hw_r->eip,
+          (hw_r->eflags & EFL_VM) ? " (V86)" : "", hw_r->eflags, hw_r->ss, hw_r->esp, hw_r->eax);
+}
 
 struct execctx {
     u32 jb[6];
@@ -1269,7 +1284,13 @@ void __cdecl vmm_main(struct w386_info *inf)
     set_desc(gdt + SEL_RMDATA, 0, 0xFFFF, 0x92, 0);
     set_desc(gdt + SEL_LDT, (u32)ldt, ldt_limit, 0x82, 0);
     set_desc(gdt + (SEL_PMBP & ~7), pmbp_lin, info->pmbp_count - 1, 0xFA, 0);
-    set_desc(gdt + (SEL_FLAT3 & ~7), 0, 0xFFFFFFFF, 0xF2, 0x4);
+    /* selector 40h: programs take it for the BIOS data area, segment 40h
+     * (KERNEL's __0040H is another selector; Windows 3.1's WIN386 gives
+     * 40h itself base 400h, limit 2FFh). It was a flat ring-3 selector
+     * here, base 0: Visual C++ 1.52's CodeView (CVW.EXE) writes the BIOS's
+     * screen rows at 40:84h when it takes the display, and so wrote over
+     * the real-mode INT 21h vector; the next DOS call ran garbage */
+    set_desc(gdt + (SEL_BIOSDATA & ~7), 0x400, 0x2FF, 0xF2, 0);
     set_desc(gdt + (SEL_FLAT7B & ~7), 0, 0xFFFFFFFF, 0xF2, 0x4);   /* SHELL's (Windows 3.1: 7Bh) */
     gdtr.limit = sizeof(gdt) - 1;
     gdtr.base = (u32)gdt;

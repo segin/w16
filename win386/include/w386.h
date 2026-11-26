@@ -80,7 +80,7 @@ struct w386_info {
     w_u16 xbuf_size;    /* bytes */
     w_u32 trace;        /* SYSTEM.INI [w16] vmmtrace=1: detailed VMM trace */
     w_u32 vxd_count;    /* VxDs loaded after the VMM (SYSTEM.INI [386Enh]) */
-    w_u32 vxd_list;     /* window offset of their DDBs' linear addresses */
+    w_u32 vxd_list;     /* window offset of their DDBs' linear addresses, then their images' starts */
     w_u32 tail_lin;     /* WIN386's command tail (PSP:80h), linear */
     w_u32 fatal_lin;    /* a W386_FATAL_SIZE buffer of the loader's: the VMM's fatal message */
     w_u16 vmstub_off;   /* ldr_cs:vmstub_off: a new DOS VM's first code (EXECs its program) */

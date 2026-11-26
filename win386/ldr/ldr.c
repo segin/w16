@@ -44,7 +44,7 @@ extern void __far *xms_entry;
 
 static struct w386_info info;
 static char refstk[W386_REFSTK_SIZE + 16]; /* V86 stack for interrupts reflected from PM */
-static unsigned char pmbp[320];
+static unsigned char pmbp[448];      /* PMBP_COUNT (win386/vmm/vmm.h) */
 static char xbuf[16384 + 16];       /* DOS calls from PM copy through this */     /* PM breakpoints: HLT (F4h), privileged at ring 3 */
 static char ownpath[128], sysdir[128], inipath[128], krnlpath[128];
 static unsigned xms_handle;
@@ -593,6 +593,7 @@ static const char *const devkeys[] = {
 static char done_names[2048];       /* the names handled, each NUL ended */
 static unsigned done_len;
 static unsigned long __far *vxd_ddb;     /* the DDBs' linear addresses, in load order */
+static unsigned long __far *vxd_base;    /* each one's image start (linear), for the VMM's messages */
 static unsigned vxd_cap;
 
 static void wait_key(void)
@@ -628,7 +629,7 @@ static int name_done(const char *name)
 static void load_device(const char *name)
 {
     char path[160];
-    unsigned long off = 0, size = 0, ddb;
+    unsigned long off = 0, size = 0, ddb, base = W386_VMM_LIN + img_next;
     unsigned char hdr[4];
     int h, i, ok = 0;
 
@@ -676,10 +677,15 @@ static void load_device(const char *name)
     }
     if (info.vxd_count == vxd_cap) {
         unsigned long __far *nl = _frealloc(vxd_ddb, (vxd_cap ? vxd_cap * 2 : 16) * 4UL);
+        unsigned long __far *nb;
         if (!nl) { device_missing(name); return; }      /* UNVERIFIED */
         vxd_ddb = nl;
+        nb = _frealloc(vxd_base, (vxd_cap ? vxd_cap * 2 : 16) * 4UL);
+        if (!nb) { device_missing(name); return; }
+        vxd_base = nb;
         vxd_cap = vxd_cap ? vxd_cap * 2 : 16;
     }
+    vxd_base[(unsigned)info.vxd_count] = base;
     vxd_ddb[(unsigned)info.vxd_count++] = ddb;
 }
 
@@ -725,14 +731,16 @@ static void load_devices(void)
     }
 }
 
-/* the DDB list into the image after the modules, for the VMM */
+/* the DDB list into the image after the modules, for the VMM, then the
+ * images' starts (the VMM names the device a call came from by them) */
 static int put_vxd_list(void)
 {
     if (!info.vxd_count) return 1;
     info.vxd_list = img_next;
-    if (img_next + info.vxd_count * 4 + 64 * PAGE > info.xms_size) return 0;
+    if (img_next + info.vxd_count * 8 + 64 * PAGE > info.xms_size) return 0;
     if (!xms_move_to(img_next, vxd_ddb, info.vxd_count * 4)) return 0;
-    img_next += (info.vxd_count * 4 + PAGE - 1) & ~(PAGE - 1);
+    if (!xms_move_to(img_next + info.vxd_count * 4, vxd_base, info.vxd_count * 4)) return 0;
+    img_next += (info.vxd_count * 8 + PAGE - 1) & ~(PAGE - 1);
     return 1;
 }
 

@@ -60,7 +60,7 @@ loaded, as in stock 3.1. Loaded, it changes nothing a program sees
 | `idle1689=1` | `0` | KERNEL | A test option: makes the 386 Enhanced mode idle call (INT 2Fh AX=1689h) on every pass of KERNEL's idle loop, as a stress accelerator. 3.1's KRNL286 never makes it. |
 | `userlog=1` | `0` | USER | Writes USER's diagnostics to `C:\USER.LOG`. |
 | `gdilog=1` | `0` | GDI | Writes GDI's diagnostics to `C:\W16GDI.LOG`: unimplemented ordinals, the display driver's Enable, the font table and font mapping, and each SetDIBits, GetDIBits, SetDIBitsToDevice and StretchDIBits call's DIB format (size, bit count, compression, colours used, image size, colour use) and result. |
-| `vmmtrace=1` | `0` | WIN386 | The 386 Enhanced mode VMM's detailed trace, written to COM1. |
+| `vmmtrace=1` | `0` | WIN386 | The 386 Enhanced mode VMM's detailed trace, written to COM1 (with the VxDs' dynamic links and callbacks; a VMM service w16 lacks then fails with carry during initialisation instead of ending Windows with a message, so that one run shows all a device needs). |
 
 ## Example
 

@@ -629,6 +629,7 @@ void vm_tick(void)
         }
     }
     vdd_tick();
+    vmm_sample();
     status_all();
     if (cur_vm->slice) cur_vm->slice--;
     if (!cur_vm->slice && vm_list->next) resched = 1;
