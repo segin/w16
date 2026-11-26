@@ -80,6 +80,37 @@ make w16's MDI creation and activation follow 3.1 (tests: extend TK71's
 mdi lines with a child procedure that calls DefMDIChildProc, and add
 them to wpregs).
 
+#### Found 2026-11-26 (branch staroff-mdi, from dfd340c)
+
+`trace=USER.41,USER.452,USER.111` (CreateWindow, CreateWindowEx,
+SendMessage) with `traceret=1` on the tree: StarView makes its document
+window with `SendMessage(MDI client, WM_MDICREATE (220h), 0, &mcs)`
+(SV312MW:82, the client 1438h), then `SendMessage(client,
+WM_MDIGETACTIVE)` (gets the new child, 1924h) and `SendMessage(child,
+046Eh, 1, 0)` (SV312MW:35), in which it faults. On w16, WM_MDICREATE
+has shown and activated the child (18 46 22 46 47 86 222) and the
+child's controls (W7-W11) do not exist yet. On 3.1 (the tree with
+Microsoft's USER.EXE, `tracestop=110`) the same child gets 81 83 01 05
+03, then 46 24 83 47 05 and WM_SETTEXT twice, and StarView makes its
+controls next; no 18, 22, 86 or 222 in that stretch.
+
+TK71's "mdi" lines (3.1 against w16) for WM_MDICREATE of a child whose
+procedure calls DefWindowProc:
+- style 0: 3.1 `24 81 83 01 05 03 18 09 46 47 46 22`, the child visible
+  and NOT active afterwards; w16 `... 18 46 22 47 46 47 86 222 08 07`,
+  active (w16's mdi_create calls child_activate itself; 3.1 activates
+  only through DefMDIChildProc's WM_CHILDACTIVATE);
+- WS_MAXIMIZE: 3.1 `... 01 05 03 24 46 24 83 47 03 05 18 09 46 85 0D 14
+  47 46 22 46 83 85 0D 14 47`; w16 `... 01 05 03 24 18 46 83 22 47 03 05
+  46 47 86 222`.
+StarView's 3.1 sequence (46 24 83 47 05 without the leading 24 and no
+18) matches neither; its MDICREATESTRUCT (style, size) is the next
+thing to log (dump the structure SV312MW passes: trace args give its
+address, SS-relative), then probe that exact case with TK71 (a child
+procedure that calls DefMDIChildProc, TK75+ for a new probe), and make
+w16's mdi_create follow 3.1: show with 18 09 46 47, WM_CHILDACTIVATE
+after the show, no activation of its own.
+
 ### Bug 1: Setup's Program Manager group
 
 Not reproduced yet. Setup is C:\OFFICE31\SETUP.EXE on the installed
