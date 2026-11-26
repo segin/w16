@@ -159,6 +159,7 @@ BEGIN
     IDS_NOTFOUND,       "No matching files were found."
     IDS_SEARCHBOX,      "Search Results"
     IDS_SEARCHCHANGED,  "The contents of this drive have changed. Do you want to update the Search Results window?"
+    IDS_DRIVECDROM,     "%c: CD-ROM"
     IDS_MOUSECOPY,      "Are you sure you want to copy the selected files or directories to %s?"
     IDS_MOUSEMOVE,      "Are you sure you want to move the selected files or directories to %s?"
     IDS_CONFMOUSE,      "Confirm Mouse Operation"

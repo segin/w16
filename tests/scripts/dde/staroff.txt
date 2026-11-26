@@ -1,0 +1,20 @@
+run PROGMAN.EXE
+connect
+; the groups StarOffice 3.1's Setup asks for (its SETUP.INF [PROGMAN]:
+; group, title, program): a group name with a blank and a dot, and a
+; group "Autostart" that does not exist yet
+exec [CreateGroup(StarOffice 3.1)]
+exec [ShowGroup(StarOffice 3.1,1)]
+exec [AddItem(C:\Office31\swriter3.exe,StarWriter 3.1)]
+exec [AddItem(C:\Office31\scalc3.exe,StarCalc 3.1)]
+exec [AddItem(C:\Office31\sdraw3.exe,StarDraw 3.1)]
+exec [AddItem(C:\Office31\simage3.exe,StarImage 3.1)]
+exec [AddItem(C:\Office31\schart3.exe,StarChart 3.1)]
+exec [AddItem(C:\Office31\soffice3.exe,StarOffice Manager)]
+exec [CreateGroup(Autostart)]
+exec [AddItem(C:\Office31\soffice3.exe,StarOffice Manager)]
+exec [CreateGroup(StarOffice 3.1)]
+exec [AddItem(C:\Office31\setup.exe,StarOffice Setup)]
+request StarOffice 3.1
+request Autostart
+request PROGMAN

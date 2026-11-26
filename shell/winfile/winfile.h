@@ -166,6 +166,7 @@ int WINAPI ShellAbout(HWND, LPCSTR, LPCSTR, HICON);
 #define IDS_CAP360          63
 #define IDS_CAPUNKNOWN      64
 #define IDS_SEARCHCHANGED   65
+#define IDS_DRIVECDROM      66          /* "%c: CD-ROM" */
 
 /* ---- WINFILE.INI ([Settings]; WF1, WF2, WF4) ---- */
 #define INI_FILE            "WINFILE.INI"

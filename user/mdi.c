@@ -14,6 +14,10 @@ LONG def_gettext(PWND w, WORD n, LPSTR buf);     /* win.c: a window's own text *
 void menu_track_bar(HWND h, char key);
 HBRUSH sys_brush(HBRUSH b);
 
+#ifndef MDIS_ALLCHILDSTYLES
+#define MDIS_ALLCHILDSTYLES 0x0001      /* the client's style: children as asked (3.1) */
+#endif
+
 /* MDICLIENT extra bytes (w16's layout) */
 #define MDI_ACTIVE    0
 #define MDI_WINMENU   2
@@ -86,7 +90,15 @@ static void frame_text(HWND client)
         n = lstr_len(buf);
         lstr_cpyn(buf + n, " - [", 5);
         n += 4;
-        GetWindowText(m, buf + n, sizeof buf - n - 2);
+        /* (the child's own text, not WM_GETTEXT: TK75 on 3.1, a child
+           maximised while hidden got none) */
+        {
+            PWND mw = valid_wnd(m);
+            if (mw)
+                def_gettext(mw, sizeof buf - n - 2, buf + n);
+            else
+                buf[n] = 0;
+        }
         n = lstr_len(buf);
         buf[n] = ']';
         buf[n + 1] = 0;
@@ -143,7 +155,7 @@ static void unmax(HWND client, HWND child, BOOL restored)
 {
     PWND w;
     SetWindowWord(client, MDI_MAXED, 0);
-    if ((w = valid_wnd(child)) != 0)
+    if ((w = valid_wnd(child)) != 0 && GetMenu(GetParent(client)))
         w->style |= WS_SYSMENU;
     if (restored)
         child_sys_states(child, FALSE);
@@ -162,7 +174,9 @@ static void child_size(HWND client, HWND h, WPARAM how)
         if (m)
             unmax(client, m, TRUE);
         SetWindowWord(client, MDI_MAXED, (WORD)h);
-        if ((w = valid_wnd(h)) != 0)
+        /* (its system menu goes to the frame's bar: a frame without a
+           menu leaves it WS_SYSMENU, TK75 on 3.1) */
+        if ((w = valid_wnd(h)) != 0 && GetMenu(frame))
             w->style &= ~WS_SYSMENU;
         child_sys_states(h, TRUE);
         bar_add(client, h);
@@ -333,15 +347,18 @@ static void child_activate(HWND client, HWND child)
     if (child && valid_wnd(child)) {
         set_window_pos(child, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         send_message(child, WM_NCACTIVATE, TRUE, 0);
-        send_message(child, WM_MDIACTIVATE, TRUE, MAKELONG(child, old));
-        /* the focus to the child when the frame is active - but not as
-           WM_MDICREATE makes it (3.1: File Manager's directory window,
-           made with the frame active, did not get the focus; its tree
-           had it from the program's own SetFocus. w16 then took it to the
-           child, whose WM_SETFOCUS handler put it back, and File Manager
-           went on to read the root of the drive) */
-        if (top_level(client) == hwndActive && !mdi_creating)
+        /* the focus to the child when the frame is active, before its
+           WM_MDIACTIVATE, unless the MDI client has it (TK75 on 3.1: with
+           the focus on the frame a child made or activated got
+           WM_NCACTIVATE, WM_SETFOCUS, WM_MDIACTIVATE; with it on the
+           client, as a child destroyed leaves it, the new active child
+           did not get it. w16 gave it after WM_MDICREATE had returned,
+           and File Manager's directory window, whose tree had taken the
+           focus by then, put it back and read the root of the drive) */
+        if (top_level(client) == hwndActive && hwndFocus != client && valid_wnd(child))
             set_focus(child);
+        if (valid_wnd(child))
+            send_message(child, WM_MDIACTIVATE, TRUE, MAKELONG(child, old));
     }
     if (!mdi_creating)
         winmenu_update(client, 0);          /* the check mark */
@@ -353,12 +370,23 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
     int n = GetWindowWord(client, MDI_COUNT);
     UINT id = GetWindowWord(client, MDI_FIRSTID) + n;
     int x = mc->x, y = mc->y, cx = mc->cx, cy = mc->cy;
-    DWORD style = mc->style | WS_CHILD | WS_CLIPSIBLINGS | WS_CAPTION | WS_SYSMENU |
-                  WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+    DWORD style, shown;
     HWND h;
-    BOOL vis = TRUE;
+    BOOL vis;
     if (!cw)
         return 0;
+    /* the style (TK75 on 3.1, GetWindowLong after WM_MDICREATE): a
+       child with a clipped caption, system menu, thick frame and both
+       boxes, visible, whatever else it is given (WS_POPUP dropped); with
+       MDIS_ALLCHILDSTYLES in the client's style (0001h) the style given,
+       a child clipped from its siblings, visible only with WS_VISIBLE
+       (StarOffice 3.1's StarView makes its documents' windows so, hidden,
+       and shows them once their controls are made) */
+    style = (mc->style & ~WS_POPUP) | WS_CHILD | WS_CLIPSIBLINGS;
+    if (!(cw->style & MDIS_ALLCHILDSTYLES))
+        style |= WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX |
+                 WS_VISIBLE;
+    vis = (style & WS_VISIBLE) != 0;
     {
         /* the default place and size: with step the cascade's (22), the
            client's height holds k = height / (3 step) steps; the size is
@@ -385,6 +413,7 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
             cy = ht - step * k;
         }
     }
+    shown = style & (WS_VISIBLE | WS_MAXIMIZE | WS_MINIMIZE);
     style &= ~(WS_VISIBLE | WS_MAXIMIZE | WS_MINIMIZE);
     /* a maximised child is restored first, and the new one is not
        maximised (US18: 3.1's maximised child got WM_SIZE restored before
@@ -406,22 +435,38 @@ static HWND mdi_create(HWND client, MDICREATESTRUCT __far *mc)
        maximised (US18: 3.1's GetMenuState on a new child's system menu,
        also for one that never passes WM_SIZE on; UNVERIFIED why) */
     EnableMenuItem(GetSystemMenu(h, FALSE), SC_MINIMIZE, MF_GRAYED);
-    if (mc->style & WS_MINIMIZE)
-        ShowWindow(h, SW_SHOWMINNOACTIVE);
-    else if (mc->style & WS_MAXIMIZE)
-        ShowWindow(h, SW_SHOWMAXIMIZED);
-    else if (vis)
-        ShowWindow(h, SW_SHOW);         /* WM_CHILDACTIVATE activates it */
-    child_activate(client, h);
+    /* maximised or minimised while still hidden, then shown, then placed
+       on top without SWP_NOACTIVATE: its WM_CHILDACTIVATE, which
+       DefMDIChildProc turns into its activation, comes last (TK75 on
+       3.1: WM_GETMINMAXINFO, the move, WM_MOVE, WM_SIZE; WM_SHOWWINDOW,
+       WM_SETVISIBLE, the show; WM_WINDOWPOSCHANGING, WM_CHILDACTIVATE.
+       A child procedure that does not pass WM_CHILDACTIVATE on stays
+       inactive (TK71), and a hidden one is neither shown nor activated;
+       w16 showed and activated every new child itself, and StarView's
+       new document window, active before its controls were made, faulted
+       in its own message 046Eh) */
+    if (shown & WS_MINIMIZE) {
+        void minimize_new(HWND h);
+        PWND w = valid_wnd(h);
+        if (w) {
+            w->style |= WS_MINIMIZE;
+            minimize_new(h);
+        }
+        if (vis && valid_wnd(h))
+            ShowWindow(h, SW_SHOWMINNOACTIVE);
+    } else if (shown & WS_MAXIMIZE) {
+        void maximize_hidden(HWND h);
+        maximize_hidden(h);
+        if (vis && valid_wnd(h))
+            ShowWindow(h, SW_SHOW);
+    } else if (vis)
+        ShowWindow(h, SW_SHOW);
+    if (vis && valid_wnd(h))
+        set_window_pos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     mdi_creating = FALSE;
+    if (!valid_wnd(h))
+        return 0;
     winmenu_update(client, 0);
-    /* made, the active child gets the focus when the frame is active and
-       the focus is on the frame or the client (3.1: Program Manager's
-       groups, made after its frame took the focus, answer the arrow keys
-       straight away) - not before it is made (File Manager, above) */
-    if (top_level(client) == hwndActive && active_child(client) == h && !IsIconic(h) &&
-        (hwndFocus == client || hwndFocus == top_level(client)))
-        set_focus(h);
     return h;
 }
 
@@ -604,8 +649,10 @@ LRESULT WINAPI __loadds MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         child_activate(h, (HWND)wp);
         return 0;
     case WM_MDIGETACTIVE: {
-        HWND a = active_child(h);
-        return MAKELONG(a, a && a == maxed_child(h));
+        /* (a maximised child still hidden, none active: 0 and TRUE, TK75
+           on 3.1) */
+        HWND a = active_child(h), m = maxed_child(h);
+        return MAKELONG(a, m && (a == m || !a));
     }
     case WM_MDIMAXIMIZE:
         ShowWindow((HWND)wp, SW_SHOWMAXIMIZED);
@@ -728,7 +775,18 @@ LRESULT WINAPI DefFrameProc(HWND h, HWND client, UINT msg, WPARAM wp, LPARAM lp)
             break;
         }
         case WM_SETFOCUS:
-            set_focus(client);
+            /* on to the client (and its active child) only when there is
+               an active child: with none the frame keeps it, and the first
+               child made takes it in its activation (TK75 on 3.1: with the
+               focus on the client a new child did not get it, with it on
+               the frame it did; Program Manager makes its groups after its
+               frame has the focus, and its active group answers keys.
+               UNVERIFIED: with an icon active, the frame keeps it too) */
+            {
+                HWND a = active_child(client);
+                if (a && !IsIconic(a))
+                    set_focus(client);
+            }
             return 0;
         case WM_SETTEXT: {
             /* the frame's own title kept; with a maximised child its

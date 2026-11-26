@@ -47,38 +47,52 @@ tracing; no disassembly).
 
 ## Still open
 
-### Bug 3: the TL312MW fault: w16's USER (still open)
+### Bug 3: the TL312MW fault: fixed (branch staroff-mdi2)
 
-Done: KERNEL's heap growth (390fa53); USER now calls a window procedure
-with AX = the window's instance's data segment (odd) and CX = DS, and
-sends WM_SIZE and WM_MOVE right after WM_CREATE to children and popups
-(TK71, boot-test case wpregs). StarWriter on the tree still faults.
+Cause: StarView makes its MDI client with MDIS_ALLCHILDSTYLES (client
+style 56000001h) and each document window with WM_MDICREATE, style
+42CF0000h (no WS_VISIBLE), CW_USEDEFAULT, while the client is still
+0 x 0 (logged with a temporary `[w16] userlog` line in mdi_create). On
+3.1 such a child is made hidden and inactive; StarView makes its
+controls, then shows it. w16 ignored MDIS_ALLCHILDSTYLES, showed and
+activated the child at once, and StarView's own message 046Eh, sent
+through WM_MDIGETACTIVE's answer before the controls existed, faulted.
 
-How to compare (installation-05; the installed copy is
-/mnt/build/w16-staroff/cover-w16, the user's, never commit): StarWriter
-from WIN.INI run= on the tree (tests/dropin.sh -T build/w16 -3 with
-DROPIN_CDROM, DROPIN_COVER, `-i WIN.INI:windows:run=C:\OFFICE31\SWRITER3.EXE`)
-with `-i w16:trace=USER.135 -i w16:tracefrom=SV312MW -i w16:traceret=1`:
-SV312MW calls GetWindowLong(hwnd, 4) on each message, CX the message,
-so the trace is its message log. On the tree with Microsoft's USER.EXE
-(`-f .../USER.EXE=W16/SYSTEM/USER.EXE`, no fault) add `-i
-w16:tracestop=110` to have the ring printed.
+TK75 (tests/apps/tk75.c, boot-test case `mdistyle`, ARCHITECTURE.md
+next to US18) probes WM_MDICREATE with and without MDIS_ALLCHILDSTYLES
+(hidden, visible, maximised, minimised, placed), hidden children shown
+later, ShowWindow and SetWindowPos of plain children, the focus, and the
+minimum sizes. w16 now follows it (user/mdi.c, pos.c, win.c): the
+style rules; maximise/minimise hidden, show, then SetWindowPos without
+SWP_NOACTIVATE whose WM_CHILDACTIVATE activates through
+DefMDIChildProc; WM_CHILDACTIVATE from every SetWindowPos of a child
+without SWP_NOACTIVATE, not from ShowWindow's show/hide; WM_SETVISIBLE
+after WM_SHOWWINDOW; the focus to the child in its activation unless the
+client has it (DefFrameProc's WM_SETFOCUS now passes the focus on only
+to a non-iconic active child, and a child minimised without activation
+gives its focus to its top-level window, so that Program Manager's
+active group still takes it); a destroyed child's focus to its parent; WM_GETMINMAXINFO
+and the tracking sizes in SetWindowPos and CreateWindow; a maximised
+plain child covers the screen; child icons a spacing above the bottom.
+The case compares without WM_NCPAINT/WM_GETTEXT/WM_ERASEBKGND (3.1
+paints while it shows a window; w16 later).
 
-What differs: the MDI child (W6 below) on 3.1 gets, after WM_CREATE,
-WM_SIZE, WM_MOVE, a SetWindowPos (46 24 83 47 05), WM_SETTEXT twice,
-and StarView then makes its controls (W7-W11) before anything shows it;
-on w16 it is shown and activated at once (18 46 22 46 47 86 222, then
-StarView's 046E, which faults: its controls do not exist yet). TK71's
-"mdi" lines show one w16 difference in WM_MDICREATE: 3.1 sends the new
-child WM_CHILDACTIVATE and activates it only through DefMDIChildProc
-(a child procedure that calls DefWindowProc stays inactive; 3.1's order
-18 09 46 47 46 22), w16's mdi_create calls child_activate itself (18 46
-22 47 46 47 86 222). Whether StarView makes W6 with WM_MDICREATE is not
-known yet (SendMessage from SV312MW did not show in the trace): find out
-(trace USER.111 from SV312MW, or its calls into the MDI client), then
-make w16's MDI creation and activation follow 3.1 (tests: extend TK71's
-mdi lines with a child procedure that calls DefMDIChildProc, and add
-them to wpregs).
+Now (tree, `WIN /3`, from WIN.INI run=, 90 s, against 3.1 with the same
+install): StarWriter, StarCalc, StarDraw, StarImage, StarChart and the
+StarOffice Manager all start, no fault. Differences seen on screen (not
+yet looked into):
+- StarWriter and StarCalc: the floating styles window ("Paragraph
+  Styles", "Cell Styles") 3.1 shows at start is missing (StarDraw's
+  "Graphic Objects Styles" does show);
+- StarChart: the chart itself is not drawn (white area);
+- disabled toolbar buttons are plain gray boxes (3.1: grayed icons);
+- the document area outside the page is black (3.1: a gray dither),
+  and StarWriter's ruler is drawn garbled;
+- StarWriter/StarCalc/StarDraw: the style tree pane on the left starts
+  about 20 lines lower than on 3.1.
+Screens: installation-05 /mnt/build/w16-staroff/so2/out/{w,r}-PROG
+(w16, 3.1), sw1 and r31sw for StarWriter; scripts run1.sh, run31.sh
+there (DROPIN_FIXED=1 SECS=90; `-i WIN.INI:windows:run=C:\OFFICE31\X.EXE`).
 
 ### Bug 1: Setup's Program Manager group
 
@@ -92,6 +106,16 @@ groups (tools/mkgrp.py / tests/grpref.py read .GRP files). Note SVT312MW
 imports DDEML: Setup likely talks to PROGMAN through DDEML, so
 tests/ddemlscen.sh and tests/ddescenario.sh are the places to add a case.
 
+2026-11-26 (staroff-mdi2): the commands Setup's SETUP.INF [PROGMAN]
+section implies (CreateGroup "StarOffice 3.1" and "Autostart", AddItem
+of its six programs, CreateGroup of an existing group, requests) are
+tests/scripts/dde/staroff.txt, part `staroff` of boot-test case
+ddescen: w16's Program Manager answers them and writes the same .GRP
+files and PROGMAN.INI as Microsoft's. So the commands themselves work;
+what is left to find is Setup's own path (DDEML connection, the
+command strings it really builds, whether it reaches that step at all
+on w16): reproduce Setup itself as above.
+
 ### Bug 4: the OS/2 programs on the CD
 
 D:\ENGLISH\PROD_OS2\SETUP.EXE and D:\CSERVE.OS2\SETUP.EXE are LX files.
@@ -103,7 +127,22 @@ standard output. The tree has no _DEFAULT.PIF (3.1's has): compare with
 Manager File > Run and File Manager double-click (what the user did) on
 both, and CSERVE.OS2's 330K file.
 
-### CD drive, not yet checked
+### CD drive: checked (branch staroff-mdi2)
 
-File Manager's drive icon and tree for D:, the common dialogs' drive
-list, a DOS box's access to D: (`dir d:` in Command Prompt) against 3.1.
+Runs: installation-05 /mnt/build/w16-staroff/so2/cdrun.sh ref|tree NAME
+PROG SCRIPT (tests/inputrun.sh, DROPIN_CDROM; scripts fm.txt, dlg.txt,
+dos2.txt beside it; results in so2/out/cd-NAME-ref|tree).
+- File Manager (Ctrl+D, Ctrl+*): the tree and file list of D: as 3.1's.
+  3.1 shows the CD-ROM picture and "D: CD-ROM" in the drive bar; w16's
+  showed the network picture and the volume label "[960801_1625]".
+  Fixed: a remote drive MSCDEX has (INT 2Fh 150Bh) is a CD-ROM drive
+  (shell/winfile/drives.c, IDS_DRIVECDROM).
+- Notepad's File > Open on D:: the folder list as 3.1's; 3.1 lists the
+  drive as "d:", w16's COMMDLG added the label. Fixed
+  (shell/commdlg/file.c).
+- Command Prompt (WIN.INI run=COMMAND.COM): `dir d:\`, `dir
+  d:\english`, `d:`, `cd \english` into C:\DIRD.TXT: identical on 3.1
+  and the tree.
+Left: w16's own pictures differ from Microsoft's (the CD-ROM drive
+picture in both, yellow folders where 3.1's look white in these runs;
+not looked into).

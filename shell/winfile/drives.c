@@ -29,7 +29,25 @@ int drive_index(int drive)
     return -1;
 }
 
-/* the drives Windows knows (GetDriveType), A to Z */
+/* MSCDEX (INT 2Fh 150Bh): is drive d (0 = A:) a CD-ROM? */
+static BOOL is_cdrom(int d)
+{
+    WORD rax = 0, rbx = 0;
+    _asm {
+        mov ax, 150Bh
+        xor bx, bx
+        mov cx, d
+        int 2Fh
+        mov rax, ax
+        mov rbx, bx
+    }
+    return rbx == 0xADAD && rax != 0;
+}
+
+/* the drives Windows knows (GetDriveType), A to Z; a remote one that
+   MSCDEX has is a CD-ROM drive (observed on 3.1: StarOffice's CD as D:
+   in DOSBox, GetDriveType DRIVE_REMOTE, the CD-ROM picture and
+   "D: CD-ROM" in the drive bar, not its volume label) */
 void drives_scan(void)
 {
     int d;
@@ -44,7 +62,7 @@ void drives_scan(void)
             pic = BM_DRVFLOPPY;
             break;
         case DRIVE_REMOTE:
-            pic = BM_DRVNET;
+            pic = is_cdrom(d) ? BM_DRVCDROM : BM_DRVNET;
             break;
         default:
             pic = BM_DRVHARD;
@@ -144,8 +162,11 @@ static void paint(HWND w)
         }
     }
     if (d) {
-        volume_label(d->drive, label, sizeof label);
-        if (label[0])
+        int k = drive_index(d->drive);
+        label[0] = 0;
+        if (k >= 0 && g_drivepic[k] == BM_DRVCDROM)
+            fmt(t, sizeof t, load_str(IDS_DRIVECDROM), 'A' + d->drive);
+        else if (volume_label(d->drive, label, sizeof label), label[0])
             fmt(t, sizeof t, load_str(IDS_DRIVELABEL), 'A' + d->drive, (LPSTR)label);
         else
             fmt(t, sizeof t, load_str(IDS_DRIVENOLABEL), 'A' + d->drive);

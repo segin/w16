@@ -306,7 +306,9 @@ static void fill_drives(fstate FAR *st)
                 s_lower(text + 3);
             }
         } else
-        if (kind != PIC_FLOPPY && kind != PIC_NET) {
+        /* (a CD-ROM drive shows no label: observed on 3.1, StarOffice's
+           CD as D: listed as "d:") */
+        if (kind != PIC_FLOPPY && kind != PIC_NET && kind != PIC_CDROM) {
             char label[13];
             volume_label(d, label);
             if (label[0]) {
