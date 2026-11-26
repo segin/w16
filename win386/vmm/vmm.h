@@ -24,7 +24,7 @@ typedef signed int     s32;
 #define SEL_RMDATA  0x28    /* 16-bit data, 64 KB (exit) */
 #define SEL_LDT     0x30
 #define SEL_PMBP    0x3B    /* ring 3 code: PM breakpoints (HLT bytes) */
-#define SEL_FLAT3   0x43    /* ring 3 data, flat (the host's view, for clients) */
+#define SEL_BIOSDATA 0x40   /* ring 3 data: the BIOS data area (40:0), as Windows 3.1's */
 #define GDT_ENTRIES 16          /* up to SHELL's flat selector 7Bh (index 15) */
 
 #define EFL_CF  0x0001
@@ -191,6 +191,7 @@ void *kmalloc(u32 size);
 void kfree(void *p);
 u32 page_alloc(void);               /* a physical page, zeroed; 0 if none */
 u32 page_alloc_run(u32 n, u32 align, u32 max_phys);    /* contiguous pages, or 0 */
+u32 page_alloc_run_phase(u32 n, u32 phase);           /* the same, the first at phase mod 64 KB */
 u32 pages_free(void);
 u32 v86mm_pages(struct vm *v);      /* v86mmgr.c: a VM's pages beyond its first MB */
 void page_free(u32 phys);
@@ -251,6 +252,10 @@ u32 __cdecl vmm_call_proc(u32 proc, struct svcregs *r);
 void vxd_client(struct cregs *r, struct client_regs *c);
 void vxd_client_back(struct cregs *r, struct client_regs *c);
 void vxd_init(void);
+const char *vmm_svc_name(u32 svc);  /* a VMM service's DDK name */
+const char *vxd_owner(u32 addr);    /* the device whose image holds addr */
+int vmm_running(void);              /* vmm.c: the System VM has run */
+void vmm_sample(void);              /* vmm.c: [w16] vmmtrace=1, where the VM runs */
 extern struct vpicd_link *vpicd;
 int vmm_deliver(u32 vec, int iret);
 int vmm_can_deliver(void);
@@ -382,6 +387,10 @@ int int2f_pm(struct cregs *r);
 int dpmi_v86_hook(struct cregs *r, int vec, int hw);  /* PM handler for a V86 interrupt? */
 void dpmi_ps2cb(struct cregs *r);
 void dpmi_build_int(struct cregs *r, u32 sel, u32 off);
+int dpmi_pmvec_default(int vec);                    /* INT vec's PM vector is the host's */
+void dpmi_client_push(struct cregs *r, u32 v);      /* on the client's PM stack (its word size) */
+u32 dpmi_client_pop(struct cregs *r);
+void vxd_pm_callback(struct cregs *r, u32 n);       /* vxd.c: Allocate_PM_Call_Back's n-th */
 int dpmi_in_handler(void);
 void dpmi_note_pm(struct cregs *r);                /* every trap from PM */                  /* the BIOS called the PS/2 handler */
 
@@ -393,6 +402,8 @@ void dpmi_note_pm(struct cregs *r);                /* every trap from PM */     
 #define PMBP_API        259     /* 259..318: a VxD's PM API entry (1684h), by device */
 #define PMBP_API_END    319
 #define PMBP_EXCDEF     319     /* the default exception handler 0202h hands out */
-#define PMBP_COUNT      320
+#define PMBP_CB         320     /* 320..447: callbacks (Allocate_PM_Call_Back), 2 bytes apart */
+#define PMBP_CB_END     448
+#define PMBP_COUNT      448
 
 #endif

@@ -1139,6 +1139,22 @@ static int pmvec_default(int vec)
     return sysvm.pmvec_sel[vec] == SEL_PMBP && sysvm.pmvec_off[vec] == (u32)vec;
 }
 
+/* for the VMM's services (vxd.c: Get_PM_Int_Vector, Simulate_*) */
+int dpmi_pmvec_default(int vec)
+{
+    return pmvec_default(vec);
+}
+
+void dpmi_client_push(struct cregs *r, u32 v)
+{
+    pm_push(r, v);
+}
+
+u32 dpmi_client_pop(struct cregs *r)
+{
+    return pm_pop(r);
+}
+
 u32 pm_lin(u32 sel, u32 off)
 {
     return sel_base(sel) + (sysvm.client32 ? off : (off & 0xFFFF));
@@ -1243,7 +1259,11 @@ static void disk_flags(struct cregs *r)
 
 void dpmi_int(struct cregs *r, int vec, int hw)
 {
-    if (!hw && vec == 0x31) { dpmi_call(r); return; }
+    /* INT 31h: the host's own unless a virtual device has hooked it
+     * (Set_PM_Int_Vector; Visual C++ 1.52's DOSXNT.386 does at
+     * Sys_Critical_Init), or the client has with 0205h: then the hook
+     * first, which chains to the default (dpmi_pmbp) */
+    if (!hw && vec == 0x31 && pmvec_default(vec)) { dpmi_call(r); return; }
     /* INT 2Fh: the client's handlers first, the host's functions (16xxh)
      * where they chain to the default (dpmi_pmbp). Windows 3.1 (VX17,
      * tests/kidlerun.sh, ARCHITECTURE.md 12.15): a program's handler of
@@ -1314,6 +1334,14 @@ void dpmi_pmbp(struct cregs *r, u32 index)
         r->eip = ip; r->cs = cs; r->eflags = (fl & 0xFFFF & ~EFL_IOPL) | (r->eflags & 0xFFFF0000u);
         r->esp = sp; r->ss = ss;
         exc_default(r, exc_last, err);
+        return;
+    }
+    if (index >= PMBP_CB && index < PMBP_CB_END) {
+        /* a virtual device's callback (Allocate_PM_Call_Back): the
+         * registers as they are here, CS:IP the callback's own address;
+         * the device moves them on (Simulate_Iret, Simulate_Far_Ret, a
+         * jump to the vector it hooked) */
+        vxd_pm_callback(r, (index - PMBP_CB) / 2);
         return;
     }
     if (index >= PMBP_API && index < PMBP_API_END) {

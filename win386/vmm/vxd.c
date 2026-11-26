@@ -50,6 +50,121 @@ static u32 ndevs;
 #define sys_client (sysvm.client)
 static u8 *sys_acb;                 /* the application control block (Begin_PM_App) */
 static u32 *vmm_slots;              /* the VMM's service table: stub addresses */
+static void svc_unknown(u32 dev, u32 svc, struct svcregs *s);
+
+/* the VMM's service names, by number (the DDK's Virtual Device
+ * Adaptation Guide; the numbers as Ralf Brown's Interrupt List release 61
+ * gives them, docs/win386-services.md), for the messages below; "" for
+ * the debugging services E1h-E7h, whose numbers are UNVERIFIED */
+static const char *const vmm_names[VMM_SERVICES] = {
+    "Get_VMM_Version", "Get_Cur_VM_Handle", "Test_Cur_VM_Handle",
+    "Get_Sys_VM_Handle", "Test_Sys_VM_Handle", "Validate_VM_Handle",
+    "Get_VMM_Reenter_Count", "Begin_Reentrant_Execution",
+    "End_Reentrant_Execution", "Install_V86_Break_Point",
+    "Remove_V86_Break_Point", "Allocate_V86_Call_Back",
+    "Allocate_PM_Call_Back", "Call_When_VM_Returns", "Schedule_Global_Event",
+    "Schedule_VM_Event", "Call_Global_Event", "Call_VM_Event",
+    "Cancel_Global_Event", "Cancel_VM_Event", "Call_Priority_VM_Event",
+    "Cancel_Priority_VM_Event", "Get_NMI_Handler_Addr",
+    "Set_NMI_Handler_Addr", "Hook_NMI_Event", "Call_When_VM_Ints_Enabled",
+    "Enable_VM_Ints", "Disable_VM_Ints", "Map_Flat", "Map_Lin_To_VM_Addr",
+    "Adjust_Exec_Priority", "Begin_Critical_Section", "End_Critical_Section",
+    "End_Crit_And_Suspend", "Claim_Critical_Section",
+    "Release_Critical_Section", "Call_When_Not_Critical", "Create_Semaphore",
+    "Destroy_Semaphore", "Wait_Semaphore", "Signal_Semaphore",
+    "Get_Crit_Section_Status", "Call_When_Task_Switched", "Suspend_VM",
+    "Resume_VM", "No_Fail_Resume_VM", "Nuke_VM", "Crash_Cur_VM",
+    "Get_Execution_Focus", "Set_Execution_Focus", "Get_Time_Slice_Priority",
+    "Set_Time_Slice_Priority", "Get_Time_Slice_Granularity",
+    "Set_Time_Slice_Granularity", "Get_Time_Slice_Info",
+    "Adjust_Execution_Time", "Release_Time_Slice", "Wake_Up_VM",
+    "Call_When_Idle", "Get_Next_VM_Handle", "Set_Global_Time_Out",
+    "Set_VM_Time_Out", "Cancel_Time_Out", "Get_System_Time",
+    "Get_VM_Exec_Time", "Hook_V86_Int_Chain", "Get_V86_Int_Vector",
+    "Set_V86_Int_Vector", "Get_PM_Int_Vector", "Set_PM_Int_Vector",
+    "Simulate_Int", "Simulate_Iret", "Simulate_Far_Call", "Simulate_Far_Jmp",
+    "Simulate_Far_Ret", "Simulate_Far_Ret_N", "Build_Int_Stack_Frame",
+    "Simulate_Push", "Simulate_Pop", "_HeapAllocate", "_HeapReAllocate",
+    "_HeapFree", "_HeapGetSize", "_PageAllocate", "_PageReAllocate",
+    "_PageFree", "_PageLock", "_PageUnLock", "_PageGetSizeAddr",
+    "_PageGetAllocInfo", "_GetFreePageCount", "_GetSysPageCount",
+    "_GetVMPgCount", "_MapIntoV86", "_PhysIntoV86", "_TestGlobalV86Mem",
+    "_ModifyPageBits", "_CopyPageTable", "_LinMapIntoV86", "_LinPageLock",
+    "_LinPageUnLock", "_SetResetV86Pageable", "_GetV86PageableArray",
+    "_PageCheckLinRange", "_PageOutDirtyPages", "_PageDiscardPages",
+    "_GetNulPageHandle", "_GetFirstV86Page", "_MapPhysToLinear",
+    "_GetAppFlatDSAlias", "_SelectorMapFlat", "_GetDemandPageInfo",
+    "_GetSetPageOutCount", "Hook_V86_Page", "_Assign_Device_V86_Pages",
+    "_DeAssign_Device_V86_Pages", "_Get_Device_V86_Pages_Array",
+    "_SetNULPageAddr", "_Allocate_GDT_Selector", "_Free_GDT_Selector",
+    "_Allocate_LDT_Selector", "_Free_LDT_Selector", "_BuildDescriptorDWORDs",
+    "_GetDescriptor", "_SetDescriptor", "_MMGR_Toggle_HMA",
+    "Get_Fault_Hook_Addrs", "Hook_V86_Fault", "Hook_PM_Fault",
+    "Hook_VMM_Fault", "Begin_Nest_V86_Exec", "Begin_Nest_Exec", "Exec_Int",
+    "Resume_Exec", "End_Nest_Exec", "Allocate_PM_App_CB_Area",
+    "Get_Cur_PM_App_CB", "Set_V86_Exec_Mode", "Set_PM_Exec_Mode",
+    "Begin_Use_Locked_PM_Stack", "End_Use_Locked_PM_Stack",
+    "Save_Client_State", "Restore_Client_State", "Exec_VxD_Int",
+    "Hook_Device_Service", "Hook_Device_V86_API", "Hook_Device_PM_API",
+    "System_Control", "Simulate_IO", "Install_Mult_IO_Handlers",
+    "Install_IO_Handler", "Enable_Global_Trapping", "Enable_Local_Trapping",
+    "Disable_Global_Trapping", "Disable_Local_Trapping", "List_Create",
+    "List_Destroy", "List_Allocate", "List_Attach", "List_Attach_Tail",
+    "List_Insert", "List_Remove", "List_Deallocate", "List_Get_First",
+    "List_Get_Next", "List_Remove_First", "_AddInstanceItem",
+    "_Allocate_Device_CB_Area", "_Allocate_Global_V86_Data_Area",
+    "_Allocate_Temp_V86_Data_Area", "_Free_Temp_V86_Data_Area",
+    "Get_Profile_Decimal_Int", "Convert_Decimal_String",
+    "Get_Profile_Fixed_Point", "Convert_Fixed_Point_String",
+    "Get_Profile_Hex_Int", "Convert_Hex_String", "Get_Profile_Boolean",
+    "Convert_Boolean_String", "Get_Profile_String", "Get_Next_Profile_String",
+    "Get_Environment_String", "Get_Exec_Path", "Get_Config_Directory",
+    "OpenFile", "Get_PSP_Segment", "GetDOSVectors", "Get_Machine_Info",
+    "GetSet_HMA_Info", "Set_System_Exit_Code", "Fatal_Error_Handler",
+    "Fatal_Memory_Error", "Update_System_Clock", "Test_Debug_Installed",
+    "Out_Debug_String", "Out_Debug_Chr", "In_Debug_Chr",
+    "Debug_Convert_Hex_Binary", "Debug_Convert_Hex_Decimal",
+    "Debug_Test_Valid_Handle", "Validate_Client_Ptr", "Test_Reenter",
+    "Queue_Debug_String", "Log_Proc_Call", "Debug_Test_Cur_VM",
+    "Get_PM_Int_Type", "Set_PM_Int_Type", "Get_Last_Updated_System_Time",
+    "Get_Last_Updated_VM_Exec_Time", "Test_DBCS_Lead_Byte",
+    "_AddFreePhysPage", "_PageResetHandlePAddr", "_SetLastV86Page",
+    "_GetLastV86Page", "_MapFreePhysReg", "_UnmapFreePhysReg",
+    "_XchgFreePhysReg", "_SetFreePhysRegCalBk", "Get_Next_Arena",
+    "Get_Name_Of_Ugly_TSR", "Get_Debug_Options", "Set_Physical_HMA_Alias",
+    "_GetGlblRng0V86IntBase", "_Add_Global_V86_Data_Area",
+    "GetSetDetailedVMError", "", "", "", "", "", "", "", "Locate_Byte_In_ROM",
+    "Hook_Invalid_Page_Fault", "Unhook_Invalid_Page_Fault",
+    "Set_Delete_On_Exit_File", "Close_VM", "Enable_Touch_1st_Meg",
+    "Disable_Touch_1st_Meg", "Install_Exception_Handler",
+    "Remove_Exception_Handler", "Get_Crit_Status_No_Block",
+};
+
+const char *vmm_svc_name(u32 svc)
+{
+    return svc < VMM_SERVICES && *vmm_names[svc] ? vmm_names[svc] : "?";
+}
+
+/* the device whose image holds a ring-0 address (the loader's list of the
+ * images' starts, in load order: ARCHITECTURE.md 12.7); the VMM's own
+ * below the first. For the messages about a caller */
+static void dev_name(char *out, const struct ddb *d)
+{
+    int i;
+    for (i = 0; i < 8 && d->name[i] && d->name[i] != ' '; i++) out[i] = d->name[i];
+    out[i] = 0;
+}
+
+const char *vxd_owner(u32 addr)
+{
+    static char nm[9];
+    u32 *list = (u32 *)(W386_VMM_LIN + info->vxd_list), *base = list + info->vxd_count, i, best = ~0u;
+    for (i = 0; i < info->vxd_count; i++)
+        if (base[i] <= addr && (best == ~0u || base[i] >= base[best])) best = i;
+    if (best == ~0u) return "VMM";
+    dev_name(nm, (const struct ddb *)list[best]);
+    return nm;
+}
 
 u32 vm_handle(void)
 {
@@ -589,7 +704,7 @@ static void vtd_service(u32 svc, struct svcregs *s)
         phys_update();
         return;
     }
-    panic("VTD service %x is not implemented yet (called from %x)", svc, *(u32 *)(s + 1));
+    svc_unknown(5, svc, s);
 }
 
 /* VPICD's view of the VMs (w16vxd.h) */
@@ -817,6 +932,9 @@ void vxd_link(struct tframe *f)
         fatal("Invalid VxD dynamic link call to device number %04x, service %04x.\n"
               "Your w16 configuration is invalid. Run the w16 Setup program\n"
               "again to correct this problem.\n", dev, svc);
+    if (info->trace == 1)               /* [w16] vmmtrace=1: each link as it is made */
+        trace("VMM: link %s %x -> %x:%x%s%s\n", vxd_owner(f->eip - 2), f->eip - 2, dev, svc,
+              dev == 1 ? " " : "", dev == 1 ? vmm_svc_name(svc) : "");
     p[-2] = 0xFF;
     p[-1] = (id & 0x8000) ? 0x25 : 0x15;
     *(u32 *)p = slot;
@@ -981,10 +1099,12 @@ static int nest_service(u32 svc, struct svcregs *s)
         return 1;
     }
     case 0x4D:                          /* Simulate_Push: EAX (a word: 16-bit clients) */
+        if (!nest_level) return 0;      /* outside a nested block: sim_service */
         if (nest_nargs < (int)(sizeof(nest_args) / sizeof(nest_args[0])))
             nest_args[nest_nargs++] = (u16)s->eax;
         return 1;
     case 0x48:                          /* Simulate_Far_Call: CX:EDX */
+        if (!nest_level) return 0;
         nest_sel = s->ecx & 0xFFFF;
         nest_off = s->edx;
         nest_call = 1;
@@ -1030,6 +1150,374 @@ static int nest_service(u32 svc, struct svcregs *s)
         return 1;
     case 0x8E:                          /* Restore_Client_State: ESI a buffer */
         memcpy(c, (void *)s->esi, sizeof(*c));
+        return 1;
+    }
+    return 0;
+}
+
+/* ---- protected-mode interrupt vectors and callbacks (the DDK's
+ * Get_PM_Int_Vector, Set_PM_Int_Vector, Allocate_PM_Call_Back). The
+ * vectors are the System VM's table, the one DPMI 0204h/0205h read and
+ * write (only the System VM runs protected-mode code here); its defaults
+ * are the host's breakpoints, which reflect to V86 mode or serve INT
+ * 21h/2Fh/31h (dpmi.c). A callback is a breakpoint of its own in the
+ * host's ring-3 segment: reached by a far call, a jump or as an interrupt
+ * vector, it calls the device with EBX the VM, EDX the reference data and
+ * EBP the client registers, CS:IP still the callback's address: the device
+ * moves the client on (Simulate_Iret, Simulate_Far_Ret, Simulate_Far_Jmp
+ * to the vector it took over). Visual C++ 1.52's DOSXNT.386 and CVW1.386
+ * hook INT 31h, 10h and 2Fh so at Sys_Critical_Init. ---- */
+#define NPMCB ((PMBP_CB_END - PMBP_CB) / 2)
+static struct { u32 proc, ref; } pmcbs[NPMCB];
+static u32 npmcb;
+
+void vxd_pm_callback(struct cregs *r, u32 n)
+{
+    struct client_regs *c = cur_vm->client, outer = *c;
+    struct svcregs s;
+    if (n >= npmcb) panic("PM callback %x was not allocated (at %x:%x)", n, r->cs, r->eip);
+    client_fill(c, r);
+    memset(&s, 0, sizeof(s));
+    s.ebx = VMH(cur_vm);
+    s.edx = pmcbs[n].ref;
+    s.ebp = (u32)c;
+    if (info->trace == 1)
+        trace("VMM: PM callback %x (%s) AX=%x BX=%x CX=%x DX=%x DS=%x ES=%x", n, vxd_owner(pmcbs[n].proc),
+              c->eax, c->ebx, c->ecx, c->edx, c->ds, c->es);
+    vmm_call_proc(pmcbs[n].proc, &s);
+    if (info->trace == 1)
+        trace(" -> %x:%x AX=%x BX=%x CX=%x DX=%x fl %x\n", c->cs, c->eip, c->eax, c->ebx, c->ecx, c->edx, c->eflags);
+    client_store(r, c);
+    *c = outer;
+}
+
+static int vec_hooked31(u32 v)
+{
+    return v == 0x10 || v == 0x13 || v == 0x15 || v == 0x1C || v == 0x21 || v == 0x25
+        || v == 0x26 || v == 0x2F || v == 0x31 || v == 0x33 || v == 0x41;
+}
+
+static int pmint_service(u32 svc, struct svcregs *s)
+{
+    u32 v = s->eax & 0xFF;
+    switch (svc) {
+    case 0x0C:                          /* Allocate_PM_Call_Back: EDX ref, ESI proc -> EAX sel:off */
+        if (npmcb >= NPMCB || !s->esi) {
+            trace("VMM: Allocate_PM_Call_Back: no more callbacks\n");
+            s->eflags |= EFL_CF;
+            return 1;
+        }
+        pmcbs[npmcb].proc = s->esi;
+        pmcbs[npmcb].ref = s->edx;
+        /* 2 bytes apart, as Windows 3.1's (VXC.386: two in a row) */
+        s->eax = ((u32)SEL_PMBP << 16) | (PMBP_CB + 2 * npmcb++);
+        return 1;
+    case 0x44:                          /* Get_PM_Int_Vector: EAX -> CX:EDX, ZF the default */
+        /* ZF clear for a vector a device has hooked. Windows 3.1's own
+         * devices have hooked 10h, 13h, 15h, 1Ch, 21h, 25h, 26h, 2Fh, 31h,
+         * 33h and 41h before any other device starts (VXC.386: ZF set for
+         * 08h, 09h, 16h, 23h, 24h, 28h, 4Bh, 5Ch, 60h, 67h, 70h, 74h, FEh);
+         * w16's host serves those in its default handlers (dpmi.c), so
+         * they are reported as hooked the same */
+        s->ecx = sysvm.pmvec_sel[v] & 0xFFFF;
+        s->edx = sysvm.pmvec_off[v];
+        ZF_SET(s, dpmi_pmvec_default(v) && !vec_hooked31(v));
+        return 1;
+    case 0x45:                          /* Set_PM_Int_Vector: EAX, CX:EDX */
+        /* before Sys_VM_Init the DDK makes it every VM's default: the
+         * System VM's table is the only one */
+        sysvm.pmvec_sel[v] = s->ecx & 0xFFFF;
+        sysvm.pmvec_off[v] = s->edx;
+        if (info->trace == 1) trace("VMM: PM vector %x -> %x:%x\n", v, s->ecx & 0xFFFF, s->edx);
+        return 1;
+    }
+    return 0;
+}
+
+/* ---- Simulate_Int, Simulate_Iret, Simulate_Far_Call/Jmp/Ret/Ret_N,
+ * Simulate_Push, Simulate_Pop (the DDK): on the current VM's client
+ * registers, in V86 or protected mode as the VM is. (Simulate_Push and
+ * Simulate_Far_Call inside a nested execution block: nest_service.) In
+ * protected mode the words are the client's size; an interrupt keeps the
+ * client's IF, as w16's software interrupts do there (dpmi.c), and takes
+ * the vector from the protected-mode table ---- */
+static int sim_service(u32 svc, struct svcregs *s)
+{
+    struct client_regs *c = cur_vm->client;
+    struct cregs r;
+    int v86 = (c->eflags & EFL_VM) != 0;
+    u32 a, b;
+
+    if (svc < 0x46 || svc > 0x4E || svc == 0x4C) return 0;
+    memset(&r, 0, sizeof(r));
+    client_store(&r, c);
+#define SPUSH(x) (v86 ? v86_push16(&r, (u16)(x)) : dpmi_client_push(&r, (x)))
+#define SPOP()   (v86 ? (u32)v86_pop16(&r) : dpmi_client_pop(&r))
+    switch (svc) {
+    case 0x46:                          /* Simulate_Int: EAX */
+        a = s->eax & 0xFF;
+        if (v86) {
+            client_fill(c, &r);
+            if (vxd_v86_int_hooks(&r, a)) { client_fill(c, &r); return 1; }
+            SPUSH(r.eflags);
+            SPUSH(r.cs);
+            SPUSH(r.eip);
+            r.eflags &= ~(EFL_IF | EFL_TF);
+            b = *(u32 *)vm_lin(cur_vm, a * 4);
+            r.cs = b >> 16;
+            r.eip = b & 0xFFFF;
+        } else {
+            SPUSH(r.eflags & ~EFL_IOPL);
+            SPUSH(r.cs);
+            SPUSH(r.eip);
+            r.eflags &= ~EFL_TF;
+            r.cs = sysvm.pmvec_sel[a];
+            r.eip = sysvm.pmvec_off[a];
+        }
+        break;
+    case 0x47:                          /* Simulate_Iret */
+        r.eip = SPOP();
+        r.cs = SPOP();
+        a = SPOP() & 0xFFFF & ~EFL_IOPL;
+        r.eflags = (r.eflags & (0xFFFF0000u | EFL_IOPL)) | a;
+        if (!v86) r.eflags &= ~EFL_IOPL;
+        break;
+    case 0x48:                          /* Simulate_Far_Call: CX:EDX */
+        SPUSH(r.cs);
+        SPUSH(r.eip);
+        /* fall through */
+    case 0x49:                          /* Simulate_Far_Jmp: CX:EDX */
+        r.cs = s->ecx & 0xFFFF;
+        r.eip = v86 ? (s->edx & 0xFFFF) : s->edx;
+        break;
+    case 0x4A:                          /* Simulate_Far_Ret */
+    case 0x4B:                          /* Simulate_Far_Ret_N: EAX bytes more */
+        r.eip = SPOP();
+        r.cs = SPOP();
+        a = svc == 0x4B ? s->eax : 0;
+        if (v86 || !(sysvm.client32 || seg_32(r.ss))) SETW(r.esp, r.esp + a);
+        else r.esp += a;
+        break;
+    case 0x4D:                          /* Simulate_Push: EAX */
+        SPUSH(s->eax);
+        break;
+    case 0x4E:                          /* Simulate_Pop -> EAX */
+        s->eax = SPOP();
+        break;
+    default:
+        return 0;
+    }
+#undef SPUSH
+#undef SPOP
+    client_fill(c, &r);
+    return 1;
+}
+
+/* ---- the page services a third-party device needs (the DDK's
+ * _PageAllocate, _PageFree, _PageGetSizeAddr, _PageLock, _PageUnLock,
+ * _MapPhysToLinear; C convention: the arguments on the stack after the
+ * return address). Every block is physically contiguous memory of the
+ * VMM's window, present and zeroed, whatever the flags ask (the DDK lets
+ * an unlocked block's pages come at first touch; its contents are
+ * undefined without PageZeroInit); a handle is the VMM's record of it.
+ * UNVERIFIED: Windows 3.1's handles and addresses, PG_VM and PG_HOOKED
+ * pages mapped into a VM (here: the VMM's window, valid in every VM) ---- */
+#define PGH_MAGIC 0x48475057u           /* "WPGH" */
+#define PageUseAlign 0x00000002u
+struct pgh { u32 magic, lin, phys, n; };
+
+static u32 page_block_alloc(u32 n, u32 align, u32 max_phys, u32 *phys)
+{
+    struct pgh *h;
+    u32 p;
+    if (!n || n > 0x40000) return 0;
+    p = page_alloc_run(n, align, max_phys);
+    if (!p) return 0;
+    h = kmalloc(sizeof(*h));
+    if (!h) { u32 i; for (i = 0; i < n; i++) page_free(p + i * 4096); return 0; }
+    h->magic = PGH_MAGIC;
+    h->phys = p;
+    h->lin = phys_to_lin(p);
+    h->n = n;
+    if (phys) *phys = p;
+    return (u32)h;
+}
+
+static struct pgh *pgh_of(u32 h)
+{
+    struct pgh *p = (struct pgh *)h;
+    return h && p->magic == PGH_MAGIC ? p : NULL;
+}
+
+/* physical memory outside the window (device memory) mapped for
+ * _MapPhysToLinear, after the window's last page, each range once */
+static u32 physmap_next;
+static struct { u32 phys, n, lin; } physmaps[16];
+static u32 nphysmaps;
+
+static u32 map_phys(u32 phys, u32 bytes)
+{
+    u32 first = phys & ~0xFFFu, n = ((phys & 0xFFF) + bytes + 0xFFF) >> 12, i, lin;
+    if (!bytes) n = 1;
+    if (first >= info->xms_phys && phys + bytes <= info->xms_phys + info->xms_size)
+        return phys_to_lin(phys);
+    for (i = 0; i < nphysmaps; i++)
+        if (first >= physmaps[i].phys && first + n * 4096 <= physmaps[i].phys + physmaps[i].n * 4096)
+            return physmaps[i].lin + (phys - physmaps[i].phys);
+    if (!physmap_next) physmap_next = W386_VMM_LIN + ((info->xms_size + 0x3FFFFFu) & ~0x3FFFFFu);
+    if (nphysmaps == sizeof(physmaps) / sizeof(physmaps[0])
+        || physmap_next + n * 4096 > W386_VMM_LIN + W386_WINDOW_MAX || physmap_next + n * 4096 < physmap_next)
+        return 0xFFFFFFFFu;
+    lin = physmap_next;
+    for (i = 0; i < n; i++)
+        if (!map_page(lin + i * 4096, first + i * 4096, 3)) return 0xFFFFFFFFu;
+    physmaps[nphysmaps].phys = first;
+    physmaps[nphysmaps].n = n;
+    physmaps[nphysmaps++].lin = lin;
+    physmap_next += n * 4096;
+    return lin + (phys & 0xFFF);
+}
+
+/* the system nul page (_GetNulPageHandle): one zeroed page, mapped for
+ * every page of a range a device gives back. Its handle is no block's
+ * (_PageFree refuses it) */
+static struct pgh nul_pgh;
+
+static u32 nul_page(void)
+{
+    if (!nul_pgh.phys) nul_pgh.phys = page_alloc();
+    return nul_pgh.phys;
+}
+
+static struct pgh *nul_handle(void)
+{
+    nul_page();
+    return &nul_pgh;
+}
+
+/* the heap (the DDK's _HeapAllocate, _HeapReAllocate, _HeapFree,
+ * _HeapGetSize): the VMM's own blocks (kmalloc, always zeroed), the size
+ * asked kept in the block's header (its third dword). Visual C++ 1.52's
+ * VMB.386 allocates so once Windows runs; w16 stopped there before */
+#define HeapZeroReInit 0x00000002u      /* (HeapZeroInit 1: kmalloc zeroes anyway) */
+#define HeapNoCopy     0x00000004u
+static u32 heap_alloc(u32 n)
+{
+    u32 *p;
+    if (!n || n > 0x01000000u || (p = kmalloc(n)) == NULL) return 0;
+    p[-2] = n;
+    return (u32)p;
+}
+
+static int heap_service(u32 svc, struct svcregs *s)
+{
+    u32 *arg = (u32 *)(s + 1) + 1;
+    switch (svc) {
+    case 0x4F:                          /* _HeapAllocate(nbytes, flags) */
+        s->eax = heap_alloc(arg[0]);
+        return 1;
+    case 0x50: {                        /* _HeapReAllocate(hAddress, nbytes, flags) */
+        u32 old = arg[0], n = arg[1], nu, os;
+        if (!old) { s->eax = 0; return 1; }
+        os = ((u32 *)old)[-2];
+        nu = heap_alloc(n);
+        if (nu && !(arg[2] & HeapNoCopy)) memcpy((void *)nu, (void *)old, os < n ? os : n);
+        if (nu && (arg[2] & HeapZeroReInit)) memset((void *)nu, 0, n);
+        if (nu) kfree((void *)old);
+        s->eax = nu;
+        return 1;
+    }
+    case 0x51:                          /* _HeapFree(hAddress, flags) */
+        if (arg[0]) kfree((void *)arg[0]);
+        s->eax = arg[0] != 0;
+        return 1;
+    case 0x52:                          /* _HeapGetSize(hAddress, flags) */
+        s->eax = arg[0] ? ((u32 *)arg[0])[-2] : 0;
+        return 1;
+    }
+    return 0;
+}
+
+static int page_service(u32 svc, struct svcregs *s)
+{
+    u32 *arg = (u32 *)(s + 1) + 1;      /* after the return address */
+    struct pgh *h;
+    if (heap_service(svc, s)) return 1;
+    switch (svc) {
+    case 0x53: {                        /* _PageAllocate(nPages, pType, VM, AlignMask, minPhys, maxPhys, PhysAddr, flags) */
+        u32 flags = arg[7], align = 1, maxp = 0, phys = 0, hh;
+        if (flags & PageUseAlign) {
+            align = arg[3] + 1;
+            maxp = arg[5] ? arg[5] << 12 : 0;
+        }
+        hh = page_block_alloc(arg[0], align, maxp, &phys);
+        if (hh && (flags & PageUseAlign) && arg[4] && phys < arg[4] << 12) {
+            /* below minPhys: the window starts above it in practice */
+            h = pgh_of(hh);
+            { u32 i; for (i = 0; i < h->n; i++) page_free(h->phys + i * 4096); }
+            kfree(h);
+            hh = 0;
+        }
+        if (hh && (flags & PageUseAlign) && arg[6]) *(u32 *)arg[6] = phys;
+        s->eax = hh;
+        s->edx = hh ? pgh_of(hh)->lin : 0;
+        if (info->trace == 1)
+            trace("VMM: _PageAllocate(%x, %x, %x, %x, %x, %x, %x, %x) by %s: %x %x\n", arg[0], arg[1], arg[2],
+                  arg[3], arg[4], arg[5], arg[6], arg[7], vxd_owner(*(u32 *)(s + 1)), s->eax, s->edx);
+        return 1;
+    }
+    case 0x55:                          /* _PageFree(hMem, flags) */
+        h = pgh_of(arg[0]);
+        if (!h) { s->eax = 0; return 1; }
+        { u32 i; for (i = 0; i < h->n; i++) page_free(h->phys + i * 4096); }
+        h->magic = 0;
+        kfree(h);
+        s->eax = 1;
+        return 1;
+    case 0x58:                          /* _PageGetSizeAddr(hMem, flags) -> EAX pages, EDX address */
+        h = pgh_of(arg[0]);
+        s->eax = h ? h->n : 0;
+        s->edx = h ? h->lin : 0;
+        return 1;
+    case 0x56:                          /* _PageLock(hMem, nPages, PageOff, flags) */
+    case 0x57:                          /* _PageUnLock: always present here */
+        h = pgh_of(arg[0]);
+        s->eax = h && arg[2] + arg[1] <= h->n;
+        return 1;
+    case 0x5D:                          /* _MapIntoV86(hMem, VM, VMLinPgNum, nPages, PageOff, flags) */
+    case 0x5E: {                        /* _PhysIntoV86(PhysPage, VM, VMLinPgNum, nPages, flags) */
+        /* the pages into the VM's first megabyte (its page table, which
+         * its high linear window shares): pages 10h-10Fh, the DDK's range.
+         * CVW1.386 maps a 2-page block of its own at B8h in the System VM
+         * when CVW starts (its text screen). UNVERIFIED: what Windows
+         * 3.1's VDD does with such pages when the display changes hands */
+        struct vm *v = vm_of(arg[1]);
+        u32 pg = arg[2], n = arg[3], first, i, *pt;
+        if (svc == 0x5D) {
+            h = arg[0] == (u32)nul_handle() ? NULL : pgh_of(arg[0]);
+            if (arg[0] != (u32)nul_handle() && (!h || arg[4] + n > h->n)) { s->eax = 0; return 1; }
+            first = h ? h->phys + arg[4] * 4096 : 0;
+        } else
+            first = arg[0] << 12;
+        if (!v || pg < 0x10 || pg + n > 0x110 || pg + n < pg) { s->eax = 0; return 1; }
+        pt = (u32 *)phys_to_lin(v->ptab_phys);
+        for (i = 0; i < n; i++)
+            pt[pg + i] = (first ? first + i * 4096 : nul_page()) | 7;
+        set_cr3(get_cr3());
+        if (info->trace == 1)
+            trace("VMM: %s(%x, VM %d, %x, %x) by %s\n", svc == 0x5D ? "_MapIntoV86" : "_PhysIntoV86",
+                  arg[0], v->id, pg, n, vxd_owner(*(u32 *)(s + 1)));
+        s->eax = 1;
+        return 1;
+    }
+    case 0x6A:                          /* _GetNulPageHandle -> EAX */
+        s->eax = (u32)nul_handle();
+        return 1;
+    case 0x6C:                          /* _MapPhysToLinear(PhysAddr, nBytes, flags) */
+        s->eax = map_phys(arg[0], arg[1]);
+        if (info->trace == 1)
+            trace("VMM: _MapPhysToLinear(%x, %x, %x) by %s: %x\n", arg[0], arg[1], arg[2],
+                  vxd_owner(*(u32 *)(s + 1)), s->eax);
         return 1;
     }
     return 0;
@@ -1186,6 +1674,11 @@ void __cdecl svc_dispatch(struct svcregs *s)
 {
     u32 dev = s->id >> 16, svc = s->id & 0xFFFF;
 
+    /* Log_Proc_Call: the debugging VMM's call log (the DDK: BeginProc
+     * calls it in a device built with DEBUG; CVW1.386 at each of its
+     * procedures); a retail VMM keeps no log: every register and flag as
+     * it was */
+    if (dev == 1 && svc == 0xCB) return;
     s->eflags &= ~EFL_CF;
     if (dev == 1 && vm_service(svc, s)) return;
     if (dev == 1) switch (svc) {
@@ -1234,12 +1727,16 @@ void __cdecl svc_dispatch(struct svcregs *s)
     if (dev == 1 && io_service(svc, s)) return;
     if (dev == 1 && tmo_service(svc, s)) return;
     if (dev == 1 && nest_service(svc, s)) return;
+    if (dev == 1 && sim_service(svc, s)) return;
+    if (dev == 1 && pmint_service(svc, s)) return;
+    if (dev == 1 && page_service(svc, s)) return;
     if (dev == 1 && v86hook_service(svc, s)) return;
     if (dev == 5) { vtd_service(svc, s); return; }
     if (dev == 0x06) { v86mm_service(svc, s); return; }
     if (dev == 0x17) {
         if (!shell_service(svc, s)) {
-            trace("VMM: SHELL service %x is not implemented (called from %x)\n", svc, *(u32 *)(s + 1));
+            trace("VMM: SHELL service %x is not implemented (called by %s at %x)\n", svc,
+                  vxd_owner(*(u32 *)(s + 1)), *(u32 *)(s + 1));
             s->eflags |= EFL_CF;
         }
         return;
@@ -1247,11 +1744,45 @@ void __cdecl svc_dispatch(struct svcregs *s)
     if (dev == 0x0A) {
         /* (the rest of the VDD's services: carry, traced, UNVERIFIED) */
         if (!vdd_service(svc, s)) {
-            trace("VMM: VDD service %x is not implemented (called from %x)\n", svc, *(u32 *)(s + 1));
+            trace("VMM: VDD service %x is not implemented (called by %s at %x)\n", svc,
+                  vxd_owner(*(u32 *)(s + 1)), *(u32 *)(s + 1));
             s->eflags |= EFL_CF;
         }
         return;
     }
-    panic("VxD service %x of device %x is not implemented yet (called from %x)",
-          svc, dev, *(u32 *)(s + 1));
+    svc_unknown(dev, svc, s);
+}
+
+/* a service w16 does not have (yet): never a silent stop. The trace names
+ * it, its number and the device that called it. During the init messages
+ * (the System VM has not run) Windows ends with a message on the screen,
+ * back in DOS, as for an invalid dynamic link (12.2); once Windows runs,
+ * the call fails with carry, the DDK's failure for most services, and
+ * Windows goes on. With [w16] vmmtrace=1 it fails so during
+ * initialisation too, to see every service a device needs in one run. */
+static void svc_unknown(u32 dev, u32 svc, struct svcregs *s)
+{
+    u32 at = *(u32 *)(s + 1);
+    const char *who = vxd_owner(at);
+    u32 *arg = (u32 *)(s + 1) + 1;      /* a C-convention service's arguments */
+    trace("VMM: %s called %s service %x%s%s%s at %x (EAX=%x EBX=%x ECX=%x EDX=%x ESI=%x EDI=%x;"
+          " stack %x %x %x %x): not in w16\n",
+          who, dev == 1 ? "VMM" : "device", dev == 1 ? svc : (dev << 16 | svc),
+          dev == 1 ? " (" : "", dev == 1 ? vmm_svc_name(svc) : "", dev == 1 ? ")" : "",
+          at, s->eax, s->ebx, s->ecx, s->edx, s->esi, s->edi, arg[0], arg[1], arg[2], arg[3]);
+    if (!vmm_running() && info->trace != 1) {
+        if (dev == 1)
+            fatal("The virtual device %s called the VMM service %04x (%s),\n"
+                  "which w16's 386 enhanced mode does not provide yet.\n"
+                  "Remove the device from SYSTEM.INI [386Enh] to run w16.\n",
+                  who, svc, vmm_svc_name(svc));
+        fatal("The virtual device %s called service %04x of device %04x,\n"
+              "which w16's 386 enhanced mode does not provide yet.\n"
+              "Remove the device from SYSTEM.INI [386Enh] to run w16.\n",
+              who, svc, dev);
+    }
+    s->eflags |= EFL_CF;
+    /* the C-convention services (the names with a leading '_') fail with
+     * EAX 0, not carry: a caller must not take what EAX held for a result */
+    if (dev == 1 && *vmm_svc_name(svc) == '_') s->eax = 0;
 }

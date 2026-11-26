@@ -259,8 +259,13 @@ struct vm *vm_create(void)
         /* physically contiguous when it can be, as Windows 3.1 gives a
          * DOS VM its memory (VDS, INT 4Bh 8103h in a box: three pages
          * locked without a buffer at consecutive physical addresses):
-         * DMA to a box's buffer then needs no copy (VDMAD) */
-        run = page_alloc_run((priv_end - priv_start) >> 12, 0, 0);
+         * DMA to a box's buffer then needs no copy (VDMAD). Placed as
+         * Windows 3.1 placed the first box's (VDS 8103h in it, tests/
+         * vdmadprobe.sh: linear 20000h at physical 31D000h): D000h past a
+         * 64 KB boundary for a 64 KB-aligned linear address, so that where
+         * a box's buffer crosses a DMA page does not change with whatever
+         * the VMM allocated before (it had, with the VMM's image size) */
+        run = page_alloc_run_phase((priv_end - priv_start) >> 12, priv_start + 0xD000);
         for (a = priv_start; a < priv_end; a += 4096) {
             u32 pg = run ? run + (a - priv_start) : page_alloc();
             if (!pg) break;
@@ -629,6 +634,7 @@ void vm_tick(void)
         }
     }
     vdd_tick();
+    vmm_sample();
     status_all();
     if (cur_vm->slice) cur_vm->slice--;
     if (!cur_vm->slice && vm_list->next) resched = 1;

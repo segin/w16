@@ -1,0 +1,18 @@
+; Program Manager with Visual C++ 1.52's four devices and its WXSRVR.EXE
+; (WIN.INI load=; VMB.386's API client) running: tests/msvcvxd.sh wx.
+; Program Manager must be painted and answer the keyboard (its File and
+; Help menus) as under Windows 3.1's WIN386
+sleep 3
+match 01-boot 40 3
+shot 01-boot
+key alt+f
+sleep 2
+match 02-file 15 2
+shot 02-file
+key Escape
+sleep 1
+key alt+h
+sleep 2
+match 03-help 15 2
+shot 03-help
+key Escape

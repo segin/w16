@@ -1,0 +1,5 @@
+# VXC.386: the protected-mode interrupt probe VxD (tests/vxd/vxc.asm), an LE VxD with no device ID
+format windows vxd
+option quiet
+option nodefaultlibs
+export VXC_DDB.1
