@@ -77,22 +77,49 @@ plain child covers the screen; child icons a spacing above the bottom.
 The case compares without WM_NCPAINT/WM_GETTEXT/WM_ERASEBKGND (3.1
 paints while it shows a window; w16 later).
 
-Now (tree, `WIN /3`, from WIN.INI run=, 90 s, against 3.1 with the same
-install): StarWriter, StarCalc, StarDraw, StarImage, StarChart and the
-StarOffice Manager all start, no fault. Differences seen on screen (not
-yet looked into):
-- StarWriter and StarCalc: the floating styles window ("Paragraph
-  Styles", "Cell Styles") 3.1 shows at start is missing (StarDraw's
-  "Graphic Objects Styles" does show);
-- StarChart: the chart itself is not drawn (white area);
-- disabled toolbar buttons are plain gray boxes (3.1: grayed icons);
-- the document area outside the page is black (3.1: a gray dither),
-  and StarWriter's ruler is drawn garbled;
-- StarWriter/StarCalc/StarDraw: the style tree pane on the left starts
-  about 20 lines lower than on 3.1.
-Screens: installation-05 /mnt/build/w16-staroff/so2/out/{w,r}-PROG
-(w16, 3.1), sw1 and r31sw for StarWriter; scripts run1.sh, run31.sh
-there (DROPIN_FIXED=1 SECS=90; `-i WIN.INI:windows:run=C:\OFFICE31\X.EXE`).
+### The screen differences: fixed (2026-11-26)
+
+The five differences seen after staroff-mdi2 (StarWriter, StarCalc,
+StarDraw, StarImage, StarChart, the StarOffice Manager on the tree, `WIN
+/3`, from WIN.INI run=, against 3.1 with the same install) are gone.
+Found by swapping Microsoft's module into the tree (`-f`): GDI for the
+toolbars, page surround and ruler; USER for the chart, the Stylist and
+the style tree. Each pinned with a probe on 3.1 (ARCHITECTURE.md 11.4,
+GD14; 10.4, TK75) and fixed:
+- disabled toolbar buttons (gray boxes): colour -> mono BitBlt used the
+  destination DC's colours, 3.1 the source's (GDI, blt.c);
+- page surround black, checked buttons without pattern: CreateBrushIndirect
+  with BS_DIBPATTERN unhandled, 1-bit DIB pattern brushes made monochrome
+  (GDI, object.c);
+- StarWriter's ruler, StarCalc's grid: MoveToEx (GDI.483) was a stub;
+- StarChart's white area: DispatchMessage validated a window that had
+  called BeginPaint and invalidated itself again (USER, msg.c, paint.c);
+  also BringWindowToTop of a child activates it (pos.c); the bars' dither
+  phase: window DCs' brush origin (dc.c, defwnd.c);
+- floating Stylist missing (StarWriter, StarCalc): an owned popup sent to
+  HWND_BOTTOM went under its owner (pos.c, owner_order);
+- style tree 20 pixels low: SetMenu after the MDI client was made left the
+  client under the caption (pos.c, SWP_FRAMECHANGED); also SW_SHOWMAXIMIZED
+  of a hidden MDI child (min tracking size, no WM_SHOWWINDOW, WM_SIZE only
+  for a new client size).
+Left: the third toolbar row (the style and font combo boxes) is 31 pixels
+high on w16, 29 on 3.1 (SetWindowPos of StarView's toolbar: 1Fh against
+1Dh), so everything under it is 2 pixels lower; the combo box's height
+comes from its font's height (user/combo.c, T + 6), so likely the
+TrueType font's metrics (gdi/ttfont.c), not looked into. EnumFonts and
+EnumFontFamilies (GDI.70, GDI.330), which StarWriter, StarCalc, StarDraw
+and StarChart call, are still stubs (font lists empty). w16's GDI with
+Microsoft's VGA.DRV faults in DISPLAY (DS 0) at StarWriter's start: not
+looked into. Microsoft's VGA.DRV draws a solid gray brush as black in a
+colour -> mono BitBlt with a pattern ROP (GD14, unchecked case).
+
+Hand runs (installation-05): /mnt/build/w16-staroff/so3/run.sh tree|ref
+NAME PROG [dropin opts] (run dir /mnt/build/w16-runs/w16-staroff3b; MS=GDI.EXE,USER.EXE
+swaps Microsoft's modules into the tree; SECS, SHOTS); results in so3/out/NAME.
+Tracing that found the causes: `-i "w16:trace=GDI.*" -i w16:tracefrom=SV312MW
+-i w16:int21log=1 -i w16:traceret=1` (GDI calls with results in
+C:\W16DBG.LOG); for USER name the functions (traceret with USER.* stops
+StarChart), `-i w16:tracedump=1` adds the RECTs; `-i w16:gdilog=1`.
 
 ### Bug 1: Setup's Program Manager group
 
