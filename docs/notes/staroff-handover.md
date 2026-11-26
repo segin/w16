@@ -133,6 +133,16 @@ groups (tools/mkgrp.py / tests/grpref.py read .GRP files). Note SVT312MW
 imports DDEML: Setup likely talks to PROGMAN through DDEML, so
 tests/ddemlscen.sh and tests/ddescenario.sh are the places to add a case.
 
+2026-11-26 (later): the installed copy's Setup (run.sh tree|ref NAME
+SETUP, SHOTS="15 30") starts on the tree as on 3.1: "already installed,
+please wait", then the Update/Upgrade/Deinstallation choice, the same
+on both (but a black band about 12 pixels high across the right edge of
+the blue background at y 250 on w16, not on 3.1: not looked into). The
+full installation from the CD, the step that should make the group, was
+not run yet: it needs its dialogs answered with keys (tests/inputrun.sh
+with DROPIN_CDROM), then trace=DDEML.* (or the USER DDE messages) from
+Setup's modules on both.
+
 2026-11-26 (staroff-mdi2): the commands Setup's SETUP.INF [PROGMAN]
 section implies (CreateGroup "StarOffice 3.1" and "Autostart", AddItem
 of its six programs, CreateGroup of an existing group, requests) are
