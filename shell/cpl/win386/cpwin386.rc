@@ -46,10 +46,10 @@ BEGIN
     CONTROL "", IDC_EN_IDLESEC, "edit", 0x50830000, 132, 46, 18, 12
     CONTROL "", IDC_EN_IDLESEC + 1, "cpArrow", 0x50820000, 150, 46, 7, 12
     CONTROL "Scheduling", -1, "button", 0x50000007, 4, 66, 156, 54
-    CONTROL "Windows in &Foreground:", -1, "static", 0x50020000, 6, 80, 116, 9
+    CONTROL "w16 in &Foreground:", -1, "static", 0x50020000, 6, 80, 116, 9
     CONTROL "", IDC_EN_FG, "edit", 0x50830000, 124, 78, 26, 12
     CONTROL "", IDC_EN_FG + 1, "cpArrow", 0x50820000, 150, 78, 7, 12
-    CONTROL "Windows in &Background:", -1, "static", 0x50020000, 6, 94, 116, 9
+    CONTROL "w16 in &Background:", -1, "static", 0x50020000, 6, 94, 116, 9
     CONTROL "", IDC_EN_BG, "edit", 0x50830000, 124, 92, 26, 12
     CONTROL "", IDC_EN_BG + 1, "cpArrow", 0x50820000, 150, 92, 7, 12
     CONTROL "&Exclusive in Foreground", IDC_EN_EXCL, "button", 0x50030002, 6, 106, 120, 12

@@ -347,7 +347,7 @@ BEGIN
     CONTROL "Cancel", IDCANCEL, "button", 0x50030000, 208, 24, 50, 14
     CONTROL "&Select All", IDC_AF_SELALL, "button", 0x58030000, 208, 46, 50, 14
     CONTROL "&Help", 0x40E, "button", 0x50030000, 208, 64, 50, 14
-    CONTROL "&Copy Fonts to Windows Directory", IDC_AF_COPY, "button", 0x50030003, 105, 161, 130, 12
+    CONTROL "&Copy Fonts to w16 Directory", IDC_AF_COPY, "button", 0x50030003, 105, 161, 130, 12
     CONTROL "", IDC_AF_STATUS, "static", 0x5002008B, 105, 87, 92, 9
     CONTROL "", 0x480, "edit", 0x50800090, 508, 97, 51, 12
     CONTROL "", 0x410, "button", 0x48000003, 526, 137, 16, 12
