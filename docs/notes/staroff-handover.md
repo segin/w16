@@ -47,69 +47,52 @@ tracing; no disassembly).
 
 ## Still open
 
-### Bug 3: the TL312MW fault: w16's USER (still open)
+### Bug 3: the TL312MW fault: fixed (branch staroff-mdi2)
 
-Done: KERNEL's heap growth (390fa53); USER now calls a window procedure
-with AX = the window's instance's data segment (odd) and CX = DS, and
-sends WM_SIZE and WM_MOVE right after WM_CREATE to children and popups
-(TK71, boot-test case wpregs). StarWriter on the tree still faults.
+Cause: StarView makes its MDI client with MDIS_ALLCHILDSTYLES (client
+style 56000001h) and each document window with WM_MDICREATE, style
+42CF0000h (no WS_VISIBLE), CW_USEDEFAULT, while the client is still
+0 x 0 (logged with a temporary `[w16] userlog` line in mdi_create). On
+3.1 such a child is made hidden and inactive; StarView makes its
+controls, then shows it. w16 ignored MDIS_ALLCHILDSTYLES, showed and
+activated the child at once, and StarView's own message 046Eh, sent
+through WM_MDIGETACTIVE's answer before the controls existed, faulted.
 
-How to compare (installation-05; the installed copy is
-/mnt/build/w16-staroff/cover-w16, the user's, never commit): StarWriter
-from WIN.INI run= on the tree (tests/dropin.sh -T build/w16 -3 with
-DROPIN_CDROM, DROPIN_COVER, `-i WIN.INI:windows:run=C:\OFFICE31\SWRITER3.EXE`)
-with `-i w16:trace=USER.135 -i w16:tracefrom=SV312MW -i w16:traceret=1`:
-SV312MW calls GetWindowLong(hwnd, 4) on each message, CX the message,
-so the trace is its message log. On the tree with Microsoft's USER.EXE
-(`-f .../USER.EXE=W16/SYSTEM/USER.EXE`, no fault) add `-i
-w16:tracestop=110` to have the ring printed.
+TK75 (tests/apps/tk75.c, boot-test case `mdistyle`, ARCHITECTURE.md
+next to US18) probes WM_MDICREATE with and without MDIS_ALLCHILDSTYLES
+(hidden, visible, maximised, minimised, placed), hidden children shown
+later, ShowWindow and SetWindowPos of plain children, the focus, and the
+minimum sizes. w16 now follows it (user/mdi.c, pos.c, win.c): the
+style rules; maximise/minimise hidden, show, then SetWindowPos without
+SWP_NOACTIVATE whose WM_CHILDACTIVATE activates through
+DefMDIChildProc; WM_CHILDACTIVATE from every SetWindowPos of a child
+without SWP_NOACTIVATE, not from ShowWindow's show/hide; WM_SETVISIBLE
+after WM_SHOWWINDOW; the focus to the child in its activation unless the
+client has it (DefFrameProc's WM_SETFOCUS now passes the focus on only
+to a non-iconic active child, and a child minimised without activation
+gives its focus to its top-level window, so that Program Manager's
+active group still takes it); a destroyed child's focus to its parent; WM_GETMINMAXINFO
+and the tracking sizes in SetWindowPos and CreateWindow; a maximised
+plain child covers the screen; child icons a spacing above the bottom.
+The case compares without WM_NCPAINT/WM_GETTEXT/WM_ERASEBKGND (3.1
+paints while it shows a window; w16 later).
 
-What differs: the MDI child (W6 below) on 3.1 gets, after WM_CREATE,
-WM_SIZE, WM_MOVE, a SetWindowPos (46 24 83 47 05), WM_SETTEXT twice,
-and StarView then makes its controls (W7-W11) before anything shows it;
-on w16 it is shown and activated at once (18 46 22 46 47 86 222, then
-StarView's 046E, which faults: its controls do not exist yet). TK71's
-"mdi" lines show one w16 difference in WM_MDICREATE: 3.1 sends the new
-child WM_CHILDACTIVATE and activates it only through DefMDIChildProc
-(a child procedure that calls DefWindowProc stays inactive; 3.1's order
-18 09 46 47 46 22), w16's mdi_create calls child_activate itself (18 46
-22 47 46 47 86 222). Whether StarView makes W6 with WM_MDICREATE is not
-known yet (SendMessage from SV312MW did not show in the trace): find out
-(trace USER.111 from SV312MW, or its calls into the MDI client), then
-make w16's MDI creation and activation follow 3.1 (tests: extend TK71's
-mdi lines with a child procedure that calls DefMDIChildProc, and add
-them to wpregs).
-
-#### Found 2026-11-26 (branch staroff-mdi, from dfd340c)
-
-`trace=USER.41,USER.452,USER.111` (CreateWindow, CreateWindowEx,
-SendMessage) with `traceret=1` on the tree: StarView makes its document
-window with `SendMessage(MDI client, WM_MDICREATE (220h), 0, &mcs)`
-(SV312MW:82, the client 1438h), then `SendMessage(client,
-WM_MDIGETACTIVE)` (gets the new child, 1924h) and `SendMessage(child,
-046Eh, 1, 0)` (SV312MW:35), in which it faults. On w16, WM_MDICREATE
-has shown and activated the child (18 46 22 46 47 86 222) and the
-child's controls (W7-W11) do not exist yet. On 3.1 (the tree with
-Microsoft's USER.EXE, `tracestop=110`) the same child gets 81 83 01 05
-03, then 46 24 83 47 05 and WM_SETTEXT twice, and StarView makes its
-controls next; no 18, 22, 86 or 222 in that stretch.
-
-TK71's "mdi" lines (3.1 against w16) for WM_MDICREATE of a child whose
-procedure calls DefWindowProc:
-- style 0: 3.1 `24 81 83 01 05 03 18 09 46 47 46 22`, the child visible
-  and NOT active afterwards; w16 `... 18 46 22 47 46 47 86 222 08 07`,
-  active (w16's mdi_create calls child_activate itself; 3.1 activates
-  only through DefMDIChildProc's WM_CHILDACTIVATE);
-- WS_MAXIMIZE: 3.1 `... 01 05 03 24 46 24 83 47 03 05 18 09 46 85 0D 14
-  47 46 22 46 83 85 0D 14 47`; w16 `... 01 05 03 24 18 46 83 22 47 03 05
-  46 47 86 222`.
-StarView's 3.1 sequence (46 24 83 47 05 without the leading 24 and no
-18) matches neither; its MDICREATESTRUCT (style, size) is the next
-thing to log (dump the structure SV312MW passes: trace args give its
-address, SS-relative), then probe that exact case with TK71 (a child
-procedure that calls DefMDIChildProc, TK75+ for a new probe), and make
-w16's mdi_create follow 3.1: show with 18 09 46 47, WM_CHILDACTIVATE
-after the show, no activation of its own.
+Now (tree, `WIN /3`, from WIN.INI run=, 90 s, against 3.1 with the same
+install): StarWriter, StarCalc, StarDraw, StarImage, StarChart and the
+StarOffice Manager all start, no fault. Differences seen on screen (not
+yet looked into):
+- StarWriter and StarCalc: the floating styles window ("Paragraph
+  Styles", "Cell Styles") 3.1 shows at start is missing (StarDraw's
+  "Graphic Objects Styles" does show);
+- StarChart: the chart itself is not drawn (white area);
+- disabled toolbar buttons are plain gray boxes (3.1: grayed icons);
+- the document area outside the page is black (3.1: a gray dither),
+  and StarWriter's ruler is drawn garbled;
+- StarWriter/StarCalc/StarDraw: the style tree pane on the left starts
+  about 20 lines lower than on 3.1.
+Screens: installation-05 /mnt/build/w16-staroff/so2/out/{w,r}-PROG
+(w16, 3.1), sw1 and r31sw for StarWriter; scripts run1.sh, run31.sh
+there (DROPIN_FIXED=1 SECS=90; `-i WIN.INI:windows:run=C:\OFFICE31\X.EXE`).
 
 ### Bug 1: Setup's Program Manager group
 

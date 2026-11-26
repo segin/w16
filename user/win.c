@@ -332,6 +332,14 @@ void minmax(PWND w, MINMAXINFO __far *mm)
     mm->ptMaxPosition.y = -cyf;
     mm->ptMinTrackSize.x = sysmet[SM_CXMINTRACK];
     mm->ptMinTrackSize.y = sysmet[SM_CYMINTRACK];
+    /* a child or popup without a caption: its frame (TK75 on 3.1: a
+       popup and a child with a thick frame alone, made 30 x 10, stayed
+       so; sized to 20 x 5 they came out 20 x 8. UNVERIFIED: the width,
+       here the frame's as the height) */
+    if ((w->style & (WS_CHILD | WS_POPUP)) && (w->style & WS_CAPTION) != WS_CAPTION) {
+        mm->ptMinTrackSize.x = 2 * cxf;
+        mm->ptMinTrackSize.y = 2 * cyf;
+    }
     mm->ptMaxTrackSize.x = mm->ptMaxSize.x;
     mm->ptMaxTrackSize.y = mm->ptMaxSize.y;
 }
@@ -501,6 +509,14 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
             cx = mm.ptMaxTrackSize.x;
         if (cy > mm.ptMaxTrackSize.y)
             cy = mm.ptMaxTrackSize.y;
+        /* and no smaller than the minimum tracking size (TK75 on 3.1:
+           an overlapped window and an MDI child with a caption and a
+           thick frame made 30 x 10 or 0 x 0 came out 102 x 26; a popup or
+           plain child with a thick frame and no caption stayed 30 x 10) */
+        if (cx < mm.ptMinTrackSize.x)
+            cx = mm.ptMinTrackSize.x;
+        if (cy < mm.ptMinTrackSize.y)
+            cy = mm.ptMinTrackSize.y;
         if (cx < 0)
             cx = 0;
         if (cy < 0)
@@ -739,7 +755,7 @@ BOOL destroy_window(HWND h)
     PWND w = valid_wnd(h), p;
     HWND parent, owned, n;
     RECT rc;
-    BOOL wasvis;
+    BOOL wasvis, hadfocus;
     if (!w || h == hwndDesktop)
         return FALSE;
     if (w->flags & WF_DESTROYING)
@@ -783,6 +799,7 @@ BOOL destroy_window(HWND h)
        docs/notes/user-audit-triage.md, in git history) */
     wasvis = is_visible(w);
     rc = w->rcWindow;
+    hadfocus = hwndFocus && (hwndFocus == h || IsChild(h, hwndFocus));
     if (wasvis)
         set_window_pos(h, 0, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOMOVE |
                        SWP_NOSIZE | SWP_NOZORDER);
@@ -793,6 +810,13 @@ BOOL destroy_window(HWND h)
     destroy_tree(h);
     if (hwndFocus && !valid_wnd(hwndFocus))
         hwndFocus = 0;
+    /* a child that had the focus leaves it to its parent (TK75 on 3.1:
+       an MDI child destroyed with WM_MDIDESTROY, the focus then on the
+       MDI client; the client destroyed, on its frame. w16 left the focus
+       nowhere) */
+    if (hadfocus && !hwndFocus && parent && (p = valid_wnd(parent)) != 0 &&
+        parent != hwndDesktop && !(p->flags & WF_DESTROYING) && is_visible(p))
+        set_focus(parent);
     if (hwndActive && !valid_wnd(hwndActive)) {
         hwndActive = 0;
         {

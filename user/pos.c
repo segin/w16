@@ -69,7 +69,6 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     BOOL wasvis, nowvis, changed, send_changed, restored = FALSE, zmoved = FALSE;
     HRGN above = 0;             /* what covered it before it came up */
     int px = 0, py = 0;
-    UINT asked = flags;
     if (!w || h == hwndDesktop)
         return FALSE;
     parent = PW(w->hwndParent);
@@ -105,6 +104,32 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     }
     x = wp.x, y = wp.y, cx = wp.cx, cy = wp.cy, flags = wp.flags;
     after = wp.hwndInsertAfter;
+    /* a new size for an overlapped or thick-framed window: WM_GETMINMAXINFO,
+       and the size kept within its tracking sizes, an icon's and a
+       maximised window's excepted
+       (TK75 on 3.1: WM_WINDOWPOSCHANGING, WM_GETMINMAXINFO,
+       WM_NCCALCSIZE; an overlapped window sized to 20 x 5 stayed
+       102 x 26, a thick-framed popup came out 20 x 8; minimised to
+       36 x 36 it was asked too) */
+    if (!(flags & SWP_NOSIZE) && (!(w->style & (WS_CHILD | WS_POPUP)) || (w->style & WS_THICKFRAME)) &&
+        (cx != w->rcWindow.right - w->rcWindow.left || cy != w->rcWindow.bottom - w->rcWindow.top)) {
+        MINMAXINFO mm;
+        void minmax(PWND w, MINMAXINFO __far *mm);
+        minmax(w, &mm);
+        send_message(h, WM_GETMINMAXINFO, 0, (LPARAM)(MINMAXINFO __far *)&mm);
+        if (!(w = valid_wnd(h)))
+            return FALSE;
+        if (!(w->style & (WS_MINIMIZE | WS_MAXIMIZE))) {
+            if (cx > mm.ptMaxTrackSize.x)
+                cx = mm.ptMaxTrackSize.x;
+            if (cy > mm.ptMaxTrackSize.y)
+                cy = mm.ptMaxTrackSize.y;
+            if (cx < mm.ptMinTrackSize.x)
+                cx = mm.ptMinTrackSize.x;
+            if (cy < mm.ptMinTrackSize.y)
+                cy = mm.ptMinTrackSize.y;
+        }
+    }
     if (cx < 0) cx = 0;
     if (cy < 0) cy = 0;
     oldwin = w->rcWindow;
@@ -192,9 +217,12 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     wp.cx = w->rcWindow.right - w->rcWindow.left;
     wp.cy = w->rcWindow.bottom - w->rcWindow.top;
     wp.flags = flags & ~(SWP_NOMOVE | SWP_NOSIZE);     /* what did change, below */
+    /* (a child asked to the top it is already at gets none: TK75 on 3.1,
+       SetWindowPos(HWND_TOP, SWP_NOMOVE | SWP_NOSIZE) of the only child
+       sent WM_WINDOWPOSCHANGING and WM_CHILDACTIVATE alone) */
     send_changed = !EqualRect(&oldwin, &w->rcWindow) ||
                    (flags & (SWP_SHOWWINDOW | SWP_HIDEWINDOW | SWP_FRAMECHANGED)) ||
-                   !(flags & SWP_NOZORDER);
+                   (!(flags & SWP_NOZORDER) && (zmoved || !(w->style & WS_CHILD)));
     if (send_changed) {
         /* moved or sized: the window or its client area (US18: on 3.1 a
            scroll bar a window's WM_SIZE takes away gives it a second
@@ -272,16 +300,16 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         if (!(w = valid_wnd(h)))
             return TRUE;
     }
-    /* a child shown without SWP_NOACTIVATE: WM_CHILDACTIVATE, which
-       DefMDIChildProc turns into the MDI child's activation (3.1, File
-       Manager's directory window: WM_SHOWWINDOW, WM_WINDOWPOSCHANGING,
-       WM_CHILDACTIVATE as it is shown); also when ShowWindow maximises or
-       restores one already shown (US18: WM_MDIMAXIMIZE or ShowWindow
-       SW_SHOWMAXIMIZED on a child that is not the active one activates it
-       before its WM_SIZE). UNVERIFIED: on moves and sizes without
-       SWP_NOACTIVATE too, as the SDK says */
-    if (((flags & SWP_SHOWWINDOW) || (asked & (SWP_SHOWWINDOW | SWP_FRAMECHANGED)) ==
-         (SWP_SHOWWINDOW | SWP_FRAMECHANGED)) && !(flags & SWP_NOACTIVATE) && (w->style & WS_CHILD))
+    /* a child placed without SWP_NOACTIVATE: WM_CHILDACTIVATE, which
+       DefMDIChildProc turns into the MDI child's activation, whether
+       anything changed or not (TK75 on 3.1: SetWindowPos of a plain child
+       with SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER sent WM_WINDOWPOSCHANGING
+       and WM_CHILDACTIVATE; with SWP_SHOWWINDOW, WM_CHILDACTIVATE before
+       WM_WINDOWPOSCHANGED; ShowWindow's maximise, minimise and restore
+       send it, its show and hide and MoveWindow do not; US18:
+       WM_MDIMAXIMIZE or ShowWindow SW_SHOWMAXIMIZED on a child that is
+       not the active one activates it before its WM_SIZE) */
+    if (!(flags & SWP_NOACTIVATE) && (w->style & WS_CHILD))
         send_message(h, WM_CHILDACTIVATE, 0, 0);
     if ((w = valid_wnd(h)) != 0 && (w->style & WS_MINIMIZE) && !(flags & SWP_NOMOVE))
         follow_icon_title(h);
@@ -348,10 +376,10 @@ static void icon_place(PWND w, POINT *pt)
             n++;
     pt->x = (n % ((pr.right - pr.left) / cx)) * cx + (cx - sysmet[SM_CXICON]) / 2;
     pt->y = (pr.bottom - pr.top) - cy * (1 + n / ((pr.right - pr.left) / cx));
-    /* on the desktop the icon's window starts a whole spacing above the
-       bottom (US4: 408 on a 480-line screen, its title at 444) */
-    if (w->style & WS_CHILD)
-        pt->y += (cy - sysmet[SM_CYICON]) / 2 - 2 + 6;
+    /* the icon's window starts a whole spacing above the bottom, on the
+       desktop (US4: 408 on a 480-line screen, its title at 444) and in a
+       parent window alike (TK75 on 3.1: 128 in a 200-line MDI client,
+       201 in a 273-line window; w16 put a child's icon 24 lines lower) */
 }
 
 typedef struct PLACE { RECT normal; POINT icon; WORD hasicon; HWND title; } PLACE;
@@ -430,9 +458,35 @@ void restore_noactivate(HWND h)
     restore_noact = FALSE;
 }
 
+static BOOL max_hidden;         /* maximize_hidden under way */
+
+/* a hidden window maximised and left hidden, not activated (WM_MDICREATE
+   of a maximised child: TK75 on 3.1, WM_GETMINMAXINFO and the move,
+   WM_MOVE and WM_SIZE before WM_SHOWWINDOW; with MDIS_ALLCHILDSTYLES and
+   no WS_VISIBLE it stays hidden, maximised) */
+void maximize_hidden(HWND h)
+{
+    max_hidden = TRUE;
+    ShowWindow(h, SW_SHOWMAXIMIZED);
+    max_hidden = FALSE;
+}
+
 static BOOL same_size(const RECT *a, const RECT *b)
 {
     return a->right - a->left == b->right - b->left && a->bottom - a->top == b->bottom - b->top;
+}
+
+/* WM_SHOWWINDOW, then WM_SETVISIBLE (0009h: TK75 and TK71 on 3.1, after
+   WM_SHOWWINDOW whenever ShowWindow shows or hides a window, top-level
+   or child; documented in the 2.1 SDK as sent just before a window is
+   made visible or invisible). FALSE: the window is gone */
+static BOOL show_msgs(HWND h, BOOL show)
+{
+    send_message(h, WM_SHOWWINDOW, show, 0);
+    if (!valid_wnd(h))
+        return FALSE;
+    send_message(h, 0x0009, show, 0);
+    return valid_wnd(h) != 0;
 }
 
 BOOL WINAPI ShowWindow(HWND h, int cmd)
@@ -463,7 +517,8 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
     case SW_HIDE:
         if (!wasvis)
             return FALSE;
-        send_message(h, WM_SHOWWINDOW, FALSE, 0);
+        if (!show_msgs(h, FALSE))
+            return wasvis;
         set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_HIDEWINDOW | SWP_NOACTIVATE);
         /* the active window hidden by ShowWindow: its owner becomes
            active if it can take it, else the next visible, enabled
@@ -507,8 +562,8 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 pt = pl->icon;
             else
                 icon_place(w, &pt);
-            if (!wasvis)
-                send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            if (!wasvis && !max_hidden)
+                show_msgs(h, TRUE);
             if (!(w = valid_wnd(h)))        /* (USER audit, sweep) */
                 return wasvis;
             sized = w->rcWindow;
@@ -528,14 +583,16 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                     show_icon_title(pl, h);
             }
             /* a child minimised without activation gives the focus it
-               holds to its parent (3.1: Program Manager makes its groups
-               shown, then minimises the iconic ones with
+               holds to its top-level window (3.1: Program Manager makes
+               its groups shown, then minimises the iconic ones with
                SW_SHOWMINNOACTIVE; the arrow keys went to the Accessories
-               icon instead of Main. UNVERIFIED: that 3.1 gives it to the
-               parent rather than to nobody; Wine does for SW_HIDE) */
+               icon instead of Main. Given to the MDI client, it kept the
+               next group from taking it: TK75 on 3.1, a child activated
+               with the focus on the client does not get it. UNVERIFIED:
+               where 3.1 puts it) */
             if ((cmd == SW_MINIMIZE || cmd == SW_SHOWMINNOACTIVE) && (w = valid_wnd(h)) != 0 &&
                 (w->style & WS_CHILD) && hwndFocus && (hwndFocus == h || IsChild(h, hwndFocus)))
-                set_focus(w->hwndParent);
+                set_focus(top_level(h));
             /* SW_MINIMIZE (Alt+Space N, the minimise box): the next
                top-level window becomes active (3.1 SDK; on 3.1 Program
                Manager is active again after Notepad is minimised - w16
@@ -558,7 +615,8 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                     activate_window(t, FALSE);
             }
         } else if (!wasvis) {
-            send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            if (!show_msgs(h, TRUE))
+                return wasvis;
             set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_SHOWWINDOW |
                            (cmd == SW_SHOWMINNOACTIVE ? SWP_NOACTIVATE : 0));
             /* an icon made by CreateWindow (WS_MINIMIZE) shown: its title
@@ -571,9 +629,7 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
     case SW_SHOWMAXIMIZED:
         if (!(w->style & WS_MAXIMIZE)) {
             MINMAXINFO mm;
-            int cxf = (w->style & WS_THICKFRAME) ? sysmet[SM_CXFRAME] : sysmet[SM_CXBORDER];
-            int cyf = (w->style & WS_THICKFRAME) ? sysmet[SM_CYFRAME] : sysmet[SM_CYBORDER];
-            RECT pr;
+            void minmax(PWND w, MINMAXINFO __far *mm);
             pl = place_of(h, TRUE);
             if (pl && !(w->style & WS_MINIMIZE)) {
                 pl->normal = w->rcWindow;
@@ -592,19 +648,11 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 }
                 pl->hasicon = 1;
             }
-            if (w->style & WS_CHILD) {
-                PWND p = PW(w->hwndParent);
-                SetRect(&pr, 0, 0, p->rcClient.right - p->rcClient.left,
-                        p->rcClient.bottom - p->rcClient.top);
-            } else
-                SetRect(&pr, 0, 0, sysmet[SM_CXSCREEN], sysmet[SM_CYSCREEN]);
-            mm.ptMaxSize.x = pr.right + 2 * cxf;
-            mm.ptMaxSize.y = pr.bottom + 2 * cyf;
-            mm.ptMaxPosition.x = -cxf;
-            mm.ptMaxPosition.y = -cyf;
-            mm.ptMinTrackSize.x = sysmet[SM_CXMINTRACK];
-            mm.ptMinTrackSize.y = sysmet[SM_CYMINTRACK];
-            mm.ptMaxTrackSize = mm.ptMaxSize;
+            /* the screen's size, a child's too (TK75 on 3.1: a plain
+               child maximised in a 400 x 300 window came out 648 x 488
+               at -4,-4; w16 gave it its parent's client area. An MDI
+               child's comes from DefMDIChildProc) */
+            minmax(w, &mm);
             send_message(h, WM_GETMINMAXINFO, 0, (LPARAM)(MINMAXINFO __far *)&mm);
             if (!(w = valid_wnd(h)))
                 return wasvis;
@@ -623,14 +671,14 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             }
             w->style &= ~WS_MINIMIZE;
             w->style |= WS_MAXIMIZE;
-            if (!wasvis)
-                send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            if (!wasvis && !max_hidden)
+                show_msgs(h, TRUE);
             if (!(w = valid_wnd(h)))        /* (USER audit, sweep) */
                 return wasvis;
             sized = w->rcWindow;
             set_window_pos(h, 0, mm.ptMaxPosition.x, mm.ptMaxPosition.y,
-                           mm.ptMaxSize.x, mm.ptMaxSize.y,
-                           SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+                           mm.ptMaxSize.x, mm.ptMaxSize.y, SWP_NOZORDER | SWP_FRAMECHANGED |
+                           (max_hidden ? SWP_NOACTIVATE : SWP_SHOWWINDOW));
             /* WM_SIZE comes from DefWindowProc's WM_WINDOWPOSCHANGED, once
                (US18: one WM_SIZE per maximise or restore on 3.1; w16 sent
                a second here); here only when the size stayed the same */
@@ -641,10 +689,12 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             /* and active (3.1 SDK: SW_SHOWMAXIMIZED activates; US30 cbt on
                3.1: SC_MAXIMIZE of an inactive window, MINMAX then its
                ACTIVATE) */
-            if ((w = valid_wnd(h)) != 0 && !(w->style & WS_CHILD) && h != hwndActive)
+            if ((w = valid_wnd(h)) != 0 && !(w->style & WS_CHILD) && h != hwndActive &&
+                !max_hidden)
                 activate_window(h, FALSE);
-        } else if (!wasvis) {
-            send_message(h, WM_SHOWWINDOW, TRUE, 0);
+        } else if (!wasvis && !max_hidden) {
+            if (!show_msgs(h, TRUE))
+                return wasvis;
             set_window_pos(h, 0, 0, 0, 0, 0, f | SWP_SHOWWINDOW);
         }
         return wasvis;
@@ -652,6 +702,7 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
     case SW_RESTORE:
         if (w->style & (WS_MINIMIZE | WS_MAXIMIZE)) {
             RECT r;
+            BOOL wasicon = (w->style & WS_MINIMIZE) != 0;
             /* an icon opened: WM_QUERYOPEN first (3.1 SDK) */
             if ((w->style & WS_MINIMIZE) &&
                 (!send_message(h, WM_QUERYOPEN, 0, 0) || !(w = valid_wnd(h))))
@@ -674,13 +725,21 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             if (pl && pl->title)
                 hide_icon_title(pl);
             w->style &= ~(WS_MINIMIZE | WS_MAXIMIZE);
-            if (!wasvis)
-                send_message(h, WM_SHOWWINDOW, TRUE, 0);
+            if (!wasvis && !max_hidden)
+                show_msgs(h, TRUE);
             if (!(w = valid_wnd(h)))        /* (USER audit, sweep) */
                 return wasvis;
             sized = w->rcWindow;
-            set_window_pos(h, 0, r.left, r.top, r.right - r.left, r.bottom - r.top,
-                           SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED |
+            /* a child comes to the top in the same call, and gets its
+               WM_CHILDACTIVATE (which an MDI child turns into its
+               activation) from it, before WM_WINDOWPOSCHANGED (TK75 on
+               3.1: WM_WINDOWPOSCHANGING, WM_GETMINMAXINFO, WM_NCCALCSIZE,
+               WM_CHILDACTIVATE, WM_WINDOWPOSCHANGED, WM_MOVE, WM_SIZE;
+               w16 sent a second WM_CHILDACTIVATE after them) */
+            set_window_pos(h, (w->style & WS_CHILD) && !restore_noact ? HWND_TOP : 0,
+                           r.left, r.top, r.right - r.left, r.bottom - r.top,
+                           SWP_SHOWWINDOW | SWP_FRAMECHANGED |
+                           ((w->style & WS_CHILD) && !restore_noact ? 0 : SWP_NOZORDER) |
                            (restore_noact ? SWP_NOACTIVATE : 0));
             if ((w = valid_wnd(h)) != 0 && same_size(&sized, &w->rcWindow))
                 send_message(h, WM_SIZE, SIZE_RESTORED,
@@ -688,17 +747,14 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                                       w->rcClient.bottom - w->rcClient.top));
             /* restored: activated and on top (3.1 SDK: SW_RESTORE and
                SW_SHOWNORMAL activate; a Program Manager group restored
-               from its icon comes up in front, active). A child gets
-               WM_CHILDACTIVATE, which an MDI child turns into its
-               activation; w16 left it where it was in the Z order */
-            if ((w = valid_wnd(h)) != 0 && !restore_noact) {
-                if (!(w->style & WS_CHILD))
-                    activate_window(h, FALSE);
-                else {
-                    set_window_pos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    send_message(h, WM_CHILDACTIVATE, 0, 0);
-                }
-            }
+               from its icon comes up in front, active; a child above) */
+            if ((w = valid_wnd(h)) != 0 && !restore_noact && !(w->style & WS_CHILD))
+                activate_window(h, FALSE);
+            /* a child opened from its icon takes the focus, its window
+               active (TK75 on 3.1: a plain child, WM_SETFOCUS after its
+               WM_SIZE; not when restored from maximised) */
+            else if (w && wasicon && !restore_noact && top_level(h) == hwndActive && hwndFocus != h)
+                set_focus(h);
             return wasvis;
         }
         /* fall through */
@@ -712,19 +768,23 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                     activate_window(h, FALSE);
             return TRUE;
         }
-        send_message(h, WM_SHOWWINDOW, TRUE, 0);
-        if (!(w = valid_wnd(h)))
+        if (!show_msgs(h, TRUE))
             return FALSE;
+        w = valid_wnd(h);
         /* a child keeps its place in the Z order (US18: three hidden
            children shown with SW_SHOW or SW_SHOWNORMAL stay in the order
            they were made on 3.1; w16 brought each to the top, and
            COMMDLG's dialogs, which show their controls one by one, came
            out with their tab order backwards: Terminal's Send Text File,
            Tab from the file name went to Strip LF) */
+        /* nor is it activated: no WM_CHILDACTIVATE (TK75 on 3.1:
+           SW_SHOW, SW_SHOWNORMAL and SW_SHOWNA of a hidden child sent
+           WM_SHOWWINDOW, WM_SETVISIBLE, WM_WINDOWPOSCHANGING,
+           WM_WINDOWPOSCHANGED; an MDI child shown so stays inactive) */
         set_window_pos(h, (cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) ? 0 : HWND_TOP,
                        0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW |
                        ((cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) ? SWP_NOACTIVATE | SWP_NOZORDER : 0) |
-                       ((w->style & WS_CHILD) ? SWP_NOZORDER : 0));
+                       ((w->style & WS_CHILD) ? SWP_NOZORDER | SWP_NOACTIVATE : 0));
         return FALSE;
     }
 }

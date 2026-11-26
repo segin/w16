@@ -37,6 +37,18 @@
 #              WM_MOVE right after WM_CREATE); the rest of TK71's log
 #              (other registers, shown windows, WM_MDICREATE) is not
 #              compared yet
+#   mdistyle   TK75 (tests/apps/tk75.c) as the shell on 3.1 and on w16's
+#              tree: what WM_MDICREATE makes of the child's style (with
+#              and without MDIS_ALLCHILDSTYLES, hidden, maximised,
+#              minimised), when it shows and activates the child, where the
+#              focus goes; ShowWindow and SetWindowPos of a plain child
+#              (WM_CHILDACTIVATE, WM_SETVISIBLE); the minimum size at
+#              CreateWindow and SetWindowPos. The messages are compared
+#              without WM_NCPAINT, WM_GETTEXT, WM_ERASEBKGND and
+#              WM_ISACTIVEICON (3.1 paints a window as it is shown, w16
+#              when it next paints), and without the WM_WINDOWPOSCHANGED
+#              3.1 sends a minimised child last, after its activation
+#              (UNVERIFIED what moves it)
 #   staroff    StarOffice 3.1's CD (tests/staroff.sh; skipped without
 #              $W16_STAROFF_ISO): Microsoft's OLE 2 from it starting up,
 #              and GetDriveType of the CD drive, on 3.1 and w16's tree
@@ -1004,7 +1016,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1459,6 +1471,25 @@ runcase() {
             r="differs from 3.1 ($out/wpregs.diff)"
         if [ "$r" = ok ]; then echo "ok   wpregs: a window procedure's AX, CX, ES, DS; WM_SIZE and WM_MOVE in CreateWindow as 3.1's"
         else echo "FAIL wpregs: $r"; fails=$((fails + 1)); fi ;;
+    mdistyle)
+        # TK75: Microsoft's USER (3.1) against w16's tree
+        for k in ref tree; do
+            if [ $k = ref ]; then o="-r -3"; else o="-T $root/build/w16 -3"; fi
+            # shellcheck disable=SC2086
+            "$root/tests/dropin.sh" $o -c 'WIN /3' -t 120 -W TK75.LOG -o "$out/mdistyle-$k" \
+                -f "$root/build/dos/TK75.EXE=TK75.EXE" -i 'boot:shell=C:\TK75.EXE' > "$out/mdistyle-$k.txt" 2>&1 &
+        done
+        wait
+        for k in ref tree; do
+            tr -d '\r' < "$out/mdistyle-$k/c/TK75.LOG" 2>/dev/null |
+                sed -e '/^S/s/ \(0085\|000D\|0014\|0035\)//g' -e '/^S.*min$/s/ 0047 |/ |/' > "$out/mdistyle-$k.log"
+        done
+        r=ok
+        grep -q '^T done' "$out/mdistyle-ref.log" || r="ref did not finish ($out/mdistyle-ref.log)"
+        [ "$r" != ok ] || diff "$out/mdistyle-ref.log" "$out/mdistyle-tree.log" > "$out/mdistyle.diff" ||
+            r="differs from 3.1 ($out/mdistyle.diff)"
+        if [ "$r" = ok ]; then echo "ok   mdistyle: WM_MDICREATE's styles, showing, activation and focus as 3.1's"
+        else echo "FAIL mdistyle: $r"; fails=$((fails + 1)); fi ;;
     staroff)
         # StarOffice 3.1's CD (tests/staroff.sh; skip without the image)
         "$root/tests/staroff.sh" -o "$out/staroff" > "$out/staroff.txt" 2>&1 || true
