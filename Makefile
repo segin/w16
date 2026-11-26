@@ -2636,6 +2636,14 @@ $(DOS)/US35.EXE: $(B)/tests/start.o $(B)/tests/us35.o $(B)/tests/us29s.o $(B)/te
 	    option map=$(B)/tests/us35.map \
 	    file { $(B)/tests/start.o $(B)/tests/us35.o $(B)/tests/us29s.o $(B)/tests/mevent.o }
 dos: $(DOS)/US35.EXE
+# US37: the focus after CreateDialog of a dialog shown without activation;
+# DM_GETDEFID (tests/apps/us37.c)
+$(B)/tests/us37.o: tests/apps/us37ref.h tests/apps/tklog.h
+$(DOS)/US37.EXE: $(B)/tests/start.o $(B)/tests/us37.o $(B)/tests/us29s.o tests/apps/app.lnk tests/apps/us37.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us37.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us37.map file { $(B)/tests/start.o $(B)/tests/us37.o $(B)/tests/us29s.o }
+dos: $(DOS)/US37.EXE
 # US36: text past 32767 characters; counts and positions of 32768 or more (tests/apps/us36.c)
 $(B)/tests/us36.o: tests/apps/us36ref.h tests/apps/tklog.h
 $(DOS)/US36.EXE: $(B)/tests/start.o $(B)/tests/us36.o tests/apps/app.lnk

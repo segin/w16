@@ -1,0 +1,3 @@
+# US37.EXE (tests/apps/us37.c): dialog focus and Return; keybd_event in registers
+@tests/apps/app.lnk
+import U_KEYBD_EVENT USER.289
