@@ -5,7 +5,8 @@
 ;   local heap size, DS = its data segment, ES:SI = the command line (TK5,
 ;   ARCHITECTURE.md 9.2); USER makes its local heap and runs user_init.
 ; call_wndproc: calls a window procedure with AX = the window's hInstance
-;   and DS = ES = SS, as Windows does (Pietrek, Windows Internals, ch. 7:
+;   as its data segment selector (odd) and DS = ES = CX = SS, as Windows
+;   does (TK71, tests/apps/tk71.c) (Pietrek, Windows Internals, ch. 7:
 ;   DispatchMessage and SendMessage), so an exported procedure without a
 ;   MakeProcInstance thunk, or one with no prologue at all (w16's
 ;   WINOLDAP, compiled -zWs), finds its data segment. USER's own class
@@ -85,9 +86,15 @@ _call_wndproc:
         or ax, ax
         jnz .ax
         mov ax, ss              ; (a timer procedure: AX = SS)
-.ax:    mov dx, ss              ; DS = ES = SS: the calling task's data
+.ax:    or ax, 1                ; the instance's data segment selector, as
+                                ; 3.1 (TK71: AX odd, hInstance | 1; w16
+                                ; gave the even handle, and StarOffice's
+                                ; StarView took a wrong value for a
+                                ; selector in its message 046Eh)
+        mov dx, ss              ; DS = ES = SS: the calling task's data
         mov ds, dx              ; segment, for a procedure that is not
         mov es, dx              ; exported properly (Pietrek ch. 7)
+        mov cx, dx              ; CX too (TK71)
         call far [bp+6]
         pop ds
         pop di

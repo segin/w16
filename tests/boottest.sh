@@ -30,6 +30,13 @@
 #              LoadModule and WinExec make of OS/2 and other foreign NE,
 #              LX, LE and PE files, KERNEL's constant exports; Microsoft's
 #              KRNL386, w16's KRNL286 and KRNL386: the logs the same
+#   wpregs     TK71 (tests/apps/tk71.c) as the shell on 3.1 and on w16's
+#              tree: AX, CX, ES and DS a window procedure is called with
+#              (AX the window's instance's data segment), and the messages
+#              CreateWindow sends a hidden child and popup (WM_SIZE and
+#              WM_MOVE right after WM_CREATE); the rest of TK71's log
+#              (other registers, shown windows, WM_MDICREATE) is not
+#              compared yet
 #   staroff    StarOffice 3.1's CD (tests/staroff.sh; skipped without
 #              $W16_STAROFF_ISO): Microsoft's OLE 2 from it starting up,
 #              and GetDriveType of the CD drive, on 3.1 and w16's tree
@@ -997,7 +1004,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1433,6 +1440,25 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   kexedir: DLLs from the program's directory, foreign executables, constant exports as 3.1's"
         else echo "FAIL kexedir: $r"; fails=$((fails + 1)); fi ;;
+    wpregs)
+        # TK71: Microsoft's USER (3.1) against w16's tree
+        for k in ref tree; do
+            if [ $k = ref ]; then o="-r -3"; else o="-T $root/build/w16 -3"; fi
+            # shellcheck disable=SC2086
+            "$root/tests/dropin.sh" $o -c 'WIN /3' -t 120 -W TK71.LOG -o "$out/wpregs-$k" \
+                -f "$root/build/dos/TK71.EXE=TK71.EXE" -i 'boot:shell=C:\TK71.EXE' > "$out/wpregs-$k.txt" 2>&1 &
+        done
+        wait
+        for k in ref tree; do
+            tr -d '\r' < "$out/wpregs-$k/c/TK71.LOG" 2>/dev/null |
+                sed -n 's/^\(M [0-9A-F]*\) AX=\([^ ]*\) BX=[^ ]* CX=\([^ ]*\) .* ES=\([^ ]*\) DS=\([^ ]*\)$/\1 AX=\2 CX=\3 ES=\4 DS=\5/p; /hidden$/p; /^T done/p' > "$out/wpregs-$k.log"
+        done
+        r=ok
+        grep -q '^T done' "$out/wpregs-ref.log" || r="ref did not finish ($out/wpregs-ref.log)"
+        [ "$r" != ok ] || diff "$out/wpregs-ref.log" "$out/wpregs-tree.log" > "$out/wpregs.diff" ||
+            r="differs from 3.1 ($out/wpregs.diff)"
+        if [ "$r" = ok ]; then echo "ok   wpregs: a window procedure's AX, CX, ES, DS; WM_SIZE and WM_MOVE in CreateWindow as 3.1's"
+        else echo "FAIL wpregs: $r"; fails=$((fails + 1)); fi ;;
     staroff)
         # StarOffice 3.1's CD (tests/staroff.sh; skip without the image)
         "$root/tests/staroff.sh" -o "$out/staroff" > "$out/staroff.txt" 2>&1 || true

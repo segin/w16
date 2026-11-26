@@ -194,6 +194,8 @@ static u16 trpos, trcount;
    real target */
 char trace_from[9];     /* [w16] tracefrom=MODULE (winboot.c): only its calls */
 int trace_ret_on;       /* [w16] traceret=1 (winboot.c): the results too */
+u16 trace_stop;         /* [w16] tracestop=N (winboot.c): the ring printed
+                           once N calls were recorded (no fault needed) */
 
 /* [w16] traceret=1: the traced calls still to return, with the caller's
    return address, which trace_note replaced by trace_ret (kentry.asm).
@@ -241,6 +243,8 @@ u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
     }
     trpos = (trpos + 1) % TR_N;
     trcount++;
+    if (trace_stop && trcount == trace_stop + 1)
+        trace_print();          /* (the call before this one complete) */
     r->idx = idx;
     r->ip = frame[0];
     r->cs = frame[1];

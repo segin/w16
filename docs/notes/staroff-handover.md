@@ -47,42 +47,38 @@ tracing; no disassembly).
 
 ## Still open
 
-### Bug 3: the TL312MW fault (reproduces on the tree): w16's USER
+### Bug 3: the TL312MW fault: w16's USER (still open)
 
-Fixed on the way (commit 390fa53): w16's KERNEL could not grow a local
-heap in a wired segment; Microsoft's USER wires its data segment, so
-under w16's KERNEL USER's heap stayed at 8K ("System resources
-exhausted" after ~60 windows). With that, StarWriter runs fully on 3.1
-with w16's KRNL386, and on w16's tree with Microsoft's USER.EXE swapped
-in (GDI differences show: a black area, toolbar bitmaps missing). With
-w16's own USER it still faults: the remaining cause is w16's USER.
+Done: KERNEL's heap growth (390fa53); USER now calls a window procedure
+with AX = the window's instance's data segment (odd) and CX = DS, and
+sends WM_SIZE and WM_MOVE right after WM_CREATE to children and popups
+(TK71, boot-test case wpregs). StarWriter on the tree still faults.
 
-Reproduce on installation-05: the installed copy is
-/mnt/build/w16-staroff/cover-w16 (C:\OFFICE31 and what Setup put in
-C:\W16; the user's install, never commit), then
+How to compare (installation-05; the installed copy is
+/mnt/build/w16-staroff/cover-w16, the user's, never commit): StarWriter
+from WIN.INI run= on the tree (tests/dropin.sh -T build/w16 -3 with
+DROPIN_CDROM, DROPIN_COVER, `-i WIN.INI:windows:run=C:\OFFICE31\SWRITER3.EXE`)
+with `-i w16:trace=USER.135 -i w16:tracefrom=SV312MW -i w16:traceret=1`:
+SV312MW calls GetWindowLong(hwnd, 4) on each message, CX the message,
+so the trace is its message log. On the tree with Microsoft's USER.EXE
+(`-f .../USER.EXE=W16/SYSTEM/USER.EXE`, no fault) add `-i
+w16:tracestop=110` to have the ring printed.
 
-    DROPIN_MEMSIZE=32 DROPIN_CDROM=/mnt/build/w16-staroff/STAROFF.ISO \
-    DROPIN_COVER=/mnt/build/w16-staroff/cover-w16 DROPIN_FIXED=1 \
-    tests/dropin.sh -T build/w16 -3 -c 'WIN /3' -t 70 -s OUT.png -o DIR \
-      -i 'WIN.INI:windows:run=C:\OFFICE31\SWRITER3.EXE' -i w16:watchdog=0
-
-StarWriter shows its window, then `exception 000D at xxxx:0EF8
-(TL312MW:7)`, err 0200 (the user: 01D8, 2600, F000). The error codes
-have TI=0: the value loaded into a segment register is a number, not a
-selector (the report's "ar" and module are err|7's, unrelated). The
-fault report's stack: TL312MW:7 was called with ES:BX = a far pointer
-into a 4K block, from SV312MW:35 inside a window procedure (USER:2's
-dispatch). Tracing SV312MW's GetWindowLong (`trace=USER.135
-tracefrom=SV312MW traceret=1`): the window's object is
-GetWindowLong(hwnd, 4) = 2C07:0A04 (SI=DI=0A04 at the fault), and the
-messages handled just before were 0046h, 0047h, 001Ch, 0086h, 0006h,
-0007h, 0222h, then 046Eh (WM_USER+6Eh, StarView's own) during which it
-faults. Suspect the order or timing of a posted private message (its
-lParam an event object) against w16's USER: delivered when 3.1 would
-not (before or after the object it names is valid). Next: trace USER's
-PostMessage/PeekMessage/GetMessage (USER.110, 109, 108) from SV312MW
-with traceret on the tree and on the tree with Microsoft's USER, and
-compare the sequences around 046Eh.
+What differs: the MDI child (W6 below) on 3.1 gets, after WM_CREATE,
+WM_SIZE, WM_MOVE, a SetWindowPos (46 24 83 47 05), WM_SETTEXT twice,
+and StarView then makes its controls (W7-W11) before anything shows it;
+on w16 it is shown and activated at once (18 46 22 46 47 86 222, then
+StarView's 046E, which faults: its controls do not exist yet). TK71's
+"mdi" lines show one w16 difference in WM_MDICREATE: 3.1 sends the new
+child WM_CHILDACTIVATE and activates it only through DefMDIChildProc
+(a child procedure that calls DefWindowProc stays inactive; 3.1's order
+18 09 46 47 46 22), w16's mdi_create calls child_activate itself (18 46
+22 47 46 47 86 222). Whether StarView makes W6 with WM_MDICREATE is not
+known yet (SendMessage from SV312MW did not show in the trace): find out
+(trace USER.111 from SV312MW, or its calls into the MDI client), then
+make w16's MDI creation and activation follow 3.1 (tests: extend TK71's
+mdi lines with a child procedure that calls DefMDIChildProc, and add
+them to wpregs).
 
 ### Bug 1: Setup's Program Manager group
 

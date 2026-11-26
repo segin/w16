@@ -545,11 +545,17 @@ HWND create_window(DWORD exstyle, LPCSTR clsname, LPCSTR title, DWORD style,
         return 0;
     }
     w->flags |= WF_CREATED;
-    /* a window made invisible gets WM_SIZE and WM_MOVE when it is first
-       shown (3.1 trace: Notepad's main window got none in CreateWindow;
-       its WM_SIZE handler places its edit control, which did not exist
-       yet, so w16's early WM_SIZE left the edit at 0,0 instead of 8,2) */
-    if (!(style & WS_VISIBLE))
+    /* an overlapped (top-level, not popup) window gets WM_SIZE and
+       WM_MOVE when it is first shown (3.1 trace: Notepad's main window
+       got none in CreateWindow; its WM_SIZE handler places its edit
+       control, which did not exist yet, so w16's early WM_SIZE left the
+       edit at 0,0 instead of 8,2); a child or a popup gets them right
+       after WM_CREATE, hidden or visible (TK71 on 3.1: WM_NCCREATE,
+       WM_NCCALCSIZE, WM_CREATE, WM_SIZE, WM_MOVE, then WM_PARENTNOTIFY
+       and the show). w16 held them back for every hidden window, and
+       StarOffice's StarView, whose MDI children and controls take their
+       size from WM_SIZE, faulted later in its own message 046Eh. */
+    if (!(style & (WS_CHILD | WS_POPUP)))
         w->flags |= WF_SENDSIZE;
     else {
         send_message(h, WM_SIZE, SIZE_RESTORED,
