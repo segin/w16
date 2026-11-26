@@ -2284,6 +2284,23 @@ install-tree: $(W16)/CMD.PIF
 $(W16)/CMD.PIF: assets/CMD.PIF
 	@mkdir -p $(@D)
 	cp $< $@
+# _DEFAULT.PIF (assets/): the PIF Windows uses for a DOS program that has
+# none of its own, with 3.1's _DEFAULT.PIF settings (program _DEFAULT.BAT,
+# no title, directory or parameters, full screen, close window on exit,
+# 640/128 KB, priorities 100/50, EMS and XMS 1024/0, detect idle time,
+# video and the base section's 16Fh/170h flags 0, checksum byte 0); w16's
+# own, made with tools/mkpif.py from CMD.PIF (title= program=_DEFAULT.BAT
+# dir= params= windowed=0, then those fields set) and laid out as 3.1's
+# Setup lays its PIFs, the 286 section before the 386 one (with the 386
+# section first, boot-test case win386tree's Microsoft-WIN386 side kept
+# COMMAND.COM's box open after EXIT three times running; that side also
+# loses the typed EXIT now and then with this layout, so the order is
+# UNVERIFIED as the cause)
+W16TREE += $(W16)/_DEFAULT.PIF
+install-tree: $(W16)/_DEFAULT.PIF
+$(W16)/_DEFAULT.PIF: assets/_DEFAULT.PIF
+	@mkdir -p $(@D)
+	cp $< $@
 # Program Manager's default groups (assets/progman: PROGMAN.INI and the
 # .GRP files, which tools/mkgrp.py makes from the *.txt definitions and the
 # icons of w16's own programs; `make groups` makes them again, and make
