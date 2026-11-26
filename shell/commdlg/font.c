@@ -574,8 +574,12 @@ static void sample_rect(fstate FAR *st, RECT FAR *r)
 }
 
 /* the line under the sample, with CF_PRINTERFONTS only (observed: empty
-   with screen fonts alone; Write, with no printer, has it). UNVERIFIED:
-   when 1100 (an imitated style) comes before the others. */
+   with screen fonts alone; Write, with no printer, has it). A printer's
+   face that is not the device's own, as the display's raster fonts are
+   when Write, with no printer, passes the display's DC, has none
+   (observed: Courier there; Arial the TrueType line). UNVERIFIED: when
+   1100 (an imitated style) comes before the others; a GDI raster face
+   both the screen and a printer list. */
 static void describe(fstate FAR *st)
 {
     face FAR *f;
@@ -592,7 +596,7 @@ static void describe(fstate FAR *st)
         else if (sd & ST_SIM)
             ids = IDS_FONTSIMULATED;
         else if (f->type & PRINTER_FONTTYPE)
-            ids = IDS_FONTPRINTER;
+            ids = (f->type & DEVICE_T) ? IDS_FONTPRINTER : 0;
         else
             ids = IDS_FONTSCREEN;
     }
