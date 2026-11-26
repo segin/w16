@@ -329,15 +329,76 @@ void rsrc_free(module FAR *m)
 
 /* Observed: the offset of the resource's entry in the module table, or 0
    (also for a NULL hInstance). hInstance or hModule. */
+/* The name table (resource type 15; Windows 3.0's resource compiler made
+   one, and programs linked for 3.0 ask for their resources by the names
+   in it: the Entertainment Pack setups' dialogs). Its entries: a length
+   word (the whole entry), the resource's integer type, its id (8000h
+   set for an integer id), a NUL-terminated type name, the NUL-terminated
+   resource name; a length of 0 ends it. Observed on 3.1 (TK70): a name
+   asked for with an integer type is looked up there first, before the
+   module's named resources ("REAL" in both found the table's); names
+   match whatever their case on either side; the entry's type must be
+   the type asked for; its type name does not matter; the id is taken as
+   it stands, so one without 8000h finds nothing, nor does one the
+   module does not have. Returns the integer id (8000h | n), or 0.
+   UNVERIFIED: a named type (TK70 had no named type to find). */
+static u16 nametable_id(module FAR *m, const char FAR *name, u16 type)
+{
+    u16 t, r, sel, len, pos = 0, id = 0;
+    const u8 FAR *p;
+    for (t = type_first(m); t; t = type_next(m, t))
+        if (TYPE(m, t)->type_id == (0x8000 | 15) && TYPE(m, t)->count)
+            break;
+    if (!t)
+        return 0;
+    r = t + sizeof(ne_rsrc_type);
+    len = size_of(m, r) > 0xFFF0UL ? 0xFFF0 : (u16)size_of(m, r);
+    if (len < 2 || !galloc(GMEM_FIXED, len, 0, &sel))
+        return 0;
+    if (!res_read(m, r, sel)) {
+        GlobalFree(sel);
+        return 0;
+    }
+    p = MK_FP(sel, 0);
+    while (!id && (u32)pos + 7 <= len) {
+        u16 n = *(const u16 FAR *)(p + pos), i, j;
+        if (n < 7 || (u32)pos + n > len)
+            break;
+        if ((*(const u16 FAR *)(p + pos + 2) | 0x8000) == type) {
+            /* past the type name, then the resource name */
+            for (i = pos + 6; i < pos + n && p[i]; i++)
+                ;
+            for (i++, j = 0; i < pos + n; i++, j++) {
+                u8 a = p[i], b = (u8)name[j];
+                if (a >= 'a' && a <= 'z')
+                    a -= 32;
+                if (b >= 'a' && b <= 'z')
+                    b -= 32;
+                if (a != b)
+                    break;
+                if (!a) {
+                    id = *(const u16 FAR *)(p + pos + 4);
+                    break;
+                }
+            }
+        }
+        pos += n;
+    }
+    GlobalFree(sel);
+    return id;
+}
+
 u16 KAPI FindResource(u16 hinst, const char FAR *name, const char FAR *type) /* KERNEL.60 */
 {
     module FAR *m = module_of(hinst);
-    u16 t, k;
+    u16 t, k, tid, nid = 0;
     if (!m || (t = find_type(m, type)) == 0)
         return 0;
+    if (ident(name, &tid) == 1 && ident(type, &tid) == 0)
+        nid = nametable_id(m, name, tid);
     for (k = 0; k < TYPE(m, t)->count; k++) {
         u16 r = t + sizeof(ne_rsrc_type) + k * sizeof(ne_rsrc_name);
-        if (id_match(m, NAME(m, r)->id, name))
+        if (nid ? NAME(m, r)->id == nid : id_match(m, NAME(m, r)->id, name))
             return r;
     }
     return 0;
