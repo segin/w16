@@ -632,7 +632,17 @@ static u16 local_init(u16 seg, u16 start, u16 end)
         end = (u16)(segsize - 1);
     }
     first = (start + 3) & ~3;
-    if (end >= segsize || end < SENTINEL_SIZE || first < start)
+    /* observed on 3.1 (TK66I "linit end=size", "end>size", both kernels,
+       both modes): LocalInit(sel, 22h, 1000h) and (sel, 22h, 1001h) on
+       a 1000h-byte block both make the heap, its last sentinel at FF4h,
+       inside the block. Microsoft's COMPOBJ.DLL (OLE 2) makes its task
+       allocator's heap so; w16 refused an end of the block's size, and
+       CoInitialize failed with E_OUTOFMEMORY (StarOffice 3.1: "Error
+       initializing object-system."). The limit is now the last
+       sentinel's place: it must lie inside the segment. UNVERIFIED:
+       what 3.1 does with an end further past the block (w16: 0) */
+    if (end < SENTINEL_SIZE || first < start ||
+        (u32)((end - SENTINEL_SIZE) & ~3) + SENTINEL_SIZE > segsize)
         return 0;
     /* observed on 3.1 (TK66 "linit", both kernels): with start 1, 4 or 8
        the first sentinel is at 0Ch, clear of the words before it (the

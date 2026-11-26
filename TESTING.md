@@ -19,6 +19,7 @@ here depends on that host.
 | `dosbox-x` (AUR) | WIN.COM, WINOLDAP, 286 and 386 Enhanced tests |
 | `xorg-server-xvfb`, `xdotool`, `imagemagick` | headless screens, real keyboard and mouse input, pixel diffs |
 | `mtools` | hard disk images (MS-DOS 4.00 boots, `tests/86box.sh`) |
+| `p7zip` (optional) | CD images (`tests/staroff.sh`) |
 | `86box`, `86box-roms` (AUR; optional) | the hardware-coprocessor test (`tests/86box-n4.sh`, section 3) |
 
 On Arch: `yay -S openwatcom-v2 nasm python python-pillow noto-fonts dosbox dosbox-x xorg-server-xvfb xdotool imagemagick`.
@@ -210,6 +211,13 @@ the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;
 `-m FILE` puts Microsoft's file back for bisection, `-t FILE` lays only that file of the tree over 3.1; the boot-test case
 `quicktime`, parts `over`, `tree` and `tree386`),
+`tests/staroff.sh` (StarOffice 3.1's CD image, `$W16_STAROFF_ISO`, default
+`~/Downloads/staroffice/STAROFF.ISO`, mounted as a CD-ROM drive D: with
+`tests/dropin.sh`'s `DROPIN_CDROM`; Microsoft's OLE 2 libraries from it
+(ZIP archives, read with `7z` and Python) under TK70 on 3.1 and on w16's
+tree; skipped without the image; the boot-test case `staroff`; nothing of
+it is committed; `DROPIN_COVER=DIR` lays an installed application's files
+over the scratch C: drive for hand runs),
 `tests/sb16/sbscen.sh [dev] [audio] [prog]` (w16's SB16.DRV in DOSBox-X
 as a Sound Blaster 16: MMP's device sections over it under both
 MMSYSTEMs and against Windows 3.1's SNDBLST2.DRV, `tests/sb16/sbcmp.py`;

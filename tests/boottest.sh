@@ -25,6 +25,14 @@
 #   lastexit   the shell (TK55) ends at once: WIN's ERRORLEVEL 0 and text
 #              mode 3 afterwards, as 3.1's KERNEL ends Windows through
 #              USER's ExitWindows when the last task ends (ref and w16)
+#   kexedir    TK69 (tests/apps/tk69.c) as the shell: where KERNEL finds
+#              the DLLs a program in a directory of its own imports, what
+#              LoadModule and WinExec make of OS/2 and other foreign NE,
+#              LX, LE and PE files, KERNEL's constant exports; Microsoft's
+#              KRNL386, w16's KRNL286 and KRNL386: the logs the same
+#   staroff    StarOffice 3.1's CD (tests/staroff.sh; skipped without
+#              $W16_STAROFF_ISO): Microsoft's OLE 2 from it starting up,
+#              and GetDriveType of the CD drive, on 3.1 and w16's tree
 #   kcmdline   long WinExec command lines (TK68 as the shell, TK68W in
 #              WINOLDAP.MOD's and WINOA386.MOD's place and run as a
 #              Windows program): what KERNEL gives WINOLDAP and a program
@@ -975,7 +983,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr}
+cases=${*:-kernel dosx dosxaudit kexedir staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1387,6 +1395,36 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   lastexit: the last task's end ends Windows through ExitWindows (ERRORLEVEL 0, mode 3)"
         else echo "FAIL lastexit: $r ($out/lastexit-w16)"; fails=$((fails + 1)); fi ;;
+    kexedir)
+        # TK69 (tests/apps/tk69.c): Microsoft's KRNL386, w16's KRNL286 and
+        # KRNL386 (Standard mode), the logs the same
+        d=$root/build/dos
+        set -- -f "$d/TK69.EXE=TK69.EXE" -f "$d/TKID.TPL=TKID.TPL" -f "$d/TK69A.EXE=TK69X/TK69A.EXE" \
+            -f "$d/TK69L.DLL=TK69X/TK69L.DLL" -i 'boot:shell=C:\TK69.EXE'
+        for k in ref k286 k386; do
+            case $k in ref) o="-r -3" ;; k286) o= ;; k386) o=-3 ;; esac
+            # shellcheck disable=SC2086
+            "$root/tests/dropin.sh" -t 120 -W TK69.LOG -o "$out/kexedir-$k" $o "$@" > "$out/kexedir-$k.txt" 2>&1 &
+        done
+        wait
+        r=ok
+        for k in ref k286 k386; do
+            tr -d '\r' < "$out/kexedir-$k/c/TK69.LOG" 2>/dev/null | sed '/^T start/d' > "$out/kexedir-$k.log"
+        done
+        grep -q '^T done$' "$out/kexedir-ref.log" || r="ref did not finish ($out/kexedir-ref.log)"
+        for k in k286 k386; do
+            [ "$r" = ok ] || break
+            diff "$out/kexedir-ref.log" "$out/kexedir-$k.log" > "$out/kexedir-$k.diff" ||
+                r="$k: differs from 3.1 ($out/kexedir-$k.diff)"
+        done
+        if [ "$r" = ok ]; then echo "ok   kexedir: DLLs from the program's directory, foreign executables, constant exports as 3.1's"
+        else echo "FAIL kexedir: $r"; fails=$((fails + 1)); fi ;;
+    staroff)
+        # StarOffice 3.1's CD (tests/staroff.sh; skip without the image)
+        "$root/tests/staroff.sh" -o "$out/staroff" > "$out/staroff.txt" 2>&1 || true
+        if grep -q '^skip' "$out/staroff.txt"; then echo "ok   staroff: $(head -1 "$out/staroff.txt")"
+        elif ! grep -q FAIL "$out/staroff.txt" && grep -q '^ok' "$out/staroff.txt"; then echo "ok   staroff: OLE 2 from the CD as on 3.1, the CD drive DRIVE_REMOTE"
+        else echo "FAIL staroff: $(grep -m1 FAIL "$out/staroff.txt" || echo 'no result') ($out/staroff.txt)"; fails=$((fails + 1)); fi ;;
     kcmdline)
         # TK68 (tests/apps/tk68.c) makes the calls C:\TK68.TXT names; the
         # w16 runs make four more, whose tails 3.1 fails with

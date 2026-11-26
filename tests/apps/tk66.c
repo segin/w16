@@ -617,6 +617,91 @@ static void linit1(const char *pfx, WORD start, WORD end, DWORD bytes)
     GlobalFree(g);
 }
 
+/* a heap of its own in a small block (as USER's menu and string heaps
+   are: GlobalAlloc, LocalInit): how many 100h-byte LocalAllocs it takes
+   (the heap growing with its block), and the block's size then */
+static void lgrow(const char *pfx, WORD flags)
+{
+    static char nm[48];
+    HGLOBAL g = GlobalAlloc(flags | GMEM_ZEROINIT, 0x400);
+    WORD seg, n = 0, i, k;
+    while (pfx[n]) {
+        nm[n] = pfx[n];
+        n++;
+    }
+    if (!g)
+        return;
+    seg = SELECTOROF(GlobalLock(g));
+    note(pfx);
+    lstrcpy(nm + n, "init");
+    obs(nm, LocalInit(seg, 0x10, 0x3FF) != 0);
+    for (i = 0; i < 100; i++)
+        if (!LOWORD(call_ds(seg, (void FAR *)LocalAlloc, 2, LMEM_FIXED, 0x100, 0)))
+            break;
+    lstrcpy(nm + n, "allocs");
+    obs(nm, i);
+    /* moveable ones: the handle table grows too */
+    for (i = 0; i < 3000; i++)
+        if (!LOWORD(call_ds(seg, (void FAR *)LocalAlloc, 2, LMEM_MOVEABLE, 4, 0)))
+            break;
+    /* (3.1: 94Fh, KRNL286 950h; w16 951h: within the handle tables'
+       layout, which is not checked here) */
+    lstrcpy(nm + n, "moveable allocs over 900h");
+    obs(nm, i >= 0x900);
+    lstrcpy(nm + n, "size");
+    k = (WORD)(GlobalSize(g) >> 4);
+    obs(nm, k);
+    lstrcpy(nm + n, "selector same");
+    obs(nm, SELECTOROF(GlobalLock(g)) == seg);
+    GlobalUnlock(g);
+    GlobalUnlock(g);
+    GlobalFree(g);
+}
+
+/* LocalInit(seg, 0, size) on a small moveable block of that size, then
+   rounds of three LMEM_ZEROINIT allocations of 12h, 20h and 1Ah bytes
+   (what Microsoft's USER does per window in a heap of its own) until one
+   fails: how many rounds, the block's size then, the last offset */
+static void lpat(void)
+{
+    static const char nm0[] = "linit pattern: ";
+    HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, 0x400);
+    WORD seg, i, k, last = 0;
+    static const WORD sz[3] = { 0x12, 0x20, 0x1A };
+    if (!g)
+        return;
+    seg = SELECTOROF(GlobalLock(g));
+    note(nm0);
+    obs("linit pattern: init", LocalInit(seg, 0, 0x400) != 0);
+    /* first alloc-and-free churn: the heap must not fill up with it */
+    for (i = 0; i < 3000; i++) {
+        WORD h1 = LOWORD(call_ds(seg, (void FAR *)LocalAlloc, 2, LMEM_FIXED | LMEM_ZEROINIT, 0x12, 0));
+        WORD h2 = LOWORD(call_ds(seg, (void FAR *)LocalAlloc, 2, LMEM_FIXED | LMEM_ZEROINIT, 0x1A, 0));
+        if (!h1 || !h2)
+            break;
+        call_ds(seg, (void FAR *)LocalFree, 1, h1, 0, 0);
+        call_ds(seg, (void FAR *)LocalFree, 1, h2, 0, 0);
+    }
+    obs("linit pattern: churn rounds", i);
+    obs_env("linit pattern: size after churn", (WORD)(GlobalSize(g) >> 4));
+    for (i = 0; i < 2000; i++) {
+        for (k = 0; k < 3; k++) {
+            WORD h = LOWORD(call_ds(seg, (void FAR *)LocalAlloc, 2, LMEM_FIXED | LMEM_ZEROINIT, sz[k], 0));
+            if (!h)
+                break;
+            last = h;
+        }
+        if (k < 3)
+            break;
+    }
+    obs("linit pattern: rounds over 300h", i >= 0x300);
+    obs_env("linit pattern: rounds", i);
+    obs_env("linit pattern: last", last);
+    obs("linit pattern: size", (WORD)(GlobalSize(g) >> 4));
+    GlobalUnlock(g);
+    GlobalFree(g);
+}
+
 static void linit(void)
 {
     step("linit");
@@ -624,6 +709,13 @@ static void linit(void)
     linit1("linit 4: ", 4, 0x3FF, 0x400);
     linit1("linit 1: ", 1, 0x3FF, 0x400);
     linit1("linit 0 0: ", 0, 0, 0x10000UL);
+    /* the end at the block's size (Microsoft's COMPOBJ.DLL, OLE 2's task
+       allocator: LocalInit(sel, 22h, 1000h) on a 1000h-byte block; w16
+       refused it), then one byte past it */
+    linit1("linit end=size: ", 0x22, 0x1000, 0x1000);
+    linit1("linit end>size: ", 0x22, 0x1001, 0x1000);
+    lgrow("linit grow moveable: ", GMEM_MOVEABLE);
+    lpat();
 }
 
 /* ---- TK66N.EXE: a named type's name past the module table (medium 16) ---- */

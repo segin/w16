@@ -64,6 +64,12 @@
 # (tests/ver/vtree.sh: WINDOWS, so that paths compare with 3.1's)
 # DROPIN_DDRIVE=DIR: a copy of DIR mounted as D: as well (after the
 # clock is set; tests/ver/vtree.sh)
+# DROPIN_CDROM=ISO: the ISO 9660 image ISO mounted as D:, a CD-ROM drive
+# (DOSBox's imgmount -t iso, with its MSCDEX), as a user mounts a CD
+# (tests/staroff.sh); not with DROPIN_DDRIVE
+# DROPIN_COVER=DIR: DIR's files copied over the scratch C: drive (DIR's
+# top level is C:\), before -f's files and -i's settings: an application
+# installed before, kept outside the repository (hand runs of StarOffice)
 # DROPIN_REF=DIR: another C: drive to copy instead of the reference
 # install's (e.g. tests/sb16setup.sh's, the reference with Sound Blaster
 # 16 drivers installed)
@@ -192,6 +198,9 @@ fi
 if [ -n "$dosx" ]; then
     cp "$dosx" "$sys/DOSX.EXE"
 fi
+if [ -n "${DROPIN_COVER:-}" ]; then
+    cp -r "$DROPIN_COVER"/. "$work/c/"
+fi
 printf '%s\n' "$files" | while IFS= read -r f; do
     [ -n "$f" ] || continue
     src=${f%%=*} dst=${f#*=}
@@ -262,6 +271,11 @@ fi
 # screens never show the host's date or time (a reference cached on one
 # day and a w16 run on the next differed in Clock's minimised title)
 [ -z "${DROPIN_DDRIVE:-}" ] || { rm -rf "$work/d"; cp -r "$DROPIN_DDRIVE" "$work/d"; }
+cdrom=
+if [ -n "${DROPIN_CDROM:-}" ]; then
+    [ -z "${DROPIN_DDRIVE:-}" ] || { echo "DROPIN_CDROM and DROPIN_DDRIVE both want D:" >&2; exit 2; }
+    cdrom=$(cd "$(dirname "$DROPIN_CDROM")" && pwd)/$(basename "$DROPIN_CDROM")
+fi
 mkdir -p "$work/clock"
 cp "$root/build/dos/CLOCKSET.COM" "$work/clock/" || { echo "missing $root/build/dos/CLOCKSET.COM (make dos)" >&2; exit 2; }
 common="[dosbox]
@@ -278,7 +292,8 @@ mount d \"$work/clock\"
 D:\\CLOCKSET
 mount -u d
 mount c \"$work/c\"${DROPIN_DDRIVE:+
-mount d \"$work/d\"}
+mount d \"$work/d\"}${cdrom:+
+imgmount d \"$cdrom\" -t iso}
 c:
 cd \\$wdir
 $cmd$redir

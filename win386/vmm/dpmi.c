@@ -1076,6 +1076,17 @@ int int2f_pm(struct cregs *r)
     case 0x1600:
         SETW(r->eax, 0x0A03);
         return 1;
+    case 0x1000:
+        /* SHARE's installation check: "installed" (AL FFh). Observed on
+           Windows 3.1 in 386 Enhanced mode (tests/apps/tk70.c, a Windows
+           program in the System VM, DOSBox without SHARE): AL FFh with
+           Microsoft's WIN386, 0 with w16's before and in Standard mode.
+           Microsoft's OLE 2 STORAGE.DLL asks it before it makes a
+           compound file and fails with STG_E_SHAREREQUIRED without
+           (StarOffice 3.1: its documents). UNVERIFIED: what 3.1 answers
+           in a DOS box (w16: passed on to DOS) */
+        SETLO(r->eax, 0xFF);
+        return 1;
     case 0x1680:                        /* release time slice: AL=0 */
     case 0x1689:                        /* KERNEL's idle loop (Pietrek ch. 6): */
         SETLO(r->eax, 0);               /* the System VM's time goes to the others */

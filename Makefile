@@ -43,7 +43,7 @@ TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8 DX9
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63 TK68 TK68W
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63 TK68 TK68W TK69 TK69A TK70
 # TK65's import DLLs (TK65IMP below)
 TK65I   := TK65I1.DLL TK65I2.DLL TK65I3.DLL TK65I4.DLL TK65I5.DLL TK65I6.DLL TK65I7.DLL TK65I8.DLL TK65I9.DLL
 # DLLs and files TK5 uses
@@ -52,7 +52,7 @@ TESTDLLS := TKDLL.DLL TKDLB.DLL TKID.TPL TKBAD.DLL TKNODEP.DLL TKNOD.DLL \
             TK62A.EXE TKENT.DLL TKENT2.DLL TKBADNE.DLL TKBIGDG.DLL TKDG.DLL TKWA.DLL TKWB.DLL \
             TK64A.EXE TK64M.EXE TK64O.EXE TK64P.EXE TK65D.DLL $(TK65I) \
             TK66L.EXE TK66S.EXE TK66R.EXE TK66F.EXE TK66I.EXE TK66N.EXE TK66E.EXE TKBADNM.DLL \
-            TK67H.EXE \
+            TK67H.EXE TK69L.DLL \
             TKEA.DLL TKEB.DLL TKEC.DLL TKED.DLL TKEE.DLL
 # tools that run inside a (reference) Windows: tests/refrun.sh
 WINTOOLS := SNAP SNAP2 TW2 TEXP3 TEXP2 TDDE TICONS THELP CA1
@@ -322,6 +322,30 @@ $(DOS)/TK68W.EXE: $(B)/tests/start.o $(B)/tests/tk68w.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk68w.map file { $(B)/tests/start.o $(B)/tests/tk68w.o }
+
+# TK69A.EXE: TK69's program, importing TKID (the DLL search of a program
+# in its own directory); TK69L.DLL: tkid.c as a DLL importing TKID
+$(DOS)/TK69A.EXE: $(B)/tests/start.o $(B)/tests/tk69a.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win import ID_GET TKID.1 \
+	    option map=$(B)/tests/tk69a.map file { $(B)/tests/start.o $(B)/tests/tk69a.o }
+$(DOS)/TK69L.DLL: $(B)/tests/dllstart.o $(B)/tests/dll/tknodep.o \
+                  tests/apps/dll.lnk tests/apps/tkid.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/tkid.lnk option modname=TK69L import NOFUNC TKID.1 \
+	    name $@ libpath $(WATCOM)/lib286/win option map=$(B)/tests/tk69l.map \
+	    file { $(B)/tests/dllstart.o $(B)/tests/dll/tknodep.o }
+
+# TK70.EXE: Microsoft's OLE 2 libraries starting up (they are not w16's:
+# the boot-test case staroff copies an installed set in)
+$(DOS)/TK70.EXE: $(B)/tests/start.o $(B)/tests/tk70.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    import COBUILDVERSION COMPOBJ.1 import COINITIALIZE COMPOBJ.2 \
+	    import COUNINITIALIZE COMPOBJ.3 import COGETMALLOC COMPOBJ.4 \
+	    import OLEBUILDVERSION OLE2.1 import OLEINITIALIZE OLE2.2 \
+	    import OLEUNINITIALIZE OLE2.3 import STGCREATEDOCFILE STORAGE.1 import INITAPP USER.5 \
+	    option map=$(B)/tests/tk70.map file { $(B)/tests/start.o $(B)/tests/tk70.o }
 
 # TK57.EXE: KERNEL in 386 Enhanced mode: WinFlags, the Reboot API (tk57s.asm)
 $(B)/tests/tk57.o: tests/apps/tk57ref.h tests/apps/tklog.h

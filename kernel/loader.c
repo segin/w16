@@ -27,6 +27,9 @@
 #define LE_BIGENTRY     10      /* an entry table of 32K or more (TK66
                                    "entries"; the SDK's 10 is "incorrect
                                    Windows version") */
+#define LE_OS2          12      /* an OS/2 NE file (NE target 1; TK69) */
+#define LE_DOS4         13      /* NE target 3 (TK69) */
+#define LE_UNKNOWNEXE   14      /* NE targets 4 and 5 (TK69) */
 #define LE_WIN32        21      /* LoadModule of a 32-bit program (a PE
                                    file) without Win32s (SH14); the SDK:
                                    "requires 32-bit extensions" */
@@ -301,6 +304,29 @@ static const char FAR *env_path(void)
    loads its shell there is no running task, and DLLs in the shell's own
    directory were not found.
    UNVERIFIED: network directories (the documentation lists them last). */
+/* While a program (not a library) is loaded for a task started after
+   the shell, the directory it was found in: the place of the search
+   that is the current task's directory otherwise. Observed on Windows
+   3.1 (tests/apps/tk69.c, TK69 as the shell and started from WIN.INI
+   run=, Standard and 386 Enhanced mode): WinExec of C:\TK69X\TK69A.EXE,
+   which imports TKID, with copies of TKID.DLL in TK69A's directory, the
+   current directory, the Windows and system directories and the caller's
+   directory, finds them in the order current, Windows, system, TK69A's;
+   the caller's copy never, nor C:\TK69X's for LoadLibrary of a DLL in
+   C:\TK69X that imports TKID. So a program installed in a directory of
+   its own (StarOffice 3.1: C:\OFFICE31\SWRITER3.EXE and its DLLs there)
+   finds its DLLs from any current directory. The shell's own directory
+   is not searched for the shell's DLLs (tests/tk5ref.sh): the shell is
+   not loaded through load_module.
+   UNVERIFIED: 3.1 also left TK69A's directory out with C:\TK69C as the
+   current directory (C:\TK69X\TK69A.EXE named in full, relative or by
+   "..", and with a copy in C:\TK69C\TK69X), but not with C:\, C:\TK6,
+   C:\TK69CC or C:\ABCDE, nor for C:\TK69X\SUB\TK69A.EXE from C:\TK69C:
+   apparently a faulty comparison with the current directory, which w16
+   does not copy. */
+static char prog_dir[DOS_PATHMAX];
+static int prog_dir_wanted;     /* LoadModule's load (load_module) */
+
 static int open_search(const char FAR *name, const char *ext, char *found,
                        u16 *fh, u16 *err)
 {
@@ -320,8 +346,13 @@ static int open_search(const char FAR *name, const char *ext, char *found,
         try_dir(win_dir, kstrlen(win_dir), name, ext, found, fh) ||
         try_dir(sys_dir, kstrlen(sys_dir), name, ext, found, fh))
         return 1;
-    t = task_module();
-    if (t) {
+    /* the fourth place: the directory of the program being loaded while a
+       program is (for the DLLs it imports, also those of its DLLs), else
+       the current task's (below: prog_dir) */
+    if (prog_dir[0]) {
+        if (try_dir(prog_dir, kstrlen(prog_dir), name, ext, found, fh))
+            return 1;
+    } else if ((t = task_module()) != NULL) {
         dir_of(dir, t->path);
         if (try_dir(dir, kstrlen(dir), name, ext, found, fh))
             return 1;
@@ -895,11 +926,25 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
         }
         return NULL;
     }
+    /* another system's NE file. Observed on Windows 3.1 (TK69, KRNL386,
+       Standard mode): LoadModule of a copy of a Windows program whose
+       target system (NE 36h) is 1 (OS/2) gives 12, also with an expected
+       version of 0 (OS/2 1.x); 3 gives 13; 4 and 5 give 14; 0 loads it as
+       2 does. UNVERIFIED: the values above 5 (taken as 4 and 5). Before,
+       w16 loaded such a file as a Windows module. */
+    if (h.target_os != NEOS_WINDOWS && h.target_os != 0) {
+        f_close(fh);
+        *err = h.target_os == NEOS_OS2 ? LE_OS2 : h.target_os == NEOS_DOS4 ? LE_DOS4 : LE_UNKNOWNEXE;
+        return NULL;
+    }
     if (!(h.flags & NEF_LIBRARY) && !program) {
         f_close(fh);
         *err = LE_PROGRAM;
         return NULL;
     }
+    /* the program's directory, for the DLLs it imports (prog_dir) */
+    if (!(h.flags & NEF_LIBRARY) && load_depth == 1 && prog_dir_wanted)
+        dir_of(prog_dir, path);
     if (!(h.flags & NEF_LIBRARY) && cur_task) {
         u16 dsel;
         if (!galloc(GMEM_FIXED, 64, 0, &dsel)) {
@@ -1563,7 +1608,7 @@ static u16 load_module(const char FAR *name, void FAR *params, int oldapp)
     const loadparms FAR *lp = params;
     module FAR *m;
     u16 err, libinit, ad, r;
-    int not_ne, is_pe;
+    int not_ne, is_pe, outer;
 
     if (params == (void FAR *)-1L)
         return LoadLibrary(name);
@@ -1579,7 +1624,14 @@ static u16 load_module(const char FAR *name, void FAR *params, int oldapp)
     last_libinit = 0;
     last_not_ne = 0;
     last_pe = 0;
+    outer = !load_depth;        /* not from a DLL's initialisation */
+    if (outer)
+        prog_dir_wanted = 1;
     m = load_file(name, NULL, 1, &err);
+    if (outer) {
+        prog_dir_wanted = 0;
+        prog_dir[0] = 0;
+    }
     libinit = last_libinit;
     last_libinit = 0;
     not_ne = last_not_ne;
@@ -1603,6 +1655,12 @@ static u16 load_module(const char FAR *name, void FAR *params, int oldapp)
             return start_oldapp(name, lp);
         return LE_BADEXE;
     }
+    /* observed on 3.1 (TK69): WinExec of an NE file for target 4
+       (Windows/386) returns an instance where LoadModule gives 14; 12 and
+       13 (OS/2, DOS 4) it returns as LoadModule. UNVERIFIED that it is
+       WINOLDAP that runs (the MS-DOS stub): taken from the 11 case */
+    if (!m && err == LE_UNKNOWNEXE && oldapp && winboot_active && lp)
+        return start_oldapp(name, lp);
     if (!m)
         return err;
     if (m->flags & NEF_LIBRARY)
