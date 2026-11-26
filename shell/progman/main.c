@@ -133,6 +133,17 @@ void load_groups(void)
     }
     for (k = 0; k < l.nmodel; k++)
         group_open(l.model[k]);
+    /* the top group is the active one, an icon too (observed on 3.1:
+       Order=" 2 4 1 3" with Games minimised came up with Games' icon
+       active, its title highlighted; minimising it had passed the
+       activation on to Main here) */
+    {
+        HWND top = GetWindow(g_client, GW_CHILD);
+        while (top && !group_name(top))
+            top = GetWindow(top, GW_HWNDNEXT);
+        if (top && top != (HWND)(WORD)SendMessage(g_client, WM_MDIGETACTIVE, 0, 0))
+            SendMessage(g_client, WM_MDIACTIVATE, (WPARAM)top, 0);
+    }
     mem_free(order);
     mem_free(keys);
     mem_free((LPSTR)l.tried);
@@ -590,6 +601,14 @@ LRESULT CALLBACK __export FrameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
             /* within a second of that menu closing: it was its command */
             if (child && IsWindow(child) && GetTickCount() - menu_closed_at < 1000)
                 return SendMessage(child, WM_SYSCOMMAND, wp, lp);
+        }
+        /* Shift+Alt+F4 (Close with Shift held) saves the settings and
+           stays, as Shift+File>Exit (observed on 3.1: with Save Settings
+           on Exit off, the arranged group icons were written and no Exit
+           box came) */
+        if ((wp & 0xFFF0) == SC_CLOSE && GetKeyState(VK_SHIFT) < 0) {
+            save_settings(TRUE);
+            return 0;
         }
         break;
     case WM_DDE_INITIATE:

@@ -1278,6 +1278,7 @@ typedef struct MLOOP {
 } MLOOP;
 
 void sysbox_rect(PWND w, RECT *r);
+HWND icon_title_of(HWND h);
 extern HWND hwndSysMenuOpen;
 
 static void invert_sysbox(MLOOP *l)
@@ -1358,6 +1359,22 @@ static void open_popup(MLOOP *l, HMENU popup, int x, int y)
     if ((m = valid_menu(popup)) == 0)  /* (again: the owner may have changed it) */
         return;
     layout_popup(m);
+    /* an icon's system menu (a click on it, Alt+Space or Alt+-): above
+       the icon, its last line (the popup's shadow row) on the icon's
+       top line; where there is no room above, below the icon's title
+       (3.1: Program Manager's icon at 21,408 had its menu at 22,266,
+       one at 21,-18 at 22,44 under its two-line title; a group's icon
+       at 168,308 in Program Manager at 172,166. UNVERIFIED why the
+       left edge is 1 pixel in on the desktop and 4 for an MDI child) */
+    if (l->sysmenu && valid_wnd(l->owner) && (PW(l->owner)->style & WS_MINIMIZE)) {
+        PWND o = PW(l->owner);
+        x = o->rcWindow.left + sysmet[(o->style & WS_CHILD) ? SM_CXFRAME : SM_CXBORDER];
+        y = o->rcWindow.top - m->cy;
+        if (y < 0) {
+            HWND t = icon_title_of(l->owner);
+            y = t && (PW(t)->style & WS_VISIBLE) ? PW(t)->rcWindow.bottom : o->rcWindow.bottom;
+        }
+    }
     if (x + m->cx > sysmet[SM_CXSCREEN])
         x = sysmet[SM_CXSCREEN] - m->cx;
     if (y + m->cy > sysmet[SM_CYSCREEN])
@@ -1669,6 +1686,16 @@ static void run_menu(MLOOP *l)
                 l->done = TRUE;
                 continue;
             }
+            /* a double click on an icon: its click put the menu up, the
+               second press ends it and the icon opens (3.1: Program
+               Manager's icon double-clicked came up restored, no menu) */
+            if (l->sysmenu && valid_wnd(l->owner) && (PW(l->owner)->style & WS_MINIMIZE) &&
+                (int)send_message(l->owner, WM_NCHITTEST, 0, MAKELONG(msg.pt.x, msg.pt.y)) == HTCAPTION) {
+                l->result = SC_RESTORE;
+                l->resultsys = TRUE;
+                l->done = TRUE;
+                continue;
+            }
             /* elsewhere: a press like any other */
             msg.message = msg.message == WM_LBUTTONDBLCLK ? WM_LBUTTONDOWN : WM_NCLBUTTONDOWN;
             /* fall through */
@@ -1889,6 +1916,28 @@ void menu_track_point(HWND h, POINT pt)
     }
     if (l.barsel < 0)
         return;
+    run_menu(&l);
+}
+
+/* an icon's system menu from a click on it: as from the keyboard, its
+   first item selected (3.1: Restore) */
+void menu_track_icon(HWND h)
+{
+    MLOOP l;
+    if (!valid_wnd(h))
+        return;
+    fmemset(&l, 0, sizeof l);
+    l.owner = h;
+    l.barsel = -1;
+    l.sel = -1;
+    l.bar = sysmenu_of(PW(h));
+    l.sysmenu = TRUE;
+    if (!(PW(h)->style & WS_CHILD))
+        l.menubar = (HMENU)PW(h)->hMenu;
+    sysmenu_states(PW(h), l.bar);
+    send_message(h, WM_INITMENU, (WPARAM)l.bar, 0);
+    select_bar(&l, 0, TRUE);
+    select_popup_item(&l, 0);
     run_menu(&l);
 }
 

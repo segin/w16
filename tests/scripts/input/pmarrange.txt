@@ -1,0 +1,69 @@
+; Program Manager's Arrange Icons and what is saved of it (tests/boottest.sh
+; pmarrange; run with INPUTRUN_STAY=1): the Read Me item of the Main group
+; dragged into the gap between File Manager and Control Panel and Window >
+; Arrange Icons (Read Me second, the others after it one place on; dropped
+; over File Manager, w16's Program Manager left the pointer's white out,
+; not looked into); the minimised Games group's icon
+; dragged right and Window > Arrange Icons with it active (Accessories,
+; StartUp, Games); a click on the Games icon (its system menu above it,
+; Restore selected), Escape; Windows ended with Save Settings on Exit on
+; (File > Exit Windows, OK), then started again at the DOS prompt: the
+; same places and Games active. The case compares the screens and the
+; group files and PROGMAN.INI with Windows 3.1's.
+click 1
+sleep 1
+home
+move 132 101
+down 1
+sleep 0.5
+move -3 -1
+sleep 0.5
+move -25 -15
+sleep 0.5
+move -28 -20
+sleep 0.5
+up 1
+match 01-dragged 20 2
+shot 01-dragged
+key alt+w
+key a
+match 02-arranged 20 2
+shot 02-arranged
+home
+move 93 163
+down 1
+sleep 0.5
+move 3 0
+sleep 0.5
+move 50 -2
+sleep 0.5
+match 03-dragging 20 1
+shot 03-dragging
+move 64 -1
+sleep 0.5
+up 1
+match 04-icondragged 20 2
+shot 04-icondragged
+key alt+w
+key a
+match 05-iconsarranged 20 2
+shot 05-iconsarranged
+home
+move 130 163
+click 1
+match 06-iconmenu 20 2
+shot 06-iconmenu
+key Escape
+match 07-menuclosed 20 2
+shot 07-menuclosed
+key alt+f
+key x
+sleep 2
+key Return
+waitexit 60
+sleep 2
+type win /s /b
+key Return
+sleep 20
+match 08-restarted 60 3
+shot 08-restarted

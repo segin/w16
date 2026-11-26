@@ -22,10 +22,11 @@ LONG def_gettextlength(PWND w);
 HBRUSH sys_brush(HBRUSH b);
 void invalidate_screen(const RECT *rc);
 void menu_track_bar(HWND h, char key);
-void track_window(HWND h, UINT hit, BOOL keyboard);
+BOOL track_window(HWND h, UINT hit, BOOL keyboard);
 LRESULT WINAPI __loadds MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
 void menu_track_point(HWND h, POINT pt);
 void menu_track_sys(HWND h);
+void menu_track_icon(HWND h);
 
 static HBITMAP bmClose, bmReduce, bmZoom, bmRestore, bmReduceD, bmZoomD, bmRestoreD;
 
@@ -667,7 +668,13 @@ static void sys_command(HWND h, PWND w, WPARAM cmd, LPARAM lp)
         send_message(h, WM_CLOSE, 0, 0);
         break;
     case SC_MOVE:
-        track_window(h, HTCAPTION, (cmd & 0xF) == 0);
+        /* an icon clicked, not dragged: its system menu (3.1: a click on
+           a Program Manager group's icon, or on Program Manager's own on
+           the desktop, put the menu up on the release, Restore selected;
+           a press held still showed nothing) */
+        if (track_window(h, HTCAPTION, (cmd & 0xF) == 0) && (w = valid_wnd(h)) != 0 &&
+            (w->style & WS_MINIMIZE) && (w->style & WS_SYSMENU))
+            menu_track_icon(h);
         break;
     case SC_SIZE:
         track_window(h, (cmd & 0xF) ? HTLEFT + (cmd & 0xF) - 1 : HTBOTTOMRIGHT, (cmd & 0xF) == 0);

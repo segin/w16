@@ -1175,33 +1175,23 @@ static UINT desk_icons(PWND p)
     return n;
 }
 
-/* minimised children in rows along the bottom (UNVERIFIED spacing) */
+/* minimised children in rows along the bottom, in the desktop's order
+   and places (3.1, Program Manager's Window > Arrange Icons with a group
+   icon active: Accessories at 21,218, StartUp at 171,218 and Games
+   dragged to 330,215 went to 21, 96 and 171 in that order, each at the
+   row's top, 218 in a 290-line client; w16 took them in Z order, Games
+   first, 2 lines lower). UNVERIFIED: the return value (the height of a
+   row, as before; the desktop's is the count, TM3) */
 UINT WINAPI ArrangeIconicWindows(HWND parent)
 {
     PWND p = valid_wnd(parent);
-    HWND s;
-    int x, y, cx = sysmet[SM_CXICONSPACING], cy = sysmet[SM_CYICONSPACING];
-    int width, n = 0;
+    UINT n;
     if (!p)
         return 0;
+    n = desk_icons(p);
     if (parent == hwndDesktop)
-        return desk_icons(p);
-    width = p->rcClient.right - p->rcClient.left;
-    x = 0;
-    y = p->rcClient.bottom - p->rcClient.top - cy;
-    for (s = p->hwndChild; s; s = PW(s)->hwndNext) {
-        if (!(PW(s)->style & WS_MINIMIZE) || !(PW(s)->style & WS_VISIBLE))
-            continue;
-        if (x + cx > width && x) {
-            x = 0;
-            y -= cy;
-        }
-        set_window_pos(s, 0, x + (cx - sysmet[SM_CXICON]) / 2, y + 2, 0, 0,
-                       SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-        x += cx;
-        n++;
-    }
-    return n ? cy : 0;
+        return n;
+    return n ? sysmet[SM_CYICONSPACING] : 0;
 }
 
 /* ---- icon titles (#32772): the caption under a minimised window ---- */

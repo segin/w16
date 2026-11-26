@@ -2089,10 +2089,13 @@ static LRESULT drag_drop(HWND hwnd, group FAR *g, LPARAM lp)
             invalidate_item(hwnd, t);
             t->x = at.x;
             t->y = at.y;
+            /* saved with the settings, not now (3.1: an item dragged
+               within its group, Program Manager then ended without
+               exiting, left the file as it was; with Save Settings on
+               Exit off nothing was written on exit either) */
+            g->dirty = TRUE;
             if (g_autoarrange)
                 group_arrange(hwnd);
-            if (write_group(g))
-                g->dirty = FALSE;
             invalidate_item(hwnd, t);
             group_rescroll(hwnd);
         }
