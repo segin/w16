@@ -831,6 +831,16 @@ static int layout_bar(LPMENU m, int width, BOOL align)
                the same widths after a maximised group's 19-pixel bitmap,
                File then at 19: the widths are rounded, not the places) */
             w = (w + 4) / 8 * 8;
+        /* a text that starts with 08h: that item and the ones after it
+           right-justified as with MF_HELP, the item its text's width (the
+           08h counted as a character) plus one cell, not two, its text
+           still a cell in (US38: "\bFour" 41 wide, "Four" at 8) */
+        if (!(it->flags & (MF_BITMAP | MF_OWNERDRAW | MF_SEPARATOR)) && it->text &&
+            *STEXT(it->text) == '\b') {
+            w -= cc;
+            if (help == m->count)
+                help = i;
+        }
         if ((it->flags & MF_HELP) && help == m->count)
             help = i;
         if (x + w > width && x > 0) {
@@ -869,26 +879,112 @@ int menu_bar_height(PWND w, int width)
            sysmet[SM_CYBORDER];
 }
 
-/* draw a menu item's text with its mnemonic underlined, tabbed text
-   right-aligned at right */
-static void draw_item_text(HDC hdc, LPMITEM it, int x, int y, int right)
+/* An item's text in parts (US38, Windows 3.1): the text up to its first
+   08h, or without one up to its first '\t', drawn at the item's left with
+   its mnemonic; in a popup, the text after that 08h up to the first '\t'
+   (none if the tab comes before it) right-aligned at the end of the
+   widest item's text (rightx); the text after the first '\t' left-aligned
+   at the popup's tab column (tabx). Neither of the last two takes '&' as a
+   mnemonic: they are drawn as they are, though the right-aligned part is
+   placed by its width without its ampersands ("Two\b&Amp": "&Amp" drawn
+   ending 9 pixels past the column). A further '\t' or 08h is drawn as a
+   character (the font's box). An 08h first in a popup's item: nothing of
+   the text before the tab is drawn. In a bar, an 08h first is skipped
+   (the item starts the bar's right-justified group, layout_bar), the
+   right-aligned part is never drawn, and the text after a tab is drawn at
+   x tabx of the window (8 on VGA, over the first item's text; UNVERIFIED
+   for a window whose frame is not 4 pixels wide). Microsoft Visual C++
+   1.52's IDE puts 08h before its File menu's accelerators and '\t' in
+   its other menus. */
+static int ext_noprefix(HDC hdc, const char *s, int n)
+{
+    char out[128];
+    int i, k = 0;
+    for (i = 0; i < n && k < (int)sizeof out; i++) {
+        if (s[i] == '&') {
+            i++;
+            if (i >= n)
+                break;
+        }
+        out[k++] = s[i];
+    }
+    return k ? LOWORD(GetTextExtent(hdc, out, k)) : 0;
+}
+
+/* the text before the 08h or tab with its mnemonic: "&&" an ampersand,
+   and only the last single '&' underlines the character after it, which
+   may be the 08h or tab that ends the part (US38: "Ite&m&\bCtrl" on 3.1
+   is "Item" with a 4-pixel line after it, not under the m; "&\tX" a
+   4-pixel line alone) */
+static void prefix_out(HDC hdc, int x, int y, const char *s, int n)
+{
+    int cx = x, ulx = 0, i, start = 0;
+    char ulc = 0;
+    TEXTMETRIC tm;
+    GetTextMetrics(hdc, &tm);
+    for (i = 0; i <= n; i++) {
+        if (i == n || s[i] == '&') {
+            if (i > start) {
+                TextOut(hdc, cx, y, s + start, i - start);
+                cx += LOWORD(GetTextExtent(hdc, s + start, i - start)) - tm.tmOverhang;
+            }
+            if (i < n && s[i + 1] == '&' && i + 1 < n) {
+                TextOut(hdc, cx, y, "&", 1);
+                cx += LOWORD(GetTextExtent(hdc, "&", 1)) - tm.tmOverhang;
+                i++;
+            } else if (i < n && s[i + 1]) {
+                ulx = cx;
+                ulc = s[i + 1];
+            }
+            start = i + 1;
+        }
+    }
+    if (ulc) {
+        int cw = LOWORD(GetTextExtent(hdc, &ulc, 1));
+        HPEN pen = CreatePen(PS_SOLID, 1, GetTextColor(hdc));
+        HPEN old = SelectObject(hdc, pen);
+        MoveTo(hdc, ulx, y + tm.tmAscent + 1);
+        LineTo(hdc, ulx + cw, y + tm.tmAscent + 1);
+        SelectObject(hdc, old);
+        DeleteObject(pen);
+    }
+}
+
+static void draw_item_text(HDC hdc, LPMITEM it, int x, int y, int rightx, int tabx, BOOL bar)
 {
     char buf[128];
-    char *tab;
+    char *t = buf;
+    int len, bpos = -1, tpos = -1, i, left;
+    RECT r;
     text_of(it, buf, sizeof buf);
-    for (tab = buf; *tab && *tab != '\t'; tab++)
-        ;
-    {
-        RECT r;
-        SetRect(&r, x, y, 0x7FFF, y + cySysChar);
-        DrawText(hdc, buf, (int)(tab - buf), &r, DT_SINGLELINE | DT_NOCLIP);
+    if (bar && *t == '\b')
+        t++;
+    len = lstr_len(t);
+    for (i = 0; i < len; i++) {
+        if (t[i] == '\b' && bpos < 0)
+            bpos = i;
+        if (t[i] == '\t' && tpos < 0)
+            tpos = i;
     }
-    if (*tab) {
-        /* the accelerator, from x 'right' (a popup's tab column) */
-        RECT r;
-        tab++;
-        SetRect(&r, right, y, 0x7FFF, y + cySysChar);
-        DrawText(hdc, tab, -1, &r, DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX);
+    left = bpos >= 0 ? bpos : tpos >= 0 ? tpos : len;
+    if (left)
+        prefix_out(hdc, x, y, t, left);
+    if (!bar && bpos > 0) {
+        int n = (tpos >= 0 ? tpos : len) - bpos - 1;
+        if (n > 0) {
+            int rx = rightx - ext_noprefix(hdc, t + bpos + 1, n);
+            SetRect(&r, rx, y, 0x7FFF, y + cySysChar);
+            DrawText(hdc, t + bpos + 1, n, &r, DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX);
+        }
+    }
+    if (tpos >= 0 && t[tpos + 1]) {
+        /* in a bar on an opaque background, over what is there (US38:
+           "Th&ree\tY" a Y in a white cell over the first item's O) */
+        int mode = bar ? SetBkMode(hdc, OPAQUE) : 0;
+        SetRect(&r, tabx, y, 0x7FFF, y + cySysChar);
+        DrawText(hdc, t + tpos + 1, -1, &r, DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX);
+        if (bar)
+            SetBkMode(hdc, mode);
     }
 }
 
@@ -930,7 +1026,11 @@ static void draw_bar_item(HDC hdc, LPMITEM it, int ox, int oy)
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, syscolor[(it->flags & MF_GRAYED) ? COLOR_GRAYTEXT :
                                hil ? COLOR_HIGHLIGHTTEXT : COLOR_MENUTEXT]);
-    draw_item_text(hdc, it, r.left + cxSysCharMenu(), r.top, r.right);
+    {
+        COLORREF bk = SetBkColor(hdc, syscolor[hil ? COLOR_HIGHLIGHT : COLOR_MENU]);
+        draw_item_text(hdc, it, r.left + cxSysCharMenu(), r.top, 0, cxSysCharMenu(), TRUE);
+        SetBkColor(hdc, bk);
+    }
 }
 
 void menu_draw_bar(HDC hdc, PWND w, int x, int y, int width)
@@ -1065,7 +1165,7 @@ static void draw_popup_item(HDC hdc, LPMENU m, LPMITEM it, BOOL hil)
         PatBlt(mem, 0, 0, cx, cy, WHITENESS);
         SetBkMode(mem, TRANSPARENT);
         SetTextColor(mem, RGB(0, 0, 0));
-        draw_item_text(mem, it, POP_LEFT, 0, m->tabx);
+        draw_item_text(mem, it, POP_LEFT, 0, m->tabx - POP_GAP, m->tabx, FALSE);
         UnrealizeObject(hbrGray);
         /* the checkerboard starts at the item's corner, not the screen's:
            Windows Write's grayed Undo under the highlight, its item at
@@ -1092,7 +1192,21 @@ static void draw_popup_item(HDC hdc, LPMENU m, LPMITEM it, BOOL hil)
         DeleteDC(mem);
         return;
     }
-    draw_item_text(hdc, it, r.left + POP_LEFT, r.top, r.left + m->tabx);
+    draw_item_text(hdc, it, r.left + POP_LEFT, r.top, r.left + m->tabx - POP_GAP,
+                   r.left + m->tabx, FALSE);
+    if (it->flags & MF_POPUP) {
+        /* a submenu's arrow: a triangle 5 wide and 9 high pointing right,
+           its tip 4 pixels in from the frame, centred on the item's
+           height, in the text's colour; not counted in the width (US38:
+           "&Load Workspace\b", a popup of 230 for a widest text of 198);
+           UNVERIFIED grayed or highlighted */
+        HBRUSH b = CreateSolidBrush(GetTextColor(hdc)), ob = SelectObject(hdc, b);
+        int k, top = r.top + (r.bottom - r.top - 9) / 2;
+        for (k = 0; k < 5; k++)
+            PatBlt(hdc, r.right - 7 + k, top + k, 1, 9 - 2 * k, PATCOPY);
+        SelectObject(hdc, ob);
+        DeleteObject(b);
+    }
 }
 
 LRESULT WINAPI __loadds MenuWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
@@ -1716,6 +1830,12 @@ BOOL WINAPI TrackPopupMenu(HMENU hm, UINT flags, int x, int y, int r, HWND h, co
     else if (flags & TPM_RIGHTALIGN)
         x -= m->cx;
     open_popup(&l, hm, x, y);
+    /* with no mouse button down, the first item selected, as from the
+       keyboard (US38 on 3.1: TrackPopupMenu called from a timer's
+       message, the pointer away from the popup; UNVERIFIED with a
+       button down, a first item grayed or a separator) */
+    if (l.hwndPopup && GetAsyncKeyState(VK_LBUTTON) >= 0 && GetAsyncKeyState(VK_RBUTTON) >= 0)
+        select_popup_item(&l, 0);
     run_menu(&l);
     return TRUE;
 }

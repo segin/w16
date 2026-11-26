@@ -1,0 +1,3 @@
+# US38.EXE (tests/apps/us38.c): menu accelerator text after '\t' and 08h; keybd_event in registers
+@tests/apps/app.lnk
+import U_KEYBD_EVENT USER.289

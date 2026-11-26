@@ -548,6 +548,14 @@
 #              fonts and in dialogs: the closed height, the edit field,
 #              the item heights, the dropped list, and their pixels by
 #              checksum; owner-drawn ones' WM_MEASUREITEMs)
+#   menutab    menu items' accelerator text after '\t' and 08h (user/menu.c;
+#              Microsoft Visual C++ 1.52's IDE showed a box for its File
+#              menu's 08h): probe US38 as the shell on 3.1 and on w16's
+#              USER, their OBS lines identical (GetMenuString, each
+#              popup's size) and the screens it saves (C:\US38_nn.BMP:
+#              popups from resource menus, AppendMenu, InsertMenu,
+#              ModifyMenu and ChangeMenu, with tabs, 08h, ampersands, a
+#              submenu, and menu bars with them) identical pixel for pixel
 #   editwrap   a multi-line edit control's word wrap and undo
 #              (user/edit.c): probe US35 as the shell on 3.1, on w16's USER
 #              and on w16's USER and GDI, their OBS lines identical (line
@@ -1004,7 +1012,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -4449,6 +4457,50 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         fi
         if [ "$r" = ok ]; then echo "ok   combo: US34 as 3.1 (combo boxes' heights, fields, lists and pixels in five fonts and in dialogs; w16 USER, and USER+GDI)"
         else echo "FAIL combo: $r"; fails=$((fails + 1)); fi ;;
+    menutab)
+        # menu accelerators after '\t' and 08h (tests/apps/us38.c)
+        mt38() {   # LABEL dropin.sh options...: US38's run, its log in LABEL.log
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 200 -W TK.LOG -o "$out/$_l" \
+                -f "$root/build/dos/US38.EXE=US38.EXE" -i 'boot:shell=C:\US38.EXE' -r "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            : > "$out/$_l.log"
+            for _d in "$out/$_l/c/WINDOWS" "$out/$_l/c"; do
+                [ -f "$_d/TK.LOG" ] && { tr -d '\r' < "$_d/TK.LOG" > "$out/$_l.log"; break; }
+            done
+        }
+        DROPIN_WSECS=30 mt38 menutab-ref &
+        DROPIN_WSECS=30 mt38 menutab-w16 -f "$user=WINDOWS/SYSTEM/USER.EXE" &
+        wait
+        r=ok
+        for k in ref w16; do
+            grep -q '^US38 end' "$out/menutab-$k.log" ||
+                { [ "$r" = ok ] && r="US38 did not finish ($k: $out/menutab-$k.log)"; }
+        done
+        if [ "$r" = ok ]; then
+            grep '^OBS ' "$out/menutab-ref.log" > "$out/menutab-ref.obs"
+            grep '^OBS ' "$out/menutab-w16.log" > "$out/menutab-w16.obs"
+            cmp -s "$out/menutab-ref.obs" "$out/menutab-w16.obs" ||
+                r="$(diff "$out/menutab-ref.obs" "$out/menutab-w16.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/menutab-ref.obs, menutab-w16.obs)"
+            grep -q '^FAIL' "$out/menutab-w16.log" && [ "$r" = ok ] &&
+                r="$(grep -c '^FAIL' "$out/menutab-w16.log") FAIL line(s) ($out/menutab-w16.log)"
+        fi
+        if [ "$r" = ok ]; then
+            # the screens it saved, pixel for pixel (not byte for byte:
+            # GetDIBits leaves the padding bits at a row's end as they were)
+            n=0
+            for b in "$out/menutab-ref/c"/US38_*.BMP; do
+                f=${b##*/}
+                n=$((n + 1))
+                px=$(magick compare -metric AE "$b" "$out/menutab-w16/c/$f" "$out/menutab-${f%.BMP}-diff.png" 2>&1 >/dev/null || true)
+                [ "${px%% *}" = 0 ] ||
+                    { r="screen $f differs from 3.1's by ${px%% *} pixel(s) ($out/menutab-${f%.BMP}-diff.png)"; break; }
+                rm -f "$out/menutab-${f%.BMP}-diff.png"
+            done
+            [ "$r" = ok ] && [ "$n" -lt 23 ] && r="only $n screens saved"
+        fi
+        if [ "$r" = ok ]; then echo "ok   menutab: US38 as 3.1 (accelerators after tabs and 08h in popups and bars, ampersands, GetMenuString; 23 screens)"
+        else echo "FAIL menutab: $r"; fails=$((fails + 1)); fi ;;
     editwrap)
         # a multi-line edit control's word wrap and undo (tests/apps/us35.c)
         ew35() {   # LABEL dropin.sh options...: US35's run, its log in LABEL.log

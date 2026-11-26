@@ -2691,6 +2691,19 @@ $(DOS)/US37.EXE: $(B)/tests/start.o $(B)/tests/us37.o $(B)/tests/us29s.o tests/a
 	$(WLINK) @tests/apps/us37.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us37.map file { $(B)/tests/start.o $(B)/tests/us37.o $(B)/tests/us29s.o }
 dos: $(DOS)/US37.EXE
+# US38: popup-menu accelerators after '\t' and 08h (tests/apps/us38.c;
+# Microsoft Visual C++ 1.52's IDE)
+$(B)/tests/us38.o: tests/apps/us38ref.h tests/apps/tklog.h
+$(B)/tests/us38.res: tests/apps/us38.rc
+	@mkdir -p $(@D)
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=$@ $<
+$(DOS)/US38.EXE: $(B)/tests/start.o $(B)/tests/us38.o $(B)/tests/us29s.o \
+                 $(B)/tests/us38.res tests/apps/app.lnk tests/apps/us38.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/us38.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us38.map option resource=$(B)/tests/us38.res \
+	    file { $(B)/tests/start.o $(B)/tests/us38.o $(B)/tests/us29s.o }
+dos: $(DOS)/US38.EXE
 # US36: text past 32767 characters; counts and positions of 32768 or more (tests/apps/us36.c)
 $(B)/tests/us36.o: tests/apps/us36ref.h tests/apps/tklog.h
 $(DOS)/US36.EXE: $(B)/tests/start.o $(B)/tests/us36.o tests/apps/app.lnk

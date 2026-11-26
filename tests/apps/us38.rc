@@ -1,0 +1,38 @@
+/* US38's resource menus (tests/apps/us38.c): items whose accelerator text
+   follows a tab, or a backspace (08h, written "\a" here as in Microsoft's
+   RC; Microsoft Visual C++ 1.52's IDE uses it), or both in one popup */
+#include <windows.h>
+
+US38 MENU
+BEGIN
+    POPUP "&Tabs"
+    BEGIN
+        MENUITEM "&New\tCtrl+N", 101
+        MENUITEM "&Open...\tCtrl+O", 102
+        MENUITEM "&Close", 103
+        MENUITEM "&Save\tCtrl+S", 104, GRAYED
+        MENUITEM "Save &As...", 105
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit\tAlt+F4", 106
+    END
+    POPUP "&Right"
+    BEGIN
+        MENUITEM "&New\aCtrl+N", 111
+        MENUITEM "&Open...\aCtrl+O", 112
+        MENUITEM "&Close", 113
+        MENUITEM "&Save\aCtrl+S", 114, GRAYED
+        MENUITEM "Save &As...", 115
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit\aAlt+F4", 116
+    END
+    POPUP "&Mixed"
+    BEGIN
+        MENUITEM "&New\aCtrl+N", 121
+        MENUITEM "&Undo\tCtrl+Z", 122
+        MENUITEM "Find &Matching Brace\tCtrl+]", 123
+        MENUITEM "&Edit...\a", 124
+        MENUITEM "Com&pile File 12345678.123\aCtrl+F8", 125
+        MENUITEM "&Go\tF5", 126
+        MENUITEM "Wide item without any", 127
+    END
+END
