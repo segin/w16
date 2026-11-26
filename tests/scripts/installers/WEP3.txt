@@ -5,7 +5,7 @@
 ; make the group (WM_DDE_ACK awaited with a filtered GetMessage), then the
 ; "complete" box
 ; dest WEP
-; expect WEP/CARDS.DLL
+; expect WEP/TRIPEAKS.EXE WEP/SKI.EXE WEP/IWLIB.DLL
 key alt+f
 sleep 1
 key r

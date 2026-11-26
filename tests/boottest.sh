@@ -3742,7 +3742,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         # third-party installers on the install tree against 3.1
         # (tests/installers.sh); skipped where $W16_INSTDIR lacks them
         p=${part:-WEP1}
-        "$root/tests/installers.sh" "$out/installers-$p" "$p" > "$out/installers-$p.txt" 2>&1
+        "$root/tests/installers.sh" "$out/installers-$p" "$p" > "$out/installers-$p.txt" 2>&1 || true
         if grep -q "^PASS $p" "$out/installers-$p.txt"; then r=ok
         elif grep -q "^skip $p" "$out/installers-$p.txt"; then r=ok
         else r="$p: $(grep -m1 "^FAIL" "$out/installers-$p.txt" || echo 'no result') ($out/installers-$p.txt)"; fi
