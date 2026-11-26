@@ -651,8 +651,13 @@ static void load_device(const char *name)
             return;
         }
     } else {
-        if (strlen(sysdir) + strlen(name) >= sizeof(path)) { device_missing(name); return; }
-        strcpy(path, sysdir);
+        /* a name with a drive or starting at a root is a path as written
+           (Visual C++ 1.52's Setup writes device=C:\MSVC\BIN\dosxnt.386);
+           any other is in WIN386's directory */
+        int full = name[0] && name[1] == ':' || name[0] == '\\' || name[0] == '/';
+        if ((full ? 0 : strlen(sysdir)) + strlen(name) >= sizeof(path)) { device_missing(name); return; }
+        path[0] = 0;
+        if (!full) strcpy(path, sysdir);
         strcat(path, name);
         h = open(path, O_RDONLY | O_BINARY);
         if (h < 0) { device_missing(name); return; }
