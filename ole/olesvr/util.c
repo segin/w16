@@ -44,9 +44,12 @@ void mem_free(void FARP *p)
    inherit), in a global block when it does not fit there. */
 char FARP *tmp_dup(const char FARP *s)
 {
-    int n = str_len(s) + 1;
-    HLOCAL h = n < 0x4000 ? LocalAlloc(LMEM_FIXED, n) : NULL;
+    DWORD n = (DWORD)str_len(s) + 1;
+    HLOCAL h;
     char FARP *d;
+    if (n > STR_MAX)
+        return NULL;                    /* no NUL in 64K: refused */
+    h = n < 0x4000 ? LocalAlloc(LMEM_FIXED, (UINT)n) : NULL;
     if (h) {
         d = (char FARP *)MAKELP(SELECTOROF((void FAR *)&svr_inst), (WORD)h);
         str_cpy(d, s);
@@ -65,11 +68,12 @@ void tmp_free(char FARP *p)
         mem_free(p);
 }
 
-int str_len(const char FARP *s)
+/* the length, unsigned; STR_MAX when no NUL ends the first 64K - 1 */
+WORD str_len(const char FARP *s)
 {
-    int n = 0;
+    WORD n = 0;
     if (s)
-        while (s[n])
+        while (n < STR_MAX && s[n])
             n++;
     return n;
 }
@@ -84,7 +88,8 @@ void str_cpy(char FARP *d, const char FARP *s)
 
 char FARP *str_dup(const char FARP *s)
 {
-    char FARP *d = mem_alloc(str_len(s) + 1);
+    DWORD n = (DWORD)str_len(s) + 1;
+    char FARP *d = n <= STR_MAX ? mem_alloc(n) : NULL;
     if (d)
         str_cpy(d, s);
     return d;
@@ -232,7 +237,7 @@ void huge_copy(void FAR *dst, const void FAR *src, DWORD n)
 }
 
 /* formats whose DDE value is a handle rather than the bytes */
-static BOOL by_handle(WORD cf)
+BOOL by_handle(WORD cf)
 {
     return cf == CF_METAFILEPICT || cf == CF_BITMAP || cf == CF_DIB || cf == CF_PALETTE;
 }
@@ -240,15 +245,19 @@ static BOOL by_handle(WORD cf)
 /* A WM_DDE_DATA block for the data h the server handed over: flags, cf,
    then the bytes of h (GlobalSize of them, as Windows 3.1's OLESVR: its
    blocks are 4 bytes more than the server's) or, for the picture
-   formats, the handle itself. The server's block is freed. */
+   formats, the handle itself. The server's block is freed; when the
+   block cannot be made, h is left to the caller (data_free). */
 HGLOBAL data_block(WORD flags, WORD cf, HGLOBAL h)
 {
     DWORD n = by_handle(cf) ? 2 : (h ? GlobalSize(h) : 0);
     /* zero-filled: Windows 3.1's are (the rounding of the block) */
     HGLOBAL b = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, n + 4);
     BYTE FAR *p = b ? (BYTE FAR *)GlobalLock(b) : NULL;
-    if (!p)
+    if (!p) {
+        if (b)
+            GlobalFree(b);
         return NULL;
+    }
     ((WORD FAR *)p)[0] = flags;
     ((WORD FAR *)p)[1] = cf;
     if (by_handle(cf))
@@ -263,6 +272,43 @@ HGLOBAL data_block(WORD flags, WORD cf, HGLOBAL h)
     }
     GlobalUnlock(b);
     return b;
+}
+
+/* Frees data of format cf that no client will get: the bytes, or the
+   picture a handle format names (a METAFILEPICT's metafile too). */
+void data_free(WORD cf, HANDLE h)
+{
+    if (!h)
+        return;
+    if (cf == CF_BITMAP || cf == CF_PALETTE) {
+        DeleteObject((HGDIOBJ)h);
+        return;
+    }
+    if (cf == CF_METAFILEPICT) {
+        METAFILEPICT FAR *m = (METAFILEPICT FAR *)GlobalLock(h);
+        if (m) {
+            if (m->hMF)
+                DeleteMetaFile(m->hMF);
+            GlobalUnlock(h);
+        }
+    }
+    GlobalFree(h);
+}
+
+/* Frees a WM_DDE_DATA block whose post failed (the data is still ours
+   then), with the picture a handle format carries. */
+void data_block_free(HGLOBAL b, WORD cf)
+{
+    if (!b)
+        return;
+    if (by_handle(cf)) {
+        const WORD FAR *p = (const WORD FAR *)GlobalLock(b);
+        if (p) {
+            data_free(cf, (HANDLE)p[2]);
+            GlobalUnlock(b);
+        }
+    }
+    GlobalFree(b);
 }
 
 /* The value of a POKE or DATA block as a block of its own, what
@@ -292,10 +338,22 @@ HGLOBAL data_value(HGLOBAL block, WORD cf)
     return h;
 }
 
-void ack(HWND to, HWND from, WORD status, WORD hi)
+/* FALSE when it could not be posted: what the client frees on getting
+   the ACK (the item atom, the command or data block) is then the
+   caller's to free (ack_lost) */
+BOOL ack(HWND to, HWND from, WORD status, WORD hi)
 {
-    if (!PostMessage(to, WM_DDE_ACK, (WPARAM)from, MAKELPARAM(status, hi)))
-        if (hi && status != 0)          /* item atoms: ours to delete now */
-            ;                           /* UNVERIFIED: a failed post */
+    return PostMessage(to, WM_DDE_ACK, (WPARAM)from, MAKELPARAM(status, hi));
+}
+
+/* After an ACK that never reached the client: the atom and the block it
+   would have freed. A block that is no longer one (its owner gone) is
+   left alone. */
+void ack_lost(ATOM atom, HGLOBAL block)
+{
+    if (atom)
+        GlobalDeleteAtom(atom);
+    if (block && GlobalSize(block))
+        GlobalFree(block);
 }
 
