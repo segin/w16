@@ -222,6 +222,35 @@ u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
     for (i = 0; i < 6; i++)
         r->arg[i] = (u32)FP_OFF(frame) + 2 * (2 + i) + 1 <= sel_lim16(FP_SEG(frame)) ?
                     frame[2 + i] : 0;
+    {
+        /* with [w16] int21log=1 each traced call goes to the debuglog as
+           it happens (a live API log beside the INT 21h one) */
+        extern u16 __cdecl i21_log;
+        if (i21_log && b) {
+            static const char hx[] = "0123456789ABCDEF";
+            char s[120];
+            u16 n = 0, k, j, v;
+            const char FAR *mn = b->info[idx % TB_COUNT].mod;
+            for (k = 0; mn[k] && n < 12; k++)
+                s[n++] = mn[k];
+            s[n++] = '.';
+            v = b->info[idx % TB_COUNT].ordinal;
+            for (k = 10000; k; k /= 10)
+                if (v >= k || k == 1 || n && s[n - 1] != '.')
+                    s[n++] = (char)('0' + (v / k) % 10);
+            for (k = 0; k < 11; k++) {
+                v = k == 0 ? r->cs : k == 1 ? r->ip : k == 2 ? r->ax :
+                    k == 3 ? r->bx : k == 4 ? r->cx : k == 5 ? r->dx : r->arg[k - 6];
+                s[n++] = (char)(k == 1 ? ':' : ' ');
+                for (j = 0; j < 4; j++)
+                    s[n++] = hx[(v >> (12 - 4 * j)) & 15];
+            }
+            s[n++] = '\r';
+            s[n++] = '\n';
+            s[n] = 0;
+            kdbg_file(s);
+        }
+    }
     return b ? b->info[idx % TB_COUNT].real : 0;
 }
 

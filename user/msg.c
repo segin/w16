@@ -560,6 +560,7 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
     HQUEUE hq = cur_hq();
     QUEUE __far *q;
     BOOL remove = (flags & PM_REMOVE) != 0;
+    WORD rel;
     if (!hq)
         return FALSE;
     for (;;) {
@@ -595,7 +596,20 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
         }
         q = q_of(hq);
         q->wakemask = QS_ALLINPUT | QS_SENDMESSAGE;
-        if (!(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)) && !input_pending) {
+        /* what may be waiting for this call: sent messages always;
+           posted ones only when one came during this pass (the rest
+           are outside the filter); paints and timers only when the
+           filter takes them. A GetMessage for the DDE range alone (the
+           Entertainment Pack 2 and 3 setups' wait for WM_DDE_ACK) went
+           round this loop for ever, never yielding, while its own
+           progress window waited to be painted: Program Manager never
+           ran to answer, and Windows stood still. */
+        rel = QS_SENDMESSAGE | (q->changebits & QS_POSTMESSAGE);
+        if (in_filter(WM_PAINT, lo, hi))
+            rel |= QS_PAINT;
+        if (in_filter(WM_TIMER, lo, hi))
+            rel |= QS_TIMER;
+        if (!(q->wakebits & rel) && !input_pending) {
             idle_cursor_check(hq);
             /* a playback's events come by polling: no sleep meanwhile */
             if (journal_active())
@@ -603,7 +617,7 @@ static BOOL get_message(MSG __far *m, HWND hf, UINT lo, UINT hi, UINT flags, BOO
             else if (!input_pending)
                 K_WAITEVENT(0);
         }
-        else if (input_pending && !(q->wakebits & (QS_SENDMESSAGE | QS_POSTMESSAGE | QS_TIMER | QS_PAINT)))
+        else if (input_pending && !(q->wakebits & rel))
             K_OLDYIELD();
     }
     q = q_of(hq);
