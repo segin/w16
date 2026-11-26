@@ -1,0 +1,30 @@
+; Write's Character > Fonts... dialog (tests/boottest.sh writefonts;
+; WIN.INI run=WRITE.EXE, no printer installed): COMMDLG's Font dialog
+; as Write asks for it (the display's fonts as the printer's), then
+; Courier typed into the face box (a raster face: its sizes, its sample
+; and no line under it; as keys: "type" adds a space), Escape and File >
+; Exit (nothing to save).
+; Real keys (tests/inputrun.sh); the pointer goes to the desktop under
+; Write's window first, so that it is an arrow in every screen.
+click 1
+sleep 0.5
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+sleep 0.3
+move 200 200
+matchnow 01-start 20 1
+key alt+c
+sleep 0.5
+key f
+matchnow 02-fonts 20 2.5
+key shift+c o u r i e r
+matchnow 03-courier 20 2.5
+key Escape
+matchnow 04-closed 20 1.5
+key alt+f
+sleep 0.5
+key x
+matchnow 05-exited 20 2

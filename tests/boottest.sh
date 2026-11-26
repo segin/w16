@@ -665,6 +665,19 @@
 #              3.1, every saved file the same, every screen within
 #              tests/scripts/write.baseline; a part ending in o (wr30o)
 #              runs w16's Write with w16's OLECLI.DLL
+#   writefonts Write's Character > Fonts... (the user's report "Write says
+#              that no fonts are installed": w16's GDI had no EnumFonts or
+#              EnumFontFamilies), real keys (tests/scripts/input/
+#              writefonts.txt: the dialog, Courier typed, Escape, Exit), no
+#              printer installed, carets not blinking: Microsoft's Write on
+#              all-Microsoft 3.1 against w16's Write there (part ms, 0
+#              pixels) and against w16's Write, GDI, COMMDLG and USER there
+#              (part w16: 0 pixels but for the list's TrueType pictures,
+#              w16's own, and the TrueType sample in the first dialog
+#              screen); w16's install tree alone in 386 Enhanced mode
+#              (part tree, the user's setup): the dialog's screens against
+#              w16's approved ones in tests/scripts/input/writefonts-tree/
+#              (WRFONTS_TREEREF=update rewrites them)
 #   w16winfile w16's File Manager (WINFILE.EXE) against Microsoft's on
 #              all-Microsoft 3.1: one part per scenario of
 #              tests/scripts/winfile (w16winfile@wf01 ...):
@@ -1032,7 +1045,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -3063,6 +3076,67 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         ls "$out/$c-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
         if [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    writefonts)
+        s=$root/tests/scripts/input/writefonts.txt
+        r=ok
+        # the TrueType and device pictures of the face list (w16's own);
+        # the sample, Arial drawn by w16's rasteriser, in the first shot
+        wfmask="rectangle 49,171 67,236"
+        wfcmp() {   # wfcmp REFDIR W16DIR NAME [MASK]
+            for f in "$1"/[0-9]*.png; do
+                sn=$(basename "$f")
+                [ -f "$2/$sn" ] || { r="$3: no $sn"; return; }
+                d="point 639,479"
+                if [ -n "${4:-}" ]; then
+                    d="$d $4"
+                    [ "$sn" = 02-fonts.png ] && d="$d rectangle 204,263 478,323"
+                fi
+                magick "$f" -fill black -draw "$d" "$out/writefonts-$3-a.png"
+                magick "$2/$sn" -fill black -draw "$d" "$out/writefonts-$3-b.png"
+                n=$(magick compare -metric AE "$out/writefonts-$3-b.png" "$out/writefonts-$3-a.png" "$out/writefonts-$3-${sn%.png}-diff.png" 2>&1 >/dev/null || true)
+                n=${n%% *}
+                [ "$n" = 0 ] || { r="$3: $sn: $n pixels differ"; return; }
+            done
+            ls "$1"/[0-9]*.png > /dev/null 2>&1 || r="$3: no screens"
+        }
+        for pk in ${part:-ms w16 tree}; do
+            case $pk in
+            tree)
+                tref=$root/tests/scripts/input/writefonts-tree
+                rm -rf "$out/writefonts-tree" "$out/writefonts-tref"
+                "$root/tests/inputrun.sh" -s -b 60 -t 300 "$s" "$out/writefonts-tree" -T "$root/build/w16" -3 \
+                    -i 'WIN.INI:windows:run=WRITE.EXE' -i 'WIN.INI:windows:CursorBlinkRate=65535' \
+                    > "$out/writefonts-tree.txt" 2>&1 || true
+                if [ "${WRFONTS_TREEREF:-}" = update ]; then
+                    mkdir -p "$tref"
+                    cp "$out/writefonts-tree/02-fonts.png" "$out/writefonts-tree/03-courier.png" "$tref/"
+                fi
+                mkdir -p "$out/writefonts-tref"
+                cp "$out/writefonts-tree/02-fonts.png" "$out/writefonts-tree/03-courier.png" "$out/writefonts-tref/" 2>/dev/null || true
+                wfcmp "$tref" "$out/writefonts-tref" tree ;;
+            *)
+                cp "$root/.tools/ref/win31/cdrive/WINDOWS/WIN.INI" "$out/writefonts-WIN.INI"
+                python3 "$root/tests/scripts/iniset.py" "$out/writefonts-WIN.INI" 'windows:run=WRITE.EXE' 'windows:CursorBlinkRate=65535'
+                refrun writefonts-ref writefonts "$root/tests/inputrun.sh" -s -b 25 -t 240 "$s" "$out/writefonts-ref" -r \
+                    -f "$out/writefonts-WIN.INI=WINDOWS/WIN.INI"
+                set -- -r -f "$out/writefonts-WIN.INI=WINDOWS/WIN.INI" -f "$root/build/dos/WRITE.EXE=WINDOWS/WRITE.EXE"
+                m=
+                if [ $pk = w16 ]; then
+                    set -- "$@" -f "$root/build/dos/GDI.EXE=WINDOWS/SYSTEM/GDI.EXE" \
+                        -f "$root/build/dos/COMMDLG.DLL=WINDOWS/SYSTEM/COMMDLG.DLL" \
+                        -f "$root/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE"
+                    m=$wfmask
+                fi
+                rm -rf "$out/writefonts-$pk"
+                "$root/tests/inputrun.sh" -e "$out/writefonts-ref/boot.png" -E "$out/writefonts-ref" ${m:+-M "$m"} \
+                    -b 25 -t 240 "$s" "$out/writefonts-$pk" "$@" > "$out/writefonts-$pk.txt" 2>&1 || true
+                wfcmp "$out/writefonts-ref" "$out/writefonts-$pk" "$pk" "$m" ;;
+            esac
+            [ "$r" = ok ] || break
+        done
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   writefonts: 0 pixels"
+        else echo "FAIL writefonts: $r ($out)"; fails=$((fails + 1)); fi ;;
     w16winfile)
         r=ok
         for pk in ${part:-$(cd "$root/tests/scripts/winfile" && ls WF*.txt | sed 's/\.txt$//' | tr A-Z a-z)}; do
@@ -6266,6 +6340,7 @@ caseparts() {
     ddescen) for v in $(cd "$root/tests/scripts/dde" && ls *.txt | sed 's/\.txt$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     scrnsave) for v in $(cd "$root/tests/scripts/ss" && ls *.txt | sed 's/\.txt$//') tree286 tree386; do printf '%s@%s ' "$1" "$v"; done ;;
     control) echo "$1@ms $1@k286 $1@k386 $1@tree $1@resize" ;;
+    writefonts) echo "$1@ms $1@w16 $1@tree" ;;
     w16write) echo "$1@ms $1@k286 $1@k386 $1@tree"; for v in $WRSCEN_BOOT; do printf '%s@%s ' "$1" "$v"; done ;;
     w16winfile) for v in $(cd "$root/tests/scripts/winfile" && ls WF*.txt | sed 's/\.txt$//' | tr A-Z a-z); do printf '%s@%s ' "$1" "$v"; done ;;
     taskman) echo "$1@ms $1@k286 $1@us $1@usall $1@tree" ;;

@@ -848,12 +848,22 @@ void cmd_findagain(void)
 /* ---- Fonts ---- */
 
 
+/* Character > Fonts...: COMMDLG's Font dialog. The original's CHOOSEFONT
+   as COMMDLG gets it (observed through a logging COMMDLG on 3.1): Flags
+   3042h (CF_PRINTERFONTS, CF_INITTOLOGFONTSTRUCT, CF_NOSIMULATIONS,
+   CF_LIMITSIZE), sizes 4 to 127, the face, height (10 points: -13),
+   weight 400 and italic of the selection, no template or hook; hDC the
+   printer's (DT_RASPRINTER with a PostScript printer) or, with no
+   printer, the display's (DT_RASDISPLAY): the dialog lists the screen's
+   fonts as the printer's, with the line under the sample. */
 void cmd_fonts(void)
 {
     CHOOSEFONT cf;
     LOGFONT lf;
     CHPX c;
     FFN FAR *f;
+    HDC ic;
+    BOOL ok;
     sel_props(&c);
     f = font_get(&g_doc, c.ftc);
     m_set(&lf, 0, sizeof lf);
@@ -865,8 +875,17 @@ void cmd_fonts(void)
     cf.lStructSize = sizeof cf;
     cf.hwndOwner = g_frame;
     cf.lpLogFont = &lf;
-    cf.Flags = CF_SCREENFONTS | CF_INITTOLOGFONTSTRUCT;    /* UNVERIFIED flags */
-    if (!ChooseFont(&cf))
+    cf.Flags = CF_PRINTERFONTS | CF_INITTOLOGFONTSTRUCT | CF_NOSIMULATIONS | CF_LIMITSIZE;
+    cf.nSizeMin = 4;
+    cf.nSizeMax = 127;
+    ic = printer_ic();
+    if (!ic)
+        ic = CreateIC("DISPLAY", NULL, NULL, NULL);
+    cf.hDC = ic;
+    ok = ChooseFont(&cf);
+    if (ic)
+        DeleteDC(ic);
+    if (!ok)
         return;
     font_ftc = font_code(&g_doc, lf.lfFaceName, (BYTE)(lf.lfPitchAndFamily & 0xF0));
     font_hps = (BYTE)(cf.iPointSize / 5);
