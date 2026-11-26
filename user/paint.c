@@ -361,6 +361,7 @@ HDC WINAPI BeginPaint(HWND h, PAINTSTRUCT __far *ps)
     else if (!(w->flags & WF_INTERNALPAINT))
         SetRectRgn(upd, 0, 0, 0, 0);
     erase = (w->flags & WF_ERASEBKGND) != 0;
+    w->flags &= ~WF_PAINTPENDING;
     validate_all(w);
     /* USER's own controls paint in their own area, as they did before
        GetDC gave them their parent's (CS_PARENTDC, dc.c) */
@@ -395,13 +396,23 @@ void update_window(HWND h, BOOL children)
     if (!w || !(w->style & WS_VISIBLE))
         return;
     if (w->flags & WF_INPAINT) {
-        if (w->hq == cur_hq() || !booted)
+        /* validated by hand only when the window did not call BeginPaint
+           (as DispatchMessage, msg.c): one that did and invalidated itself
+           while it painted keeps its new update region for the next
+           WM_PAINT (StarChart's chart window does so; it draws the chart
+           in that second WM_PAINT) */
+        if (w->hq == cur_hq() || !booted) {
+            w->flags |= WF_PAINTPENDING;
             send_message(h, WM_PAINT, 0, 0);
-        if ((w = valid_wnd(h)) != 0 && (w->flags & WF_INPAINT) && (w->hq == cur_hq() || !booted)) {
+        }
+        if ((w = valid_wnd(h)) != 0 && (w->flags & WF_INPAINT) && (w->flags & WF_PAINTPENDING) &&
+            (w->hq == cur_hq() || !booted)) {
             PAINTSTRUCT ps;
             BeginPaint(h, &ps);
             EndPaint(h, &ps);
         }
+        if ((w = valid_wnd(h)) != 0)
+            w->flags &= ~WF_PAINTPENDING;
     }
     /* the next sibling taken before each child paints, and the walk ended
        if that one is gone or moved elsewhere: a WM_PAINT that destroyed

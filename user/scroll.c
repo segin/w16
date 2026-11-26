@@ -435,6 +435,7 @@ static void ghost(HDC hdc, const RECT *rc, BOOL vert, int off)
     int arrow = vert ? sysmet[SM_CYVSCROLL] : sysmet[SM_CXHSCROLL];
     int x, y, cx, cy;
     HBRUSH old;
+    DWORD borg;
     if (vert)
         x = rc->left, y = rc->top + off, cx = rc->right - rc->left, cy = arrow;
     else
@@ -444,7 +445,7 @@ static void ghost(HDC hdc, const RECT *rc, BOOL vert, int off)
     {
         DWORD org = GetDCOrg(hdc);
         UnrealizeObject(hbrGray);
-        SetBrushOrg(hdc, (LOWORD(org) + HIWORD(org)) & 1, 0);
+        borg = SetBrushOrg(hdc, (LOWORD(org) + HIWORD(org)) & 1, 0);
     }
     old = SelectObject(hdc, hbrGray);
     PatBlt(hdc, x, y, cx, 1, PATINVERT);
@@ -452,7 +453,7 @@ static void ghost(HDC hdc, const RECT *rc, BOOL vert, int off)
     PatBlt(hdc, x, y + 1, 1, cy - 2, PATINVERT);
     PatBlt(hdc, x + cx - 1, y + 1, 1, cy - 2, PATINVERT);
     SelectObject(hdc, old);
-    SetBrushOrg(hdc, 0, 0);
+    SetBrushOrg(hdc, LOWORD(borg), HIWORD(borg));       /* the DC's own back */
 }
 
 /* after a bar of hwnd was drawn in rc of hdc: the outline again on it if

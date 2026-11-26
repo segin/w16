@@ -426,6 +426,45 @@ static void sec_brushes(void)
     brush_on(cdc, b, 24, 16, "DIB 1 red/blue");
     brush_on(mdc, b, 24, 16, "DIB 1 red/blue on mono");
     DeleteObject(b);
+    /* black and white (StarChart's bars): the text and background colours? */
+    {
+        static const COLORREF bw[2] = { 0x000000L, 0xFFFFFFL };
+        static const COLORREF wb[2] = { 0xFFFFFFL, 0x000000L };
+        static const COLORREF bs[2] = { 0x000000L, 0xC0C0C0L };
+        static const COLORREF pbw[2] = { 0, 19 };
+        g = make_dib(1, bw, 0);
+        b = CreateDIBPatternBrush(g, DIB_RGB_COLORS);
+        GlobalFree(g);
+        colours(cdc, RGB(255, 0, 0), RGB(0, 0, 255));
+        brush_on(cdc, b, 24, 16, "DIB 1 black/white, red/blue");
+        colours(cdc, 0, RGB(255, 255, 255));
+        brush_on(cdc, b, 24, 16, "DIB 1 black/white");
+        colours(mdc, RGB(255, 255, 255), 0);
+        brush_on(mdc, b, 24, 16, "DIB 1 black/white on mono reversed");
+        colours(mdc, 0, RGB(255, 255, 255));
+        DeleteObject(b);
+        g = make_dib(1, wb, 0);
+        b = CreateDIBPatternBrush(g, DIB_RGB_COLORS);
+        GlobalFree(g);
+        colours(cdc, RGB(255, 0, 0), RGB(0, 0, 255));
+        brush_on(cdc, b, 24, 16, "DIB 1 white/black, red/blue");
+        colours(cdc, 0, RGB(255, 255, 255));
+        DeleteObject(b);
+        g = make_dib(1, bs, 0);
+        b = CreateDIBPatternBrush(g, DIB_RGB_COLORS);
+        GlobalFree(g);
+        colours(cdc, RGB(255, 0, 0), RGB(0, 0, 255));
+        brush_on(cdc, b, 24, 16, "DIB 1 black/silver, red/blue");
+        colours(cdc, 0, RGB(255, 255, 255));
+        DeleteObject(b);
+        g = make_dib(1, pbw, 1);
+        b = CreateDIBPatternBrush(g, DIB_PAL_COLORS);
+        GlobalFree(g);
+        colours(cdc, RGB(255, 0, 0), RGB(0, 0, 255));
+        brush_on(cdc, b, 24, 16, "DIB 1 PAL 0/19, red/blue");
+        colours(cdc, 0, RGB(255, 255, 255));
+        DeleteObject(b);
+    }
     g = make_dib(1, odd, 0);
     b = CreateDIBPatternBrush(g, DIB_RGB_COLORS);
     GlobalFree(g);

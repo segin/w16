@@ -170,13 +170,14 @@ static BOOL caret_gray;         /* CreateCaret's (HBITMAP)1: a gray caret */
 static void caret_blt(HDC hdc)
 {
     if (caret_gray) {
-        DWORD org = GetDCOrg(hdc);
+        DWORD org = GetDCOrg(hdc), borg;
         HBRUSH ob;
         UnrealizeObject(hbrGray);
-        SetBrushOrg(hdc, (LOWORD(org) + HIWORD(org)) & 1, 0);
+        borg = SetBrushOrg(hdc, (LOWORD(org) + HIWORD(org)) & 1, 0);
         ob = SelectObject(hdc, hbrGray);
         PatBlt(hdc, caret_x, caret_y, caret_cx, caret_cy, PATINVERT);
         SelectObject(hdc, ob);
+        SetBrushOrg(hdc, LOWORD(borg), HIWORD(borg));     /* the DC's own back */
     } else
         PatBlt(hdc, caret_x, caret_y, caret_cx, caret_cy, DSTINVERT);
 }

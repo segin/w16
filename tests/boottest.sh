@@ -43,7 +43,9 @@
 #              minimised), when it shows and activates the child, where the
 #              focus goes; ShowWindow and SetWindowPos of a plain child
 #              (WM_CHILDACTIVATE, WM_SETVISIBLE); the minimum size at
-#              CreateWindow and SetWindowPos. The messages are compared
+#              CreateWindow and SetWindowPos; BringWindowToTop of children,
+#              SW_SHOWMAXIMIZED of a hidden child in a 0 x 0 client, owned
+#              popups sent to the bottom and the top (Z lines). The messages are compared
 #              without WM_NCPAINT, WM_GETTEXT, WM_ERASEBKGND and
 #              WM_ISACTIVEICON (3.1 paints a window as it is shown, w16
 #              when it next paints), and without the WM_WINDOWPOSCHANGED

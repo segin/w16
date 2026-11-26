@@ -152,6 +152,7 @@ typedef WND __far *PWND;
 #define WF_DLG          0x0400  /* a dialog box (DLGWINDOWEXTRA) */
 #define WF_SENDSIZE     0x0800  /* WM_SIZE and WM_MOVE wait for the first show */
 #define WF_LISTBOX      0x1000  /* a list box (ListBoxWndProc made it) */
+#define WF_PAINTPENDING 0x2000  /* WM_PAINT sent, BeginPaint not called yet */
 #define WF_TEXTHEAP     0x000F0000L     /* which string heap holds the text */
 #define TEXTHEAP(w)     ((WORD)((w)->flags >> 16) & 15)
 

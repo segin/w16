@@ -882,13 +882,19 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_ERASEBKGND: {
         HBRUSH b = ((PCLS)w->cls)->hbrBackground;
         RECT r;
+        DWORD org;
         if (!b)
             return 0;
         b = sys_brush(b);
         GetClientRect(h, &r);
         UnrealizeObject(b);
-        SetBrushOrg((HDC)wp, 0, 0);
+        /* the DC's brush origin back afterwards: it is the window's corner
+           (USER sets it with the DC's origin, dc.c), and what the program
+           draws next in this BeginPaint uses it (StarChart's dithered bars
+           were three rows out of phase with 3.1's) */
+        org = SetBrushOrg((HDC)wp, 0, 0);
         FillRect((HDC)wp, &r, b);
+        SetBrushOrg((HDC)wp, LOWORD(org), HIWORD(org));
         return 1;
     }
     case WM_SETTEXT: {
@@ -1056,16 +1062,18 @@ LRESULT WINAPI __loadds DesktopWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_ERASEBKGND: {
         RECT r;
         HBRUSH old;
+        DWORD org;
         GetClientRect(h, &r);
         /* the pattern aligned with the screen: a cache DC can come with
            the brush origin another user left (the gray caret's sets it
            to 1); 3.1's dithered desktop had one phase everywhere, w16's
            changed from one repaint to the next (boot-test cpclose) */
         UnrealizeObject(sysbrush[COLOR_BACKGROUND]);
-        SetBrushOrg((HDC)wp, 0, 0);
+        org = SetBrushOrg((HDC)wp, 0, 0);
         old = SelectObject((HDC)wp, sysbrush[COLOR_BACKGROUND]);
         PatBlt((HDC)wp, r.left, r.top, r.right - r.left, r.bottom - r.top, PATCOPY);
         SelectObject((HDC)wp, old);
+        SetBrushOrg((HDC)wp, LOWORD(org), HIWORD(org));
         deskver_paint((HDC)wp, &r);     /* w16's stamp; off: nothing */
         return 1;
     }
