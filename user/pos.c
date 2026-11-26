@@ -48,6 +48,57 @@ void calc_client(PWND w)
         w->rcClient.bottom = w->rcClient.top;
 }
 
+/* Owned top-level windows stay with their owner (TK75 "z ..." on 3.1):
+   - one sent to HWND_BOTTOM goes just above its owner, and the owner
+     with all its owned windows, in their order, to the bottom
+     (StarWriter's floating Stylist, owned by the frame, is sent to the
+     bottom while hidden and then shown: w16 left it under the frame);
+   - a window brought to the top has the windows it owns put above it,
+     in their order. */
+static BOOL max_client_rule;     /* ShowWindow's maximise: WM_SIZE by the client size */
+
+static void owner_order(PWND w, HWND after)
+{
+    PWND d = PW(hwndDesktop);
+    HWND list[32], s, owner;
+    int n = 0, i;
+    if (after == HWND_BOTTOM && w->hwndOwner && valid_wnd(w->hwndOwner) &&
+        PW(w->hwndOwner)->hwndParent == hwndDesktop) {
+        owner = w->hwndOwner;
+        /* just above its owner */
+        unlink_window(w);
+        for (s = d->hwndChild; s && PW(s)->hwndNext != owner; s = PW(s)->hwndNext)
+            ;
+        link_window(w, d->hwndChild == owner ? HWND_TOP : s);
+        /* the group, in its order, to the bottom */
+        for (s = d->hwndChild; s && n < 32; s = PW(s)->hwndNext)
+            if (s == owner || PW(s)->hwndOwner == owner)
+                list[n++] = s;
+        for (i = 0; i < n; i++) {
+            unlink_window(PW(list[i]));
+            link_window(PW(list[i]), HWND_BOTTOM);
+        }
+    } else if (after == HWND_TOP || after == (HWND)-1 || after == (HWND)-2) {
+        HWND me = HW(w);
+        owner = w->hwndOwner && valid_wnd(w->hwndOwner) &&
+                PW(w->hwndOwner)->hwndParent == hwndDesktop ? w->hwndOwner : 0;
+        /* an owned window: its owner and the owner's other windows come up
+           with it, under it (TK75 "z p shown") */
+        for (s = d->hwndChild; s && n < 32; s = PW(s)->hwndNext)
+            if (s != me && (PW(s)->hwndOwner == me ||
+                            (owner && (s == owner || PW(s)->hwndOwner == owner))))
+                list[n++] = s;
+        for (i = n - 1; i >= 0; i--) {
+            unlink_window(PW(list[i]));
+            link_window(PW(list[i]), HWND_TOP);
+        }
+        if (owner) {
+            unlink_window(w);
+            link_window(w, HWND_TOP);
+        }
+    }
+}
+
 static void move_children(PWND w, int dx, int dy)
 {
     HWND c;
@@ -69,6 +120,8 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     BOOL wasvis, nowvis, changed, send_changed, restored = FALSE, zmoved = FALSE;
     HRGN above = 0;             /* what covered it before it came up */
     int px = 0, py = 0;
+    BOOL client_rule = max_client_rule;     /* (this call's only) */
+    max_client_rule = FALSE;
     if (!w || h == hwndDesktop)
         return FALSE;
     parent = PW(w->hwndParent);
@@ -157,6 +210,8 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
             }
             unlink_window(w);
             link_window(w, after == (HWND)-1 ? HWND_TOP : (after == (HWND)-2 ? HWND_TOP : after));
+            if (w->hwndParent == hwndDesktop)
+                owner_order(w, after);
             changed = TRUE;
             zmoved = TRUE;
         }
@@ -176,6 +231,13 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         calc_client(w);
         if (!(w = valid_wnd(h)))
             return FALSE;
+        /* the children with the client area: a menu bar given with
+           SetMenu moves it down (StarOffice's frames get their menu after
+           their MDI client is made: the client stayed under the caption,
+           19 pixels too high, and StarWriter laid out its style tree from
+           that) */
+        if (w->rcClient.left != oldcli.left || w->rcClient.top != oldcli.top)
+            move_children(w, w->rcClient.left - oldcli.left, w->rcClient.top - oldcli.top);
     }
     if (flags & SWP_SHOWWINDOW) {
         /* CS_SAVEBITS: the screen under it kept (savebits.c) */
@@ -231,7 +293,14 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         if (oldwin.left == w->rcWindow.left && oldwin.top == w->rcWindow.top &&
             oldcli.left == w->rcClient.left && oldcli.top == w->rcClient.top)
             wp.flags |= SWP_NOMOVE;
-        if (oldwin.right - oldwin.left == wp.cx && oldwin.bottom - oldwin.top == wp.cy &&
+        /* (when ShowWindow maximises, the client area's size alone
+           decides: TK75 "all0 sv showmax" on 3.1, an MDI child maximised
+           in a 0 x 0 client went from 102 x 26 to 102 x 27, its client
+           area 94 x 0 both times, and got no WM_SIZE, so its client did
+           not count it maximised yet; elsewhere a new window size with
+           the same client area does get one: US34's 2-pixel lists) */
+        if ((client_rule || (oldwin.right - oldwin.left == wp.cx &&
+                                 oldwin.bottom - oldwin.top == wp.cy)) &&
             oldcli.right - oldcli.left == w->rcClient.right - w->rcClient.left &&
             oldcli.bottom - oldcli.top == w->rcClient.bottom - w->rcClient.top)
             wp.flags |= SWP_NOSIZE;
@@ -352,10 +421,16 @@ BOOL WINAPI MoveWindow(HWND h, int x, int y, int cx, int cy, BOOL repaint)
 BOOL WINAPI BringWindowToTop(HWND h)
 {
     PWND w = valid_wnd(h);
+    /* a child: SetWindowPos to the top without SWP_NOACTIVATE, so it gets
+       WM_CHILDACTIVATE, hidden or not, and an MDI child is activated
+       (TK75 on 3.1: "all sv bring", "p bring hidden"; StarChart brings
+       its new hidden document window to the top and waits for that
+       activation before it shows and maximises the window and draws the
+       chart) */
     if (w && !(w->style & WS_CHILD))
         activate_window(h, FALSE);
     else
-        set_window_pos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        set_window_pos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     return w != 0;
 }
 
@@ -656,6 +731,14 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             send_message(h, WM_GETMINMAXINFO, 0, (LPARAM)(MINMAXINFO __far *)&mm);
             if (!(w = valid_wnd(h)))
                 return wasvis;
+            /* never smaller than the minimum tracking size (TK75 "all0 sv
+               showmax" on 3.1: an MDI child maximised in a 0 x 0 client
+               came out 102 x 27, not 8 x 27; StarWriter sizes its document
+               window's controls from that client area's width) */
+            if (mm.ptMaxSize.x < mm.ptMinTrackSize.x)
+                mm.ptMaxSize.x = mm.ptMinTrackSize.x;
+            if (mm.ptMaxSize.y < mm.ptMinTrackSize.y)
+                mm.ptMaxSize.y = mm.ptMinTrackSize.y;
             /* an icon opened: WM_QUERYOPEN first, FALSE keeps it an icon
                (3.1 SDK; US18: 3.1 sends it after WM_GETMINMAXINFO when an
                MDI child is maximised from its icon. Program Manager's
@@ -671,11 +754,15 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             }
             w->style &= ~WS_MINIMIZE;
             w->style |= WS_MAXIMIZE;
-            if (!wasvis && !max_hidden)
+            /* (a hidden child maximised gets no WM_SHOWWINDOW or
+               WM_SETVISIBLE: TK75 "all sv showmax" and "all0 sv showmax"
+               on 3.1, an MDI child shown with SW_SHOWMAXIMIZED) */
+            if (!wasvis && !max_hidden && !(w->style & WS_CHILD))
                 show_msgs(h, TRUE);
             if (!(w = valid_wnd(h)))        /* (USER audit, sweep) */
                 return wasvis;
             sized = w->rcWindow;
+            max_client_rule = TRUE;     /* (for this call alone) */
             set_window_pos(h, 0, mm.ptMaxPosition.x, mm.ptMaxPosition.y,
                            mm.ptMaxSize.x, mm.ptMaxSize.y, SWP_NOZORDER | SWP_FRAMECHANGED |
                            (max_hidden ? SWP_NOACTIVATE : SWP_SHOWWINDOW));

@@ -15,6 +15,10 @@
  * WM_MDICREATE returned (0 or not). Then the child is destroyed with
  * WM_MDIDESTROY. Clients: "all" with MDIS_ALLCHILDSTYLES, "std"
  * without, "all0" with MDIS_ALLCHILDSTYLES and 0 x 0 (StarView's case).
+ * Later steps (StarOffice's start): BringWindowToTop of a hidden MDI
+ * child and of a plain child, SW_SHOWMAXIMIZED of a hidden child in a
+ * 0 x 0 client then grown, and the top-level order of an owner and its
+ * popups ("Z" lines) when one is sent to the bottom or the top.
  * Writes C:\TK75.LOG.
  */
 #include <windows.h>
@@ -175,7 +179,7 @@ static void focus_note(HWND cl, HWND c)
 /* a step on window c: the messages it gets ("S ... | name"), then its
    state */
 enum { A_SHOW, A_SHOWNORMAL, A_SHOWNA, A_SHOWMAX, A_SHOWMIN, A_RESTORE, A_HIDE,
-       A_TOP, A_NOZ, A_SWPSHOW, A_MOVE, A_SMALL };
+       A_TOP, A_NOZ, A_SWPSHOW, A_MOVE, A_SMALL, A_BRING };
 static void act(HWND cl, HWND c, const char *name, int what)
 {
     focus_note(cl, c);
@@ -198,6 +202,7 @@ static void act(HWND cl, HWND c, const char *name, int what)
     case A_SMALL:
         SetWindowPos(c, 0, 0, 0, 20, 5, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         break;
+    case A_BRING: BringWindowToTop(c); break;
     }
     seqlog = 0;
     put(" | ");
@@ -241,6 +246,28 @@ static HWND one(HWND cl, const char *name, DWORD style, int x, int y, int cx, in
     SendMessage(cl, WM_MDIDESTROY, (WPARAM)c, 0);
     pump();
     return 0;
+}
+
+/* "Z name: ..." this probe's top-level windows from the top (m the main
+   window, o an owner, p and q its popups, + visible), then the active one */
+static void zorder(HWND o, HWND p, HWND q, const char *name)
+{
+    HWND w;
+    HWND a = GetActiveWindow();
+    put("Z ");
+    put(name);
+    put(":");
+    for (w = GetWindow(GetDesktopWindow(), GW_CHILD); w; w = GetWindow(w, GW_HWNDNEXT)) {
+        const char *n = w == main_wnd ? " m" : w == o ? " o" : w == p ? " p" : w == q ? " q" : 0;
+        if (n) {
+            put(n);
+            if (IsWindowVisible(w))
+                put("+");
+        }
+    }
+    put(" active ");
+    put(a == main_wnd ? "m" : a == o ? "o" : a == p ? "p" : a == q ? "q" : a ? "other" : "none");
+    flush();
 }
 
 #define SV 0x42CF0000L          /* StarView's document window style */
@@ -313,6 +340,23 @@ int __cdecl tmain(void)
         SendMessage(cl, WM_MDIDESTROY, (WPARAM)k, 0);
         pump();
     }
+    /* BringWindowToTop of a hidden child (StarChart shows a control in
+       its new document window, then brings the window to the top: on 3.1
+       that activated it, through WM_CHILDACTIVATE) */
+    k = one(cl, "all sv keep4", SV, CU, CU, CU, CU, 1);
+    if (k) {
+        act(cl, k, "all sv bring", A_BRING);
+        act(cl, k, "all sv bring show", A_SHOW);
+        act(cl, k, "all sv bring2", A_BRING);
+        SendMessage(cl, WM_MDIDESTROY, (WPARAM)k, 0);
+        pump();
+    }
+    k = one(cl, "all sv keep5", SV, CU, CU, CU, CU, 1);
+    if (k) {
+        act(cl, k, "all sv showmax", A_SHOWMAX);
+        SendMessage(cl, WM_MDIDESTROY, (WPARAM)k, 0);
+        pump();
+    }
     k = one(cl, "all sv+max keep", SV | WS_MAXIMIZE, CU, CU, CU, CU, 1);
     if (k) {
         act(cl, k, "all sv+max show", A_SHOW);
@@ -338,6 +382,18 @@ int __cdecl tmain(void)
     /* StarView's: the client still 0 x 0 */
     cl = make_client(MDIS_ALLCHILDSTYLES | WS_CLIPSIBLINGS, 0, 0);
     one(cl, "all0 sv", SV, CU, CU, CU, CU, 0);
+    /* then maximised there, still hidden, and the client grown (StarWriter:
+       the maximised child's size while the client is 0 x 0; its client
+       area's width sizes the document window's controls) */
+    k = one(cl, "all0 sv keep", SV, CU, CU, CU, CU, 1);
+    if (k) {
+        act(cl, k, "all0 sv showmax", A_SHOWMAX);
+        MoveWindow(cl, 0, 0, 300, 200, TRUE);
+        state(cl, k, "all0 sv client grown");
+        act(cl, k, "all0 sv show", A_SHOW);
+        SendMessage(cl, WM_MDIDESTROY, (WPARAM)k, 0);
+        pump();
+    }
     DestroyWindow(cl);
     pump();
     cl = make_client(0, 0, 0);
@@ -351,7 +407,8 @@ int __cdecl tmain(void)
         static const struct { int what; const char *name; } st[] = {
             { A_SHOW, "p show" }, { A_NOZ, "p noz" }, { A_TOP, "p top" }, { A_MOVE, "p move" },
             { A_HIDE, "p hide" }, { A_SHOWNORMAL, "p shownormal" }, { A_HIDE, "p hide2" },
-            { A_SHOWNA, "p showna" }, { A_HIDE, "p hide3" }, { A_SWPSHOW, "p swpshow" },
+            { A_SHOWNA, "p showna" }, { A_HIDE, "p hide3" }, { A_BRING, "p bring hidden" },
+            { A_SWPSHOW, "p swpshow" }, { A_BRING, "p bring" },
             { A_SHOWMAX, "p showmax" }, { A_RESTORE, "p restore" }, { A_SHOWMIN, "p showmin" },
             { A_RESTORE, "p restore2" },
         };
@@ -400,6 +457,47 @@ int __cdecl tmain(void)
             }
             pump();
         }
+    }
+
+    /* an owned popup sent to the bottom (StarWriter's floating Stylist:
+       made hidden with the frame as owner, SetWindowPos(HWND_BOTTOM,
+       SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOACTIVATE), then
+       ShowWindow(SW_SHOW); w16 left it under its owner): the top-level
+       order of this probe's windows after each step */
+    {
+        HWND o = CreateWindow("TK75P", "o", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 50, 50, 200, 150,
+                              0, 0, (HINSTANCE)hinst, NULL);
+        HWND p = CreateWindow("TK75P", "p", WS_POPUP | WS_CAPTION, 60, 60, 100, 80, o, 0,
+                              (HINSTANCE)hinst, NULL);
+        HWND q = CreateWindow("TK75P", "q", WS_POPUP | WS_CAPTION | WS_VISIBLE, 70, 70, 100, 80,
+                              o, 0, (HINSTANCE)hinst, NULL);
+        pump();
+        zorder(o, p, q, "z created");
+        SetWindowPos(p, HWND_BOTTOM, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOACTIVATE);
+        zorder(o, p, q, "z hidden p to bottom");
+        ShowWindow(p, SW_SHOW);
+        pump();
+        zorder(o, p, q, "z p shown");
+        SetWindowPos(q, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        zorder(o, p, q, "z visible q to bottom");
+        SetWindowPos(p, o, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        zorder(o, p, q, "z p after o");
+        SetWindowPos(main_wnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        zorder(o, p, q, "z main to top");
+        SetWindowPos(o, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        pump();
+        zorder(o, p, q, "z o to top");
+        SetActiveWindow(main_wnd);
+        pump();
+        zorder(o, p, q, "z main active");
+        SetActiveWindow(o);
+        pump();
+        zorder(o, p, q, "z o active");
+        DestroyWindow(q);
+        DestroyWindow(p);
+        DestroyWindow(o);
+        pump();
     }
 
     DestroyWindow(main_wnd);

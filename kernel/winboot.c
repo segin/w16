@@ -147,7 +147,8 @@ void diag_load_end(const char FAR *name, u16 rc)
     diag_write("\r\n");
 }
 
-/* ---- the import trace (thunk.c): [w16] trace=MOD.ORD,... ---- */
+/* ---- the import trace (thunk.c): [w16] trace=MOD.ORD,... ----
+   MOD.* traces every import from MOD */
 
 static char trace_list[2048];
 
@@ -162,6 +163,8 @@ int trace_wanted(const char FAR *mod, u16 ordinal)
             m++, p++;
         if (!*m && *p == '.') {
             p++;
+            if (*p == '*')
+                return 1;
             while (*p >= '0' && *p <= '9')
                 n = n * 10 + (*p++ - '0');
             if (n == ordinal)
@@ -292,6 +295,10 @@ u16 winboot(void)
         {
             extern u16 trace_stop;          /* thunk.c */
             trace_stop = GetPrivateProfileInt("w16", "tracestop", 0, sysini);
+        }
+        {
+            extern u16 trace_dump;          /* thunk.c */
+            trace_dump = GetPrivateProfileInt("w16", "tracedump", 0, sysini);
         }
         profile_log = GetPrivateProfileInt("w16", "profilelog", 0, sysini) != 0;
         GetPrivateProfileString("w16", "tracefrom", "", trace_from, sizeof trace_from,

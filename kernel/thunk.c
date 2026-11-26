@@ -203,7 +203,11 @@ u16 trace_stop;         /* [w16] tracestop=N (winboot.c): the ring printed
    made before it: the pending call of that stack whose return address
    lies nearest below the stack pointer at the return is the one. */
 #define TP_N 64
-static struct { u16 ss, slot, ip, cs, rec, seq; } tpend[TP_N];
+static struct { u16 ss, slot, ip, cs, rec, seq, poff, pseg; } tpend[TP_N];
+u16 trace_dump;         /* [w16] tracedump=1 (winboot.c): with int21log and
+                           traceret, the 8 bytes at the far pointer in the
+                           call's last two argument words (GetWindowRect's
+                           and GetClientRect's RECT) after its result */
 extern void __far trace_ret(void);
 #pragma aux trace_ret "*"
 
@@ -220,9 +224,39 @@ u32 __cdecl trace_ret_note(u16 ss, u16 sp, u16 ax, u16 dx)
         trrec *r = &trring[tpend[best].rec];
         u32 ret = ((u32)tpend[best].cs << 16) | tpend[best].ip;
         if (r->ret == tpend[best].seq) {
+            extern u16 __cdecl i21_log;
             r->rax = ax;
             r->rdx = dx;
             r->ret = 0xFFFF;
+            if (i21_log) {      /* the live log (trace_note): the result */
+                static const char hx[] = "0123456789ABCDEF";
+                char s[24];
+                u16 n = 0, j;
+                s[n++] = ' '; s[n++] = '-'; s[n++] = '>'; s[n++] = ' ';
+                for (j = 0; j < 4; j++)
+                    s[n++] = hx[(dx >> (12 - 4 * j)) & 15];
+                s[n++] = ':';
+                for (j = 0; j < 4; j++)
+                    s[n++] = hx[(ax >> (12 - 4 * j)) & 15];
+                s[n++] = '\r'; s[n++] = '\n'; s[n] = 0;
+                kdbg_file(s);
+                if (trace_dump && tpend[best].pseg && (u32)tpend[best].poff + 7 <=
+                    sel_lim16(tpend[best].pseg)) {
+                    char t[40];
+                    u16 FAR *q = MK_FP(tpend[best].pseg, tpend[best].poff);
+                    u16 k, v;
+                    n = 0;
+                    t[n++] = ' '; t[n++] = '='; t[n++] = '>';
+                    for (k = 0; k < 4; k++) {
+                        t[n++] = ' ';
+                        v = q[k];
+                        for (j = 0; j < 4; j++)
+                            t[n++] = hx[(v >> (12 - 4 * j)) & 15];
+                    }
+                    t[n++] = '\r'; t[n++] = '\n'; t[n] = 0;
+                    kdbg_file(t);
+                }
+            }
         }
         tpend[best].cs = 0;
         return ret;
@@ -266,7 +300,7 @@ u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
         extern u16 __cdecl i21_log;
         if (i21_log && b) {
             static const char hx[] = "0123456789ABCDEF";
-            char s[120];
+            char s[160];
             u16 n = 0, k, j, v;
             const char FAR *mn = b->info[idx % TB_COUNT].mod;
             for (k = 0; mn[k] && n < 12; k++)
@@ -276,9 +310,12 @@ u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
             for (k = 10000; k; k /= 10)
                 if (v >= k || k == 1 || n && s[n - 1] != '.')
                     s[n++] = (char)('0' + (v / k) % 10);
-            for (k = 0; k < 11; k++) {
+            /* 12 argument words in the live line (BitBlt has 10) */
+            for (k = 0; k < 18; k++) {
                 v = k == 0 ? r->cs : k == 1 ? r->ip : k == 2 ? r->ax :
-                    k == 3 ? r->bx : k == 4 ? r->cx : k == 5 ? r->dx : r->arg[k - 6];
+                    k == 3 ? r->bx : k == 4 ? r->cx : k == 5 ? r->dx :
+                    (u32)FP_OFF(frame) + 2 * (k - 4) + 1 <= sel_lim16(FP_SEG(frame)) ?
+                    frame[k - 4] : 0;
                 s[n++] = (char)(k == 1 ? ':' : ' ');
                 for (j = 0; j < 4; j++)
                     s[n++] = hx[(v >> (12 - 4 * j)) & 15];
@@ -299,6 +336,8 @@ u32 __cdecl trace_note(u16 idx, u16 FAR *frame, u16 ax, u16 bx, u16 cx, u16 dx)
             tpend[i].ip = frame[0];
             tpend[i].cs = frame[1];
             tpend[i].rec = (u16)(r - trring);
+            tpend[i].poff = r->arg[0];
+            tpend[i].pseg = r->arg[1];
             tpend[i].seq = r->ret = (trcount & 0x7FFF) | 1;
             frame[0] = FP_OFF((void __far *)trace_ret);
             frame[1] = FP_SEG((void __far *)trace_ret);

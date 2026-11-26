@@ -731,7 +731,12 @@ LRESULT WINAPI __loadds MDIClientWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_SIZE: {
+        /* (or the active child, zoomed before it had a WM_SIZE to say so:
+           TK75 "all0 sv client grown" on 3.1, maximised in a 0 x 0 client
+           and the client then grown, it filled the client) */
         HWND a = maxed_child(h);
+        if (!a && (a = active_child(h)) != 0 && !valid_wnd(a))
+            a = 0;
         if (a && IsZoomed(a)) {
             RECT r;
             GetClientRect(h, &r);

@@ -130,6 +130,7 @@ LPVOID dc_pbrush(LPDC dc)
     if (dc->hPBrushOf != dc->hBrush || !dc->xPBrush || dc->lpPDevOfBrush != dc->lpPDevice) {
         LBRUSH lb;
         XP x;
+        WORD kind = (dc->flags & DCF_MEMORY) ? BRUSH_ORGMEM : 0;
         lb.lbStyle = b->lb.lbStyle;
         lb.lbColor = b->lb.lbColor;
         lb.lbHatch = b->lb.lbHatch;
@@ -141,8 +142,15 @@ LPVOID dc_pbrush(LPDC dc)
             lb.lbHatch = b->hPatBits;
         } else if (lb.lbStyle != 2)
             lb.lbHatch = 0;
+        /* the origin: the DC's brush origin when the brush is first
+           realized, then kept, in this DC and others of the same kind,
+           until UnrealizeObject (GD15 on 3.1: SetBrushOrg alone changed
+           nothing for a brush already used, nor did another window's DC;
+           a memory DC realized it again at its own origin) */
+        if (!(b->wOrgLock & BRUSH_ORGLOCK) || (b->wOrgLock & BRUSH_ORGMEM) != kind)
+            b->wOrgLock = BRUSH_ORGLOCK | kind | (dc->brushOrg.x & 7) | ((dc->brushOrg.y & 7) << 3);
         phys_free(dc, &dc->xPBrush, OBJ_BRUSH);
-        x = phys_realize(dc, OBJ_BRUSH, &lb, MAKELP(dc->brushOrg.y, dc->brushOrg.x));
+        x = phys_realize(dc, OBJ_BRUSH, &lb, MAKELP((b->wOrgLock >> 3) & 7, b->wOrgLock & 7));
         dc->xPBrush = x;
         dc->hPBrushOf = dc->hBrush;
         dc->lpPDevOfBrush = dc->lpPDevice;
@@ -918,6 +926,26 @@ DWORD GDIAPI MoveTo(HDC hdc, int x, int y)                         /* GDI.20 */
     return old;
 }
 
+/* MoveToEx (3.1's new form): the old position into *pt when it is not
+   NULL; TRUE (SDK). It was missing: StarWriter's ruler and StarCalc's
+   grid, drawn with MoveToEx and LineTo, came out as lines from wherever
+   the last line had ended. */
+BOOL GDIAPI MoveToEx(HDC hdc, int x, int y, POINT __far *pt)          /* GDI.483 */
+{
+    LPDC dc = dc_get(hdc);
+    if (mf_dc(hdc))
+        return (BOOL)mf_rec2(hdc, MR_MOVETO, y, x);
+    if (!dc)
+        return FALSE;
+    if (pt) {
+        pt->x = dc->cur.x;
+        pt->y = dc->cur.y;
+    }
+    dc->cur.x = x;
+    dc->cur.y = y;
+    return TRUE;
+}
+
 /* ---- selecting objects ---- */
 
 HGDIOBJ GDIAPI SelectObject(HDC hdc, HGDIOBJ h)                    /* GDI.45 */
@@ -1445,7 +1473,15 @@ void GDIAPI SetDCState(HDC hdc, HANDLE hs)                         /* GDI.180 */
         clip = rgn_dup_data(s->hClipRgn);
     dc = dc_get(hdc);
     s = dc_get(hs);
-    state_copy(dc, s, 0);
+    {
+        /* the brush origin stays (GD15 on 3.1: Microsoft's USER sets a
+           window DC's brush origin to its corner with SetBrushOrg right
+           after SetDCOrg, then calls SetDCState, and GetBrushOrg still
+           gives the corner) */
+        POINT org = dc->brushOrg;
+        state_copy(dc, s, 0);
+        dc->brushOrg = org;
+    }
     clip_take(hdc, clip, s->dcOrg.x, s->dcOrg.y);
     state_refresh(hdc);
 }

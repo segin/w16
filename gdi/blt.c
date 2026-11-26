@@ -26,20 +26,41 @@ static int clip_to(LPRGN rao, WORD k, int *l, int *t, int *r, int *b)
     return *l < *r && *t < *b;
 }
 
-/* the driver BitBlt over the clip region; dest rect in screen coords */
+/* is the DC's surface monochrome (a memory DC with a 1-plane, 1-bit
+   bitmap; the VGA screen is colour)? */
+static int dc_mono(LPDC dc)
+{
+    LPPBITMAP pb = dc->lpPDevice;
+    return (dc->flags & DCF_MEMORY) && pb && pb->bmPlanes == 1 && pb->bmBitsPixel == 1;
+}
+
+/* the driver BitBlt over the clip region; dest rect in screen coords.
+   A colour source on a monochrome destination is converted with the
+   source DC's colours (SDK, BitBlt: "the foreground and background colors
+   of the source (color) device context"); GD15 on 3.1: the pixels of the
+   source's background colour become 1 whatever the destination's, and a
+   monochrome pattern brush of the destination takes the source's text
+   and background colours too, so the driver gets the destination's
+   DRAWMODE with the source's two colours. */
 static void blt_out(LPDC dc, int x, int y, int w, int h, DC __far *src, int sx, int sy, DWORD rop)
 {
     LPRGN rao = dc_rao(dc);
     DRVBITBLT fn = (DRVBITBLT)dc->dev->fn[DRV_BITBLT];
     LPVOID pbr = dc_pbrush(dc);
+    DRAWMODE dm;
     WORD k;
+    dm = dc->dm;
+    if (src && !dc_mono(src) && dc_mono(dc)) {
+        dm.bkColor = src->dm.bkColor;
+        dm.TextColor = src->dm.TextColor;
+    }
     rao = rgn_ptr(dc->hRao);
     for (k = 0; k < rao->n; k++) {
         int l = x, t = y, r = x + w, b = y + h;
         if (!clip_to(rao, k, &l, &t, &r, &b))
             continue;
         fn(dc->lpPDevice, l, t, src ? src->lpPDevice : 0, sx + (l - x), sy + (t - y),
-           r - l, b - t, rop, pbr, &dc->dm);
+           r - l, b - t, rop, pbr, &dm);
         rao = rgn_ptr(dc->hRao);
     }
     dc_update_bounds(dc, x, y, x + w, y + h);

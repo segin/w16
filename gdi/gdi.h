@@ -391,9 +391,14 @@ typedef struct {                        /* 16h */
     OBJHDR hdr;
     LOGBRUSH lb;                        /* BS_PATTERN: lbHatch = the program's bitmap (GD4) */
     HGLOBAL hPatBits;                   /* Schulman's crHatchBk: w16 keeps a BS_PATTERN */
-    WORD unused;                        /* brush's copy of the bits here (PBITMAP + bits) */
+                                        /* brush's copy of the bits here (PBITMAP + bits) */
+    WORD wOrgLock;                      /* w16: BRUSH_ORGLOCK | BRUSH_ORGMEM | the origin
+                                           (x & 7, (y & 7) << 3) of its first realization,
+                                           kept until UnrealizeObject (GD15) */
 } BRUSHOBJ;
 typedef BRUSHOBJ __far *LPBRUSHOBJ;
+#define BRUSH_ORGLOCK 0x8000
+#define BRUSH_ORGMEM 0x4000                /* locked by a memory DC */
 
 /* the header, then the LOGFONT up to its face name's end, at least 0Eh
    bytes of it (GD4: 3.1's block was 2Ah for no face and for "MS Sans

@@ -167,10 +167,17 @@ static void setup_dc(PDCE d, PWND w)
     } else if (d->vis) {
         G_SELECTVISRGN(d->hdc, d->vis);
     }
-    if (window)
+    /* the brush origin at the same corner, as Microsoft's USER sets it
+       (SetBrushOrg right after SetDCOrg, seen in w16's import trace;
+       GD15: GetBrushOrg of a window's DC is its corner, so patterns start
+       at the window's corner, not the screen's) */
+    if (window) {
         G_SETDCORG(d->hdc, w->rcWindow.left, w->rcWindow.top);
-    else
+        SetBrushOrg(d->hdc, w->rcWindow.left, w->rcWindow.top);
+    } else {
         G_SETDCORG(d->hdc, w->rcClient.left, w->rcClient.top);
+        SetBrushOrg(d->hdc, w->rcClient.left, w->rcClient.top);
+    }
 }
 
 HDC get_dc(HWND h, BOOL window, HRGN clip, WORD flags)

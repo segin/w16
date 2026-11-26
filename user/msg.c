@@ -700,15 +700,23 @@ LONG WINAPI DispatchMessage(const MSG __far *m)
     w = valid_wnd(m->hwnd);
     if (!w)
         return 0;
+    if (m->message == WM_PAINT || m->message == WM_PAINTICON)
+        w->flags |= WF_PAINTPENDING;
     r = call_wnd(w, m->hwnd, m->message, m->wParam, m->lParam);
     if ((m->message == WM_PAINT || m->message == WM_PAINTICON) && (w = valid_wnd(m->hwnd)) != 0 &&
-        (w->hrgnUpdate || (w->flags & WF_INTERNALPAINT))) {
-        /* the window did not paint: validate it, as Windows does after
-           sending it WM_NCPAINT/WM_ERASEBKGND (UNVERIFIED which of those) */
+        (w->flags & WF_PAINTPENDING) && (w->hrgnUpdate || (w->flags & WF_INTERNALPAINT))) {
+        /* the window did not call BeginPaint: validate it, as Windows does
+           after sending it WM_NCPAINT/WM_ERASEBKGND (UNVERIFIED which of
+           those). A flag set before the call and cleared by BeginPaint
+           tells (Pietrek, Windows Internals, ch. 7, DispatchMessage): a
+           window that painted and invalidated itself again meanwhile
+           keeps that update region for its next WM_PAINT. */
         PAINTSTRUCT ps;
         BeginPaint(m->hwnd, &ps);
         EndPaint(m->hwnd, &ps);
     }
+    if ((m->message == WM_PAINT || m->message == WM_PAINTICON) && (w = valid_wnd(m->hwnd)) != 0)
+        w->flags &= ~WF_PAINTPENDING;
     return r;
 }
 
