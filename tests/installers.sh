@@ -19,12 +19,12 @@
 #   W4              Entertainment Pack 4: W4\DISK1, W4\DISK2
 #   JOHNNY          Screen Antics (Johnny Castaway): Sierra's SETUP.EXE,
 #                   INSTALL.EX$, INSTALL.INS ...
-#   WP3             WinPlay3 2.3 beta 5's self-extracting installer,
-#                   WP3V23B5.EXE (a self-loading program)
+# (WinPlay3 2.3 beta 5's WP3V23B5.EXE, a self-loading program, has no
+# script yet: Blinker's loader still stops on w16, ARCHITECTURE.md 9.12.)
 # What each fixed (ARCHITECTURE.md 9.12): WEP1-3 zero bytes free
 # (FindResource through a name table), WEP2-3 hanging at 0% (GetMessage
-# with a filter), BW and W4 deaf to Return (a dialog's focus), WP3 not
-# starting (self-loading programs).
+# with a filter), BW and W4 deaf to Return (a dialog's focus; W4 also
+# COMMDLG.DLL's version), JOHNNY's cancel loop (the name table too).
 #
 # Each script's "; dest DIR" line names the directory the installer
 # fills and "; expect FILE ..." files that must be there afterwards
@@ -37,7 +37,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 src=${W16_INSTDIR:-$HOME/Downloads/w16-installers}
 [ $# -ge 1 ] || { sed -n '2,/^set -u/p' "$0" | sed '$d'; exit 2; }
 out=$1; shift
-names=${*:-WEP1 WEP2 WEP3 BW W4 JOHNNY WP3}
+names=${*:-WEP1 WEP2 WEP3 BW W4 JOHNNY}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 ref=

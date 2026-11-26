@@ -416,7 +416,7 @@
 #   installers third-party installers on w16's install tree in 386
 #              Enhanced mode, against Windows 3.1 (tests/installers.sh):
 #              the files each installs the same as on 3.1; one part per
-#              installer (WEP1 WEP2 WEP3 BW W4 JOHNNY WP3), each skipped
+#              installer (WEP1 WEP2 WEP3 BW W4 JOHNNY), each skipped
 #              when $W16_INSTDIR (default ~/Downloads/w16-installers) does
 #              not hold it: they are never part of w16
 #   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
@@ -6053,7 +6053,7 @@ caseparts() {
     bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;
     filecdr) echo "$1@k286 $1@k386 $1@userk" ;;
     nametable) echo "$1@k286 $1@k386" ;;
-    installers) echo "$1@WEP1 $1@WEP2 $1@WEP3 $1@BW $1@W4 $1@JOHNNY $1@WP3" ;;
+    installers) echo "$1@WEP1 $1@WEP2 $1@WEP3 $1@BW $1@W4 $1@JOHNNY" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;

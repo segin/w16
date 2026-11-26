@@ -158,7 +158,7 @@ from `tests/scripts/installers/NAME.txt`, the files each installs
 compared with the same run on Windows 3.1; the installers are never in
 the repository: put each in its own directory under `$W16_INSTDIR`,
 default `~/Downloads/w16-installers` (WEP1, WEP2, WEP3: each pack's disks
-merged; BW/DISK1; W4/DISK1, W4/DISK2; JOHNNY; WP3/WP3V23B5.EXE), missing
+merged; BW/DISK1; W4/DISK1, W4/DISK2; JOHNNY), missing
 ones are skipped; the boot-test case `installers`, one part per
 installer; ARCHITECTURE.md 9.12; `[w16] int21log=1` logs every INT 21h
 call and the traced imports into the debuglog),
