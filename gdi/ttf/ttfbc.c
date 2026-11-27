@@ -555,8 +555,9 @@ static void bc_delta(ttfx__bc *bc, int which, ttfx_u8 op)
 
 /* ---- the interpreter ---- */
 
-#define POP() bc_pop(bc)
-#define PUSH(v) bc_push(bc, (v))
+/* (in line: most instructions pop and push) */
+#define POP() (bc->sp ? bc->stack[--bc->sp] : bc_pop(bc))
+#define PUSH(v) do { ttfx_i32 v_ = (v); if (bc->sp < bc->maxsp) bc->stack[bc->sp++] = v_; else bc_push(bc, v_); } while (0)
 #define GS bc->gs
 
 int ttfx__bcLastError, ttfx__bcLastProg, ttfx__bcTrace;
@@ -1451,6 +1452,31 @@ static void bc_glyph_gs(ttfx__gs *gs)
     gs->zp[0] = gs->zp[1] = gs->zp[2] = 1;
 }
 
+#if defined(__WATCOMC__) && !defined(__386__)
+/* (by words on the 80286: blocks under 64K) */
+static void bc_zero(void TTFX_FAR *p, ttfx_u32 n)
+{
+    ttfx_u16 TTFX_FAR *d = (ttfx_u16 TTFX_FAR *)p;
+    unsigned w = (unsigned)(n >> 1);
+    while (w--)
+        *d++ = 0;
+    if (n & 1)
+        *(ttfx_u8 TTFX_FAR *)d = 0;
+}
+
+static void bc_copy(void TTFX_FAR *dst, const void TTFX_FAR *src, ttfx_u32 n)
+{
+    ttfx_u16 TTFX_FAR *d = (ttfx_u16 TTFX_FAR *)dst;
+    const ttfx_u16 TTFX_FAR *s = (const ttfx_u16 TTFX_FAR *)src;
+    unsigned w = (unsigned)(n >> 1);
+    while (w--)
+        *d++ = *s++;
+    if (n & 1)
+        *(ttfx_u8 TTFX_FAR *)d = *(const ttfx_u8 TTFX_FAR *)s;
+}
+#else
+/* (by bytes elsewhere: a compiler may assume words do not alias the
+   structures copied) */
 static void bc_zero(void TTFX_FAR *p, ttfx_u32 n)
 {
     ttfx_u8 TTFX_FAR *d = (ttfx_u8 TTFX_FAR *)p;
@@ -1465,6 +1491,7 @@ static void bc_copy(void TTFX_FAR *dst, const void TTFX_FAR *src, ttfx_u32 n)
     while (n--)
         *d++ = *s++;
 }
+#endif
 
 /* the interpreter's view of a prepared size (its arrays in the block) */
 static void bc_attach(ttfx__bc *bc, const ttfx_font *f, ttfx__bcsize TTFX_FAR *h)
