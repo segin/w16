@@ -20,6 +20,11 @@ and why). "3.1:" is what VXH saw under Windows 3.1.
 Status (2026-11-27): the memsvc case passes: VXH's lines, a hooked page
 in two DOS boxes included, are the same under both WIN386s.
 
+Test state (2026-11-27, branch w16-memsvc on master ad88615, installation-05):
+make test passes; memsvc and every WIN386 case (win386*, k386e, vdmad, vsd,
+sb16, quicktime, msvc, msvccl, vmprobe, bigmem, cvdos) pass; the full boot
+test 196 ok, 1 failure, lzexpand quirks, which fails on master the same.
+
 ## Allocation
 
 | Service | Verdict | Findings |
