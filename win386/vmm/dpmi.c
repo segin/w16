@@ -320,10 +320,14 @@ struct dpmi_outer {
     u32 dsel, o_ldt_top, ldt_first;
     u32 dta_sel, dta_off;
     int dta_set;
-    u8 *ldt;                            /* a copy of the LDT's ldt_top bytes */
+    u32 o_term;
+    void *o_mark;
+    u8 *ldt;                           /* a copy of the LDT's ldt_top bytes */
 };
 
 static void hstk_make(void);
+static u32 rm_seg(u32 k);
+static u32 rm_off(u32 k);
 static void *dp_alloc(u32 bytes);
 static void dp_free(void *p, u32 bytes);
 static void segsels_drop(struct vm *v);
@@ -347,14 +351,22 @@ static int client_start(int c32)
             DP.ldt = dp_alloc(65536);
             if (!DP.ldt) return 0;
         }
-        memset(DP.ldt, 0, 65536);
         dpmi_vm_in(v);
-        ldt_top = 0x1000;
-        DP.ldt_first = 0x10;
-        ldt_alias = 0;
-        segsels_drop(v);                /* (their descriptors are gone with the LDT) */
+        if (!DP.stale) {
+            memset(DP.ldt, 0, 65536);
+            ldt_top = 0x1000;
+            DP.ldt_first = 0x10;
+            ldt_alias = 0;
+            segsels_drop(v);            /* (their descriptors are gone with the LDT) */
+            hstk_sel = 0;
+        } else if (c32 ? hstk_sel != SEL_HSTK32 : hstk_sel == SEL_HSTK32)
+            hstk_sel = 0;               /* (the stale one is the other size's) */
+        /* after a client DOS ended in V86 mode (Ctrl+C, 4Ch in real mode)
+         * its descriptors stay and the next client's come after them,
+         * the 16-bit host stack 87h kept (Windows 3.1, DPMIPRB T: the
+         * next client's DS AFh, CS B7h) */
+        DP.stale = 0;
         dosblks_drop(v);
-        hstk_sel = 0;
         hstk_depth = 0;
         hstk_low = HSTK_TOP;
         DP.dta_set = 0;
@@ -380,6 +392,8 @@ static int client_start(int c32)
         o->client32 = v->client32;
         o->dsel = v->dsel;
         o->dta_sel = DP.dta_sel; o->dta_off = DP.dta_off; o->dta_set = DP.dta_set;
+        o->o_term = DP.term;
+        o->o_mark = DP.exec_mark;
         o->next = DP.outer;
         DP.outer = o;
         DP.dta_set = 0;
@@ -431,6 +445,23 @@ void dpmi_switch(struct cregs *r)
     psel = ldt_alloc(1);
     set_desc(ldt_desc(psel), psp << 4, 0xFF, 0xF2, big);
     DP.psp_sel = (u16)psel;
+    /* a DOS VM's client can also be ended by DOS in V86 mode, not by its
+     * INT 21h 4Ch from protected mode: Ctrl+Break or Ctrl+C (DOS's INT 23h
+     * handler asking to end it), a critical error's Abort, an INT 21h 4Ch
+     * after a raw switch to real mode. Every way DOS ends a program goes
+     * on at the terminate address in its PSP (0Ah), so the host puts a
+     * breakpoint of its own there and frees what the client had when it
+     * is reached (dpmi_rm_entry). Before, such a client stayed: the next
+     * DPMI program in the box became a client nested in the dead one, its
+     * interrupts went to the dead one's handlers in memory DOS had given
+     * to the new program, and DOSBox-X stopped with "Corrupt MCB chain"
+     * (the user's report: Visual C++'s CL.EXE, Ctrl+C, CL again) */
+    if (cur_vm != &sysvm && psp) {
+        u32 *t = (u32 *)((psp << 4) + 0x0A);
+        DP.term = *t;
+        DP.exec_mark = exec_mark();
+        *t =(rm_seg(W386_DPMIRM_TERM) << 16) | rm_off(W386_DPMIRM_TERM);
+    }
     if ((r->ss & 0xFFFF) == (r->ds & 0xFFFF))
         ssel = dsel;
     else {
@@ -574,6 +605,9 @@ static void dpmi_simulate(struct cregs *r, int fn)
         u32 low = (u32)cur_vm->refstk_top - (cur_vm == &sysvm ? W386_REFSTK_SIZE : DOSVM_REFSTK_SIZE) + 256;
         if ((u32)cur_vm->refsp < low || ncopy + 256 > (u32)cur_vm->refsp - low) { set_cf(r, 1); return; }
     }
+    /* a DOS call: the VM's own current directory first (vm.c; before the
+     * words go on the reflection stack its calls use) */
+    if (fn == 0x0300 && (BX(r) & 0xFF) == 0x21) vm_dos_cwd();
     memset(&v, 0, sizeof(v));
     v.edi = s->edi; v.esi = s->esi; v.ebp = s->ebp; v.ebx = s->ebx;
     v.edx = s->edx; v.ecx = s->ecx; v.eax = s->eax;
@@ -1539,15 +1573,16 @@ static int task_exit(struct cregs *r)
  * terminate the program, execute an Int 21h with AH=4Ch"). Windows 3.1
  * in a DOS box (DPMIPRB run twice in a box): the second run gets the same
  * selectors and free memory as the first. */
-static void client_end(struct cregs *r)
+/* what the client had goes; psp_ok: its PSP is still DOS's (put its
+ * environment segment and terminate address back) */
+static void client_cleanup(struct cregs *r, int psp_ok)
 {
     struct vm *v = cur_vm;
-    struct cregs n = v->v86save;
     struct dpmi_outer *o;
-    if ((AX(r) >> 8) == 0x00)
-        SETW(r->eax, 0x4C00);
-    trace("DPMI: VM %d: client ends (INT 21h AX=%x, level %d)\n", v->id, AX(r), DP.level);
-    if (v->psp_seg && env_seg) *(u16 *)(((u32)v->psp_seg << 4) + 0x2C) = env_seg;
+    if (psp_ok && v->psp_seg) {
+        if (env_seg) *(u16 *)(((u32)v->psp_seg << 4) + 0x2C) = env_seg;
+        *(u32 *)(((u32)v->psp_seg << 4) + 0x0A) = DP.term;
+    }
     vxd_pm_app(0, r);
     mem_free_level(v, DP.level);
     rmcb_free_level(v, DP.level);
@@ -1564,6 +1599,8 @@ static void client_end(struct cregs *r)
         v->client32 = o->client32;
         v->dsel = o->dsel;
         DP.dta_sel = o->dta_sel; DP.dta_off = o->dta_off; DP.dta_set = o->dta_set;
+        DP.term = o->o_term;
+        DP.exec_mark = o->o_mark;
         /* the vectors are the VM's, and back to the defaults: Windows 3.1
          * (DPMIPRB N) lost the outer client's INT 61h handler when the
          * inner one ended */
@@ -1572,11 +1609,14 @@ static void client_end(struct cregs *r)
         dp_free(o->ldt, o->o_ldt_top);
         kfree(o);
     } else {
-        memset(ldt, 0, ldt_top);
-        segsels_drop(v);
+        if (psp_ok) {
+            memset(ldt, 0, ldt_top);
+            segsels_drop(v);
+            ldt_alias = 0;
+            hstk_sel = 0;
+        } else
+            DP.stale = 1;               /* (Windows 3.1 keeps them: client_start) */
         dosblks_drop(v);
-        ldt_alias = 0;
-        hstk_sel = 0;
         hstk_depth = 0;
         hstk_low = HSTK_TOP;
         DP.psp_sel = 0;
@@ -1586,6 +1626,26 @@ static void client_end(struct cregs *r)
         v->pm = 0;
     }
     DP.level--;
+}
+
+static void client_end(struct cregs *r)
+{
+    struct cregs n = cur_vm->v86save;
+    if ((AX(r) >> 8) == 0x00)
+        SETW(r->eax, 0x4C00);
+    trace("DPMI: VM %d: client ends (INT 21h AX=%x, level %d)\n", cur_vm->id, AX(r), DP.level);
+    /* the client's own PSP current first, as for the System VM's
+     * (terminate_client): a DOS extender makes its programs' PSPs current
+     * (Visual C++'s DOSXNT, INT 21h 50h, for each compiler pass), and DOS
+     * would end that one and go on at its parent and terminate address */
+    if (cur_vm->psp_seg && info->sda_lin && *(u16 *)(info->sda_lin + 0x10) != cur_vm->psp_seg) {
+        struct cregs p;
+        memset(&p, 0, sizeof(p));
+        p.eax = 0x5000;
+        p.ebx = cur_vm->psp_seg;
+        v86_int(&p, 0x21);
+    }
+    client_cleanup(r, 1);
     n.eax = r->eax;
     n.ebx = r->ebx;
     n.eflags = (n.eflags & ~(EFL_NT)) | EFL_VM | EFL_IOPL | EFL_IF;
@@ -2277,6 +2337,25 @@ void dpmi_rm_entry(struct cregs *r)
     if (k == W386_DPMIRM_SAVE) {        /* called far: return */
         r->eip = v86_pop16(r);
         r->cs = v86_pop16(r);
+        return;
+    }
+    if (k == W386_DPMIRM_TERM) {
+        /* DOS ended the client in V86 mode (dpmi_switch): what it had goes,
+         * then on to the terminate address it had (jumped to: DOS has set
+         * the parent's stack and registers already) */
+        u32 t;
+        if (!cur_vm->pm || !DP.level) { rm_bad(r, "a client's terminate address without a client"); return; }
+        t = DP.term;
+        trace("DPMI: VM %d: DOS ended the client (level %d) in V86 mode, %d nested calls\n",
+              cur_vm->id, DP.level, exec_depth());
+        exec_unwind(DP.exec_mark);
+        if (DP.level == 1) {            /* (no handler of its runs any more) */
+            hstk_depth = 0;
+            hstk_low = HSTK_TOP;
+        }
+        client_cleanup(r, 0);
+        r->cs = t >> 16;
+        r->eip = t & 0xFFFF;
         return;
     }
     if (vm_trace) trace("[RM%x %x:%x]", k, r->cs, r->eip);

@@ -5,13 +5,17 @@
 #   KIND p  one box running DPMIPRB.BAT: the probe as a 16-bit client
 #           twice (A, B: the second must see what the first saw, its
 #           selectors and memory given back), as a 32-bit client twice
-#           (C, D), then N (E): 16-bit, which EXECs the 32-bit probe (F)
-#           from protected mode
+#           (C, D), then N (E) and O (G): 16-bit, which EXEC the 16-bit
+#           (F) and 32-bit (H) probe from protected mode; then T, a client
+#           DOS ends in real mode, and U, a 16-bit run after it
 #        g  one box: G16 (tag G), then G32 (tag H): the probe, then a
 #           general protection fault no handler takes; DPGAFT.TXT is
 #           written by the batch file after them (the box went on)
 #        c  two boxes at once: C16 (tag X) and C32 (tag Y), each 256 KB of
 #           its own memory checked while the other runs
+#        d  two boxes at once, CWDPRB.COM (tests/dos/cwdprb.asm): each
+#           changes to a directory of its own and watches it for 15 s
+#           (CWX.LOG, CWY.LOG: how often it found another)
 #   MODE ms    Windows 3.1 with Microsoft's WIN386.EXE and KRNL386
 #        w16   the same with w16's WIN386.EXE
 #        tree  w16's install tree alone (build/w16), WIN /3
@@ -37,26 +41,30 @@ ms|w16) wd=WINDOWS ;;
 tree) wd=W16 ;;
 *) echo "mode: ms, w16 or tree" >&2; exit 2 ;;
 esac
-conf=
+conf= lp=DP
 [ -n "${DPMIRUN_COM1:-}" ] && conf="[serial]
 serial1=file file:$o/com1.txt"
 case $kind in
-p)  logs="A B C D E F G H" boxes=P
-    printf 'DPMIPRB 16 A\r\nDPMIPRB 16 B\r\nDPMIPRB 32 C\r\nDPMIPRB 32 D\r\nDPMIPRB N E\r\nDPMIPRB O G\r\nECHO done>DPDONE.TXT\r\n' > "$o/DPP.BAT"
+p)  logs="A B C D E F G H T U P V" boxes=P
+    printf 'DPMIPRB 16 A\r\nDPMIPRB 16 B\r\nDPMIPRB 32 C\r\nDPMIPRB 32 D\r\nDPMIPRB N E\r\nDPMIPRB O G\r\nDPMIPRB T T\r\nDPMIPRB 16 U\r\nDPMIPRB P P\r\nDPMIPRB 16 V\r\nECHO done>DPDONE.TXT\r\n' > "$o/DPP.BAT"
     wait=$wd/DPDONE.TXT ;;
 g)  logs="G H" boxes=P
     printf 'DPMIPRB G16 G\r\nDPMIPRB G32 H\r\nECHO after>DPGAFT.TXT\r\n' > "$o/DPP.BAT"
     wait= ;;
+d)  logs="X Y" boxes="X Y" lp=CW
+    printf 'CWDPRB X \\%s\\SYSTEM\r\n' "$wd" > "$o/DPX.BAT"
+    printf 'CWDPRB Y \\\r\n' > "$o/DPY.BAT"
+    wait=$wd/CWX.LOG,$wd/CWY.LOG ;;
 c)  logs="X Y" boxes="X Y"
     printf 'DPMIPRB C16 X\r\n' > "$o/DPX.BAT"
     printf 'DPMIPRB C32 Y\r\n' > "$o/DPY.BAT"
     wait=$wd/DPX.LOG,$wd/DPY.LOG ;;
-*)  echo "kind: p, g or c" >&2; exit 2 ;;
+*)  echo "kind: p, g, c or d" >&2; exit 2 ;;
 esac
 tl=240
 [ "$kind" = g ] && tl=100           # (nothing to wait for: the box ends)
 set -- -o "$o/c" -t "${DPMIRUN_TIME:-$tl}" -s "$o/shot.png" \
-    -f "$root/build/dos/DPMIPRB.COM=$wd/DPMIPRB.COM"
+    -f "$root/build/dos/DPMIPRB.COM=$wd/DPMIPRB.COM" -f "$root/build/dos/CWDPRB.COM=$wd/CWDPRB.COM"
 run=
 for b in $boxes; do
     # shellcheck disable=SC2086
@@ -78,10 +86,10 @@ esac
 DROPIN_FIXED=1 DROPIN_CONF=$conf DROPIN_NOREDIR=1 DROPIN_CPUTYPE=${DROPIN_CPUTYPE:-386} DROPIN_WSECS=3 \
     "$root/tests/dropin.sh" "$@" > "$o/dropin.txt" 2>&1
 for t in $logs; do
-    l=$(find "$o/c" -iname "DP$t.LOG" | head -1)
-    [ -n "$l" ] && tr -d '\r' < "$l" > "$o/DP$t.LOG"
-    echo "== DP$t.LOG"
-    cat "$o/DP$t.LOG" 2>/dev/null || echo "(none)"
+    l=$(find "$o/c" -iname "$lp$t.LOG" | head -1)
+    [ -n "$l" ] && tr -d '\r' < "$l" > "$o/$lp$t.LOG"
+    echo "== $lp$t.LOG"
+    cat "$o/$lp$t.LOG" 2>/dev/null || echo "(none)"
 done
 rm -f "$o/DPDONE.TXT" "$o/DPGAFT.TXT"
 for f in DPDONE.TXT DPGAFT.TXT; do

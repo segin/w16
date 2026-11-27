@@ -89,7 +89,7 @@
 # ~/Downloads/msvc152/MSVC; boot needs BIN's four .386 files, cvw BIN's
 # CVW.EXE and its DLLs too); without it they say so and pass ("skip").
 #
-#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx cl;
+#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx cl cltree;
 #          msquery and cvdos by name: boot-test cases msquery and cvdos)
 set -u
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
@@ -103,7 +103,7 @@ while getopts o: opt; do
     esac
 done
 shift $((OPTIND - 1))
-parts=${*:-vxc boot cvw wx cl}
+parts=${*:-vxc boot cvw wx cl cltree}
 [ -n "$out" ] || out=$(mktemp -d)
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
@@ -230,6 +230,60 @@ serial1=file file:$out/wx-w16.com1" timeout 600 "$root/tests/inputrun.sh" -s -b 
         r="$(grep -m1 'not in w16\|panic\|fatal' "$out/cvw-w16.log")"
     if [ "$r" = ok ]; then echo "ok   cvw: CodeView for Windows comes up as under Windows 3.1"
     else echo "FAIL cvw: $r"; fails=$((fails + 1)); fi ;;
+cltree)
+    # the user's way (2026-11-26): w16's tree alone with Visual C++'s four
+    # devices in SYSTEM.INI, a windowed box from the tree's Command Prompt
+    # PIF in C:\, MSVCVARS.BAT, then CL HELLO.C as typed (no paths), twice,
+    # then a 32-bit client that DOS ends in real mode (DPMIPRB T32: as
+    # Ctrl+C ends CL's DOSXNT) and CL again; machine as theirs (svga_s3, 32 MB). Before: the
+    # pass found no hello.c (the box's directory moved), and after a CL
+    # ended by Ctrl+C the next one crashed DOSBox-X ("Corrupt MCB chain")
+    [ -n "$(mfile BIN CL.EXE)" ] && [ -n "$(mfile BIN MSVCVARS.BAT)" ] && [ -d "$msvc/LIB" ] && [ -d "$msvc/INCLUDE" ] ||
+        { echo "skip cltree: no Visual C++ 1.52 compiler at $msvc (W16_MSVC_DIR)"; continue; }
+    set --
+    for d in BIN INCLUDE LIB; do
+        for f in $(cd "$msvc" && find "$d" -type f); do
+            set -- "$@" -f "$msvc/$f=MSVC/$(printf '%s' "$f" | tr a-z A-Z)"
+        done
+    done
+    for x in DOSXNT MMD CVW1 VMB; do
+        set -- "$@" -i "386Enh:+device=C:\\MSVC\\BIN\\$x.386"
+    done
+    printf '#include <stdio.h>\r\n\r\nint main(int argc, char *argv[])\r\n{\r\n    printf("Hello from %%d worlds!\\n", argc);\r\n    return 0;\r\n}\r\n' > "$out/HELLO.C"
+    printf 'CALL C:\\MSVC\\BIN\\MSVCVARS.BAT\r\nCL HELLO.C > CL1.TXT\r\nDEL HELLO.EXE\r\nCL HELLO.C > CL2.TXT\r\nC:\\W16\\DPMIPRB T32 T\r\nCL HELLO.C > CL3.TXT\r\nHELLO > RUN.TXT\r\nECHO done > DONE.TXT\r\n' > "$out/CLT.BAT"
+    python3 "$root/tools/mkpif.py" "$root/assets/CMD.PIF" "$out/CLT.PIF" "title=CL" 'program=C:\CLT.BAT' 'dir=C:\' \
+        windowed=1 || exit 2
+    rm -rf "$out/cltree" "$out/cltree.com1"
+    # MSVCVXD_W386=FILE: that WIN386.EXE in the tree (an older one, to see
+    # the failure)
+    [ -n "${MSVCVXD_W386:-}" ] && set -- "$@" -f "$MSVCVXD_W386=W16/SYSTEM/WIN386.EXE"
+    DROPIN_CONF="[serial]
+serial1=file file:$out/cltree.com1
+[log]
+logfile=$out/cltree.emu" DROPIN_MACHINE=svga_s3 DROPIN_MEMSIZE=32 DROPIN_NOREDIR=1 timeout 700 "$root/tests/dropin.sh" \
+        -T "$root/build/w16" -3 -p 386 -c "WIN /3" -t 600 -o "$out/cltree" -W DONE.TXT \
+        -f "$out/HELLO.C=HELLO.C" -f "$out/CLT.BAT=CLT.BAT" -f "$out/CLT.PIF=W16/CLT.PIF" \
+        -f "$root/build/dos/DPMIPRB.COM=W16/DPMIPRB.COM" -i 'WIN.INI:windows:run=C:\W16\CLT.PIF' "$@" \
+        > "$out/cltree.txt" 2>&1
+    { tr -d '\r' < "$out/cltree.com1"; } > "$out/cltree.log" 2>/dev/null
+    r=ok
+    for t in CL1 CL2 CL3 RUN; do
+        g=$(find "$out/cltree" -maxdepth 3 -ipath "*/c/$t.TXT" | head -1)
+        { tr -d '\r' < "$g"; } > "$out/cltree.$t.txt" 2>/dev/null || : > "$out/cltree.$t.txt"
+    done
+    for t in CL1 CL2 CL3; do
+        [ "$r" != ok ] || ! grep -qi 'error\|warning' "$out/cltree.$t.txt" ||
+            r="$t: $(grep -i -m1 'error\|warning' "$out/cltree.$t.txt") ($out/cltree.$t.txt)"
+        [ "$r" != ok ] || [ -s "$out/cltree.$t.txt" ] || r="$t: no output from CL ($out/cltree.txt)"
+    done
+    [ "$r" != ok ] || [ "$(cat "$out/cltree.RUN.txt")" = "Hello from 1 worlds!" ] ||
+        r="the program did not run: '$(head -c 80 "$out/cltree.RUN.txt")' ($out/cltree.txt)"
+    [ "$r" != ok ] || ! grep -qi 'mcb chain\|memory error' "$out/cltree.emu" 2>/dev/null ||
+        r="DOSBox-X: $(grep -i -m1 'mcb chain\|memory error' "$out/cltree.emu")"
+    [ "$r" != ok ] || ! grep -q 'not in w16\|panic\|fatal' "$out/cltree.log" ||
+        r="$(grep -m1 'not in w16\|panic\|fatal' "$out/cltree.log")"
+    if [ "$r" = ok ]; then echo "ok   cltree: w16's tree: CL HELLO.C in C:\\ in a windowed box, three times, around a client DOS ended"
+    else echo "FAIL cltree: $r"; fails=$((fails + 1)); fi ;;
 cl)
     [ -n "$(mfile BIN CL.EXE)" ] && [ -n "$(mfile BIN DOSXNT.EXE)" ] && [ -d "$msvc/LIB" ] && [ -d "$msvc/INCLUDE" ] ||
         { echo "skip cl: no Visual C++ 1.52 compiler at $msvc (W16_MSVC_DIR)"; continue; }

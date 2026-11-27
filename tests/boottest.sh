@@ -2070,7 +2070,7 @@ runcase() {
     msvccl)
         # the user's report (2026-11-26): CL.EXE stopped with "Phar Lap err
         # 35" in a w16 box (tests/msvcvxd.sh cl; skip without $W16_MSVC_DIR)
-        "$root/tests/msvcvxd.sh" -o "$out/msvccl" cl > "$out/msvccl.txt" 2>&1 || true
+        "$root/tests/msvcvxd.sh" -o "$out/msvccl" cl cltree > "$out/msvccl.txt" 2>&1 || true
         if grep -q '^FAIL' "$out/msvccl.txt"; then
             echo "FAIL msvccl: $(grep -m1 '^FAIL' "$out/msvccl.txt") ($out/msvccl.txt)"; fails=$((fails + 1))
         elif grep -q '^skip' "$out/msvccl.txt"; then echo "ok   msvccl: $(grep -m1 '^skip' "$out/msvccl.txt")"
@@ -2459,13 +2459,14 @@ runcase() {
             sh "$root/tests/dpmirun.sh" "$out/win386dpmi-w16$k" $k w16 > "$out/win386dpmi-w16$k.txt" 2>&1 &
         done
         sh "$root/tests/dpmirun.sh" "$out/win386dpmi-treep" p tree > "$out/win386dpmi-treep.txt" 2>&1 &
+        sh "$root/tests/dpmirun.sh" "$out/win386dpmi-w16d" d w16 > "$out/win386dpmi-w16d.txt" 2>&1 &
         wait
         r=ok
-        for k in w16p:refp w16g:refg w16c:refc treep:refp; do
+        for k in w16p:refp w16g:refg w16c:refc treep:refp w16d:refp; do
             m=$(sh "$root/tools/dpmicmp.sh" "$(printf '%s' "${k%:*}" | sed 's/^.*\(.\)$/\1/')" \
                 "$out/win386dpmi-${k#*:}" "$out/win386dpmi-${k%:*}") || { r="${k%:*}: ${m#FAIL }"; break; }
         done
-        if [ "$r" = ok ]; then echo "ok   win386dpmi: DPMI clients in DOS boxes (16- and 32-bit, nested, two boxes, a fault) as under Microsoft's WIN386; the tree too"
+        if [ "$r" = ok ]; then echo "ok   win386dpmi: DPMI clients in DOS boxes (16- and 32-bit, nested, two boxes, a fault, one DOS ended) as under Microsoft's WIN386; the tree too; each box its own current directory"
         else echo "FAIL win386dpmi: $r"; fails=$((fails + 1)); fi ;;
     cmdprompt)
         # Main's first item runs CMD.PIF (assets/CMD.PIF: COMMAND.COM,

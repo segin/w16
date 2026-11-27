@@ -115,6 +115,9 @@ struct dpmi_vm {
     int dta_set;
     struct dpmi_rmcb *rmcb;     /* 0303h's callbacks (DPMI_NRMCB, made at the first) */
     u32 wp_used;                /* 0B00h's watchpoints in use (bits) */
+    u32 term;                   /* the client's PSP terminate address (0Ah) before the host's */
+    void *exec_mark;            /* the VM's nested calls when the client started (exec_unwind) */
+    int stale;                  /* the last client ended by DOS: its descriptors are still there */
     u8 *acb;                    /* the application control block (Begin_PM_App) */
 };
 
@@ -183,6 +186,7 @@ struct vm {
     int ended;              /* its program has ended */
     struct vm *free_next;   /* destroyed, kept for the next VM */
     struct vtimer vt;       /* its timer (VTD) */
+    char cwd[68];           /* its current drive and directory, "C:\X" (vm_dos_cwd) */
     struct dpmi_vm dp;      /* its DPMI host (dpmi.c) */
 };
 
@@ -250,6 +254,8 @@ extern u32 ldt_limit;
 void exec_v86(struct cregs *v);            /* run client code until REFRET/IRQRET */
 void exec_return(struct cregs *r);
 int exec_depth(void);         /* that breakpoint: back to exec_v86's caller */
+void *exec_mark(void);                     /* the current VM's nested calls now */
+void exec_unwind(void *mark);              /* those made since mark dropped (DOS ended their program) */
 void v86_int(struct cregs *v, int vec);    /* INT vec in V86 mode, synchronously */
 void v86_int_sim(struct cregs *v, int vec);    /* the same, the devices' V86 hooks first */
 void v86_farcall(struct cregs *v, int iret);
@@ -335,6 +341,7 @@ void vm_int2a(struct cregs *r);     /* DOS's critical sections */
 extern int vm_trace;                /* [w16] vmmtrace=2 */
 int vm_dos_call(u32 ax);            /* an INT 21h that returns: the VM is in DOS until it does */
 void vm_int21(struct cregs *r);     /* V86 INT 21h: through the INT21RET breakpoint */
+void vm_dos_cwd(void);              /* before a VM's INT 21h: its own current directory */
 void vm_int21_ret(struct cregs *r);
 #define VMH(v) ((u32)(v)->cb)
 /* a DOS VM's first 8 KB of memory (the loader's VM stub, ldrasm.asm): its

@@ -61,6 +61,7 @@ struct vmev { struct vmev *next; struct vm *vm; void (*fn)(struct vm *, void *);
 static struct vmev *events;             /* VM events (vm_event) */
 static struct vm *boost;                /* a VM with events: next to run */
 static int resched;
+static struct vm *cwd_owner;            /* the VM DOS's current directory is (vm_dos_cwd) */
 
 void vmm_switch(struct vm *n);
 u32 vmm_pdir_entry(u32 i, u32 v);
@@ -198,6 +199,8 @@ void vm_snapshot(void)
     inst_copy(inst_snap, 1);
     trace("VMM: instance data %d bytes in %d ranges, DOS VM memory %x-%x (MCB %x, %d bytes after its arena)\n",
           inst_size, n_irng, priv_start, priv_end, info->free_mcb, tail_size);
+    trace("VMM: DOS's current directories at %x, %d bytes, %s\n", info->cds_lin, info->cds_size,
+          info->cds_live ? "DOS's own (instance data)" : "not DOS's (each VM's kept by the VMM)");
 }
 
 /* ---- the VM list ---- */
@@ -433,6 +436,7 @@ void vm_destroy(struct vm *v)
         if (boost == v) boost = NULL;
     }
     if (vm_focus == v) vm_focus = &sysvm;
+    if (cwd_owner == v) cwd_owner = NULL;
     trace("VMM: VM %d destroyed\n", v->id);
     v->id = 0;
     v->cb->vm = NULL;
@@ -954,11 +958,84 @@ int vm_dos_call(u32 ax)
     return ah != 0x00 && ah != 0x31 && ah != 0x4B && ah != 0x4C;
 }
 
+/* Each VM's current drive and directory. DOS keeps them in its current
+ * directory structure, which is instance data (vm_snapshot); but DOSBox's
+ * own DOS keeps them in the emulator, where every VM shares them, and the
+ * System VM's KERNEL changes them as it switches tasks (and loads font
+ * files): a box's program then found its files gone (the user's report,
+ * 2026-11-26: Visual C++'s CL HELLO.C in C:\ in a box, "Cannot open source
+ * file: 'hello.c'"; Windows 3.1's boxes share them too on DOSBox, CWDPRB,
+ * but its System VM did not change them during the compile). So before a
+ * VM's INT 21h, when another VM made the last one, the VMM asks DOS for
+ * the drive and directory (that VM's, however it set them: DOSBox's shell
+ * changes them without INT 21h) and gives DOS the calling VM's back; the
+ * same before a V86 INT 16h, which DOSBox's shell makes before it runs a
+ * command typed (its DIR and CD make no INT 21h). Only on a DOS that does
+ * not answer from its CDS (the loader tests it: info->cds_live), not
+ * inside a call the VMM makes or a DOS critical section. */
+
+void vm_dos_cwd(void)
+{
+    struct vm *v = cur_vm;
+    struct cregs t;
+    /* the last 128 bytes of the loader's transfer buffer: a DOS VM's own
+     * holds the VM stub's start-up message until it is written, and the
+     * stub's first INT 21h comes here (the MS-DOS Prompt's box showed the
+     * directory's name over its banner); no other VM's DOS call comes
+     * meanwhile (a VM's DOS calls, these too, are not left midway) */
+    u32 seg = info->xbuf_seg + ((info->xbuf_size - 128) >> 4), i;
+    char *b = (char *)(seg << 4);
+    /* (a DOS that answers from its CDS: instance data does it, and the
+     * query below would see the calling VM's own) */
+    if (info->cds_live || cwd_owner == v) return;
+    /* (another VM waiting inside DOS, a box's prompt reading the keyboard,
+     * is no reason to wait: DOSBox's DOS does these four at once) */
+    if (v->indos || v->crit) return;
+    /* not before a DOS VM's stub has a PSP of its own: until then the
+     * current one is the loader's, which the System VM shares, and DOS
+     * saves the caller's stack there at each call (the stub keeps that
+     * once, after its first call: with these calls before it, Exit
+     * Windows after a box hung, boot-test win386plain) */
+    if (v != &sysvm && info->sda_lin && *(u16 *)(info->sda_lin + 0x10) < v->refstk_seg) return;
+    if (cwd_owner) {
+        memset(&t, 0, sizeof(t));
+        t.eax = 0x1900;
+        v86_int(&t, 0x21);
+        cwd_owner->cwd[0] = (char)('A' + (t.eax & 0xFF));
+        cwd_owner->cwd[1] = ':';
+        cwd_owner->cwd[2] = '\\';
+        memset(&t, 0, sizeof(t));
+        t.eax = 0x4700;
+        t.ds = seg;
+        v86_int(&t, 0x21);
+        if (t.eflags & EFL_CF) cwd_owner->cwd[3] = 0;
+        else {
+            for (i = 0; i < 63 && b[i]; i++) cwd_owner->cwd[3 + i] = b[i];
+            cwd_owner->cwd[3 + i] = 0;
+        }
+    }
+    if (vm_trace) trace("{cwd %d '%s' > %d '%s'}", cwd_owner ? cwd_owner->id : 0, cwd_owner ? cwd_owner->cwd : "",
+                        v->id, v->cwd);
+    cwd_owner = v;
+    if (!v->cwd[0]) return;             /* (not known yet: as DOS has it) */
+    memset(&t, 0, sizeof(t));
+    t.eax = 0x0E00;
+    t.edx = (u8)(v->cwd[0] - 'A');
+    v86_int(&t, 0x21);
+    for (i = 0; i < 67 && v->cwd[2 + i]; i++) b[i] = v->cwd[2 + i];
+    b[i] = 0;
+    memset(&t, 0, sizeof(t));
+    t.eax = 0x3B00;
+    t.ds = seg;
+    v86_int(&t, 0x21);
+}
+
 /* INT 21h from V86 code: on to DOS with a second frame above the
  * caller's, whose IRET reaches the INT21RET breakpoint */
 void vm_int21(struct cregs *r)
 {
     u16 fl = (u16)r->eflags;
+    vm_dos_cwd();
     if (!vm_dos_call(r->eax)) { v86_reflect(r, 0x21); return; }
     v86_reflect(r, 0x21);
     v86_push16(r, fl);

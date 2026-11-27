@@ -15,6 +15,9 @@
 ;                 checks its own state after
 ;        G16, G32 the probe, then a general protection fault with no
 ;                 handler (the host's default action)
+;        T, T32  16- or 32-bit; then DOS ends it in real mode (0300h, INT 21h
+;                 4C07h) instead of its own INT 21h 4Ch: the next client
+;                 in the box must find a host as fresh as the first did
 ;        C16, C32 two boxes at once: 256 KB filled with the tag's pattern,
 ;                 checked 40 times with a time-slice release between
 ; Lines starting with INFO hold what depends on the host's own layout
@@ -52,6 +55,8 @@ start:  mov di, bss_start
         cmp al, '3'
         je .m32
         cmp al, 'G'
+        je .mg
+        cmp al, 'T'
         je .mg
         cmp al, 'C'
         jne .mt
