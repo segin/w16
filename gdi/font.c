@@ -215,7 +215,9 @@ static int font_count(LPCSTR file, int add)
     int n = 0;
     for (x = fonts; x; x = ((LPFONT)xptr(x))->next) {
         LPFONT f = xptr(x);
-        if (name ? !str_icmp(f->file, name) : f->hMod == (HINSTANCE)OFFSETOF(file)) {
+        /* (an empty name is no file's: a module added by its handle has
+           none) */
+        if (name ? f->file[0] && !str_icmp(f->file, name) : f->hMod == (HINSTANCE)OFFSETOF(file)) {
             n++;
             if (add && f->adds < 0xFF)
                 f->adds++;
@@ -350,9 +352,18 @@ static void font_free(XP xf)
     FreeLibrary(h);
 }
 
+/* while an enumeration's callback runs, nothing is freed (the entry it
+   is at may be removed: RemoveFontResource): reaped when it ends */
+static int enum_depth, reap_later;
+
 void font_reap(void)
 {
     XP __far *pp = &fonts_gone;
+    if (enum_depth) {
+        reap_later = 1;
+        return;
+    }
+    reap_later = 0;
     scaled_reap();
     while (*pp) {
         XP xf = *pp;
@@ -378,7 +389,7 @@ BOOL GDIAPI RemoveFontResource(LPCSTR file)                        /* GDI.136 */
     while (*pp) {
         XP xf = *pp;
         LPFONT f = xptr(xf);
-        if (name ? !str_icmp(f->file, name) : f->hMod == (HINSTANCE)OFFSETOF(file)) {
+        if (name ? f->file[0] && !str_icmp(f->file, name) : f->hMod == (HINSTANCE)OFFSETOF(file)) {
             if (f->adds > 1) {
                 f->adds--;
                 found = 1;
@@ -741,10 +752,11 @@ static LPFONTINFO font_scale(LPFONT s, LPFONTINFO bf)
     BYTE __far *src = (BYTE __far *)bf - 0x42, __far *q;
     WORD n = bf->dfLastChar - bf->dfFirstChar + 2, i, sx = s->sx, sy = s->sy;
     WORD bh = bf->dfPixHeight, h = bh * sy, flen;
-    const char __far *face = (const char __far *)src + (WORD)bf->dfFace;
     DWORD off, size, bits;
     LPFONTINFO fi;
-    for (flen = 0; face[flen]; flen++)
+    /* the face name, after the bits: past 64K in a font that big (as
+       many characters as a LOGFONT's) */
+    for (flen = 0; flen < LF_FACESIZE - 1 && *font_huge(src, bf->dfFace + flen); flen++)
         ;
     bits = (0x94 + (DWORD)n * 6 + flen + 2) & ~1UL;
     size = bits;
@@ -780,7 +792,8 @@ static LPFONTINFO font_scale(LPFONT s, LPFONTINFO bf)
     fi->dfWidthBytes *= sx;
     fi->dfDevice = 0;
     fi->dfFace = 0x94 + (DWORD)n * 6;
-    mem_copy(q + (WORD)fi->dfFace, face, flen + 1);
+    for (i = 0; i < flen; i++)
+        q[(WORD)fi->dfFace + i] = *font_huge(src, bf->dfFace + i);
     fi->dfBitsOffset = bits;
     off = bits;
     for (i = 0; i < n; i++) {
@@ -796,8 +809,9 @@ static LPFONTINFO font_scale(LPFONT s, LPFONTINFO bf)
 
 /* the bits of a font before it is drawn: a scaled copy's are made the
    first time (its block grows, so its FONTINFO may move: callers take
-   f->fi again) */
-void font_bits(LPFONT s)
+   f->fi again); FALSE: no room for them (the table's offsets are past
+   the block's end: the text cannot be drawn) */
+BOOL font_bits(LPFONT s)
 {
     LPFONTINFO bf, fi;
     BYTE __far *src, __far *q;
@@ -806,10 +820,10 @@ void font_bits(LPFONT s)
     BYTE row[64];
     HGLOBAL hn;
     if (!s || !s->base || s->bits || !s->fi || s->tt)
-        return;
+        return TRUE;
     bf = font_info(s->base);
     if (!bf)
-        return;
+        return TRUE;
     src = (BYTE __far *)bf - 0x42;
     size = *(DWORD __far *)((BYTE __far *)s->fi - 0x42 + 2);
     GlobalUnlock(s->hMem);
@@ -817,11 +831,13 @@ void font_bits(LPFONT s)
     if (hn)
         s->hMem = hn;
     q = GlobalLock(s->hMem);
+    if (!q)
+        return FALSE;                   /* (defensive: a moveable block's lock) */
     fi = (LPFONTINFO)(q + 0x42);
     s->fi = fi;
     fi->dfBitsPointer = MAKELP(SELECTOROF(q), OFFSETOF(q) + (WORD)fi->dfBitsOffset);
     if (!hn)
-        return;                         /* no room: drawn blank */
+        return FALSE;                   /* no room (tried again next time) */
     s->bits = 1;
     n = bf->dfLastChar - bf->dfFirstChar + 2;
     sx = s->sx;
@@ -862,6 +878,7 @@ void font_bits(LPFONT s)
             }
         }
     }
+    return TRUE;
 }
 
 /* the entry of base font xb scaled sx by sy: one a DC has already, or a
@@ -1151,7 +1168,29 @@ static int enum_first(XP x, int pass)
      display. TrueType fonts at 24 points of the device (32 pixels per
      em at 96 dpi). UNVERIFIED: a printer's DC (w16 drives no printer
      yet: its own fonts, the driver's EnumDFonts, are not asked for). */
-static int enum_fonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
+
+/* the entry after x, whose place in the table was pos: when a callback
+   ran (called), x may have been removed (then the entry now at its
+   place: x's next is on fonts_gone) */
+static XP enum_next(XP x, WORD *pos, int called)
+{
+    XP y;
+    WORD i = 0;
+    if (called) {
+        for (y = fonts; y && y != x; y = ((LPFONT)xptr(y))->next)
+            i++;
+        if (!y) {
+            for (y = fonts, i = 0; y && i < *pos; y = ((LPFONT)xptr(y))->next)
+                i++;
+            return y;                   /* (*pos stays the place) */
+        }
+        *pos = i;
+    }
+    (*pos)++;
+    return ((LPFONT)xptr(x))->next;
+}
+
+static int enum_fonts1(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
 {
     LPDC dc = dc_get(hdc);
     char asked[LF_FACESIZE], subst[LF_FACESIZE];
@@ -1160,7 +1199,8 @@ static int enum_fonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
     BYTE hdr[0x71];
     WORD ppem, ax, ay;
     XP x;
-    int pass, r = 1, i, type;
+    WORD pos;
+    int pass, r = 1, i, type, called = 0;
     if (!dc || !proc)
         return 0;
     ax = dc->dev->info.dpLogPixelsX;
@@ -1175,9 +1215,10 @@ static int enum_fonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
         substitute(asked, subst);
     }
     for (pass = 0; pass < 2; pass++) {
-        for (x = fonts; x; x = ((LPFONT)xptr(x))->next) {
+        for (x = fonts, pos = 0; x; x = enum_next(x, &pos, called)) {
             LPFONT f = xptr(x);
             int named = 0;
+            called = 0;
             if (!enum_listed(f, pass))
                 continue;
             if (face) {
@@ -1252,10 +1293,21 @@ static int enum_fonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
             for (i = 0; i < LF_FACESIZE - 1 && (named ? asked[i] : f->face[i]); i++)
                 elf.lf.lfFaceName[i] = named ? asked[i] : f->face[i];
             r = ((ENUMFONTPROC)proc)(&elf, &etm, type, data);
+            called = 1;
             if (!r)
                 return 0;
         }
     }
+    return r;
+}
+
+static int enum_fonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
+{
+    int r;
+    enum_depth++;
+    r = enum_fonts1(hdc, face, proc, data);
+    if (!--enum_depth && reap_later)
+        font_reap();
     return r;
 }
 
