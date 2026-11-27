@@ -208,6 +208,10 @@
 #              16-bit DMA and a transfer through VDMAD's buffer; the probe
 #              VxD VXM.386's VDMAD service results, trapped ports and
 #              channel callbacks (tools/vdmadcmp.py: the logs, the tones)
+#   memsvc     the VMM's memory and page-hooking services (tests/memsvc.sh):
+#              the probe VxD VXH.386 and PGT.COM in two DOS boxes under
+#              w16's WIN386 and Microsoft's, VXH's lines compared
+#              (docs/notes/win386-memsvc-audit.md)
 #   win386vxc  the probe VxD VXC.386 (tests/msvcvxd.sh vxc) under w16's
 #              WIN386 and Microsoft's: Get/Set_PM_Int_Vector,
 #              Allocate_PM_Call_Back, Log_Proc_Call, the page services,
@@ -1159,7 +1163,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2106,6 +2110,20 @@ runcase() {
         FAIL*) echo "FAIL vsd: ${r#FAIL } ($out/vsd-w16, $out/vsdh-w16)"; fails=$((fails + 1)) ;;
         *) echo "ok   vsd: $r; $h" ;;
         esac ;;
+    memsvc)
+        # the VMM's memory, paging and page-hooking services: tests/memsvc.sh
+        # (VXH.386's results at Device_Init and Init_Complete, a hooked V86
+        # page touched from two DOS boxes, pages mapped into them, a V86
+        # fault hook), w16's WIN386 against Microsoft's
+        set -- -k "$root/build/dos/VXH.386" -k "$root/build/dos/PGT.COM" \
+            -k "$root/tests/scripts/input/memsvc.txt" -k "$root/tests/memsvc.sh"
+        refrun memsvc-ref memsvc "$root/tests/memsvc.sh" -o "$out/memsvc-ref" "$@" ms
+        "$root/tests/memsvc.sh" -o "$out/memsvc-w16" "$@" w16 > "$out/memsvc-w16.txt" 2>&1 || true
+        if r=$("$root/tests/memsvc.sh" -c "$out/memsvc-ref" "$out/memsvc-w16" 2>&1); then
+            echo "ok   memsvc: $r"
+        else
+            echo "FAIL memsvc: $r"; fails=$((fails + 1))
+        fi ;;
     win386vxc)
         # VXC.386 under both WIN386s, VXCU.386's missing service (tests/msvcvxd.sh)
         "$root/tests/msvcvxd.sh" -o "$out/win386vxc" vxc > "$out/win386vxc.txt" 2>&1 || true

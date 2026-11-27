@@ -1175,8 +1175,12 @@ void __cdecl trap(struct tframe *f)
         /* the VMM or a device touching a client's page that is in the
          * paging file (or not used yet): pager.c brings it in */
         if (vec == 14 && pager_fault(get_cr2())) return;
+        /* a device's block page not there yet, a hooked V86 page
+         * (Hook_V86_Page; through a VM's high linear address too) */
+        if (vec == 14 && memsvc_page_fault(get_cr2(), f->err, NULL)) return;
         if ((vec == 14 || vec == 1) && vxd_watch_fault(vec, &f->eflags, f->eip)) return;
         if (vec == 1 && vxd_step(f)) return;
+        if (vec < 32 && vxd_vmm_fault(f, vec)) return;  /* Hook_VMM_Fault */
         panic("exception %x err %x at %x:%x cr2 %x eax %x esi %x edi %x",
               vec, f->err, f->cs, f->eip, get_cr2(), f->eax, f->esi, f->edi);
     }
@@ -1281,6 +1285,8 @@ void __cdecl trap(struct tframe *f)
                 }
             } else if (!f->err && io_trap(r, op))
                 tk_count[TK_IO]++;      /* a trapped port */
+            else if ((r->eflags & EFL_VM) && vxd_v86_fault(r, 13, f->err))
+                ;                       /* a device's handler (Hook_V86_Fault) */
             else if ((r->eflags & EFL_VM) && cur_vm != &sysvm)
                 vm_crashed(r);          /* a DOS VM's: that VM ends (vm.c) */
             else if (r->eflags & EFL_VM)
@@ -1297,16 +1303,22 @@ void __cdecl trap(struct tframe *f)
             tk_count[TK_V86BP]++;
             v86_breakpoint(r, lin - bp_lin);
         }
-        else
+        else if (!vxd_v86_fault(r, 6, 0))
             v86_reflect(r, 6);
     } else if (vec < 32) {
         if (r->eflags & EFL_VM) {
-            if (vec == 14 && cur_vm != &sysvm) vm_crashed(r);
+            if (vec == 14 && memsvc_page_fault(get_cr2(), f->err, NULL))
+                ;                       /* a hooked page (Hook_V86_Page) */
+            else if (vxd_v86_fault(r, vec, f->err))
+                ;                       /* a device's handler (Hook_V86_Fault) */
+            else if (vec == 14 && cur_vm != &sysvm) vm_crashed(r);
             else if (vec == 14) panic("V86 page fault at %x:%x cr2 %x", r->cs, r->eip, get_cr2());
             else
             v86_reflect(r, vec);
         } else if (vec == 14 && pager_fault(get_cr2()))
             ;                           /* a page from the paging file (pager.c) */
+        else if (vec == 14 && memsvc_page_fault(get_cr2(), f->err, NULL))
+            ;                           /* a hooked V86 page a client touched */
         else
             { tk_count[TK_EXC]++; vxd_pm_fault(r, vec, f->err); }
     } else

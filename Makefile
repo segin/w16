@@ -1174,7 +1174,7 @@ W386     := $(B)/win386
 W386INC  := win386/include
 W386LDR  := $(W386)/ldr.o $(W386)/swap.o $(W386)/ldrasm.o
 W386VMM  := $(W386)/vmmasm.o $(W386)/ddb.o $(W386)/vmm.o $(W386)/dpmi.o $(W386)/dosx.o $(W386)/vxdapi.o $(W386)/vxd.o $(W386)/io.o \
-            $(W386)/vm.o $(W386)/shell.o $(W386)/vdd.o $(W386)/v86mmgr.o $(W386)/pager.o
+            $(W386)/vm.o $(W386)/shell.o $(W386)/vdd.o $(W386)/v86mmgr.o $(W386)/pager.o $(W386)/memsvc.o
 W386HDRS := $(W386INC)/w386.h $(W386INC)/w386.inc win386/vmm/vmm.h $(W386INC)/w16vxd.h
 .PHONY: win386
 win386: $(W386)/WIN386.EXE
@@ -1250,7 +1250,7 @@ $(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX16.EXE $(DOS)/VX17.EXE $(DOS)/VX18.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/MCBCHK.EXE $(DOS)/DOSST.EXE $(DOS)/DPMIPRB.COM $(DOS)/CWDPRB.COM $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXC.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/VXW.386 $(DOS)/VXB.386 $(DOS)/SBD.COM
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX16.EXE $(DOS)/VX17.EXE $(DOS)/VX18.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/MCBCHK.EXE $(DOS)/DOSST.EXE $(DOS)/DPMIPRB.COM $(DOS)/CWDPRB.COM $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXC.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/VXW.386 $(DOS)/VXB.386 $(DOS)/SBD.COM $(DOS)/VXH.386 $(DOS)/PGT.COM
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -1368,6 +1368,21 @@ $(DOS)/VXW.386: $(B)/tests/vxwddb.o $(B)/tests/vxw.o $(W386)/vxd/vxdrt.o tests/v
 	@mkdir -p $(@D)
 	$(WLINK) @tests/vxd/vxw.lnk name $@ file { $(B)/tests/vxwddb.o $(B)/tests/vxw.o $(W386)/vxd/vxdrt.o }
 	python3 tools/leautodata.py $@
+# VXH.386: the memory services' probe VxD (tests/vxd/vxh.c, tests/memsvc.sh)
+$(B)/tests/vxh.o: tests/vxd/vxh.c $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	wcc386 -q -zq -bt=nt -mf -zl -s -ecc -3s -ox -i=$(WATCOM)/h -i=$(W386INC) -fo=$@ $<
+$(B)/tests/vxhddb.o: tests/vxd/vxhddb.asm $(W386VXDHDRS)
+	@mkdir -p $(@D)
+	$(NASM) -f obj -I$(W386INC)/ -o $@ $<
+$(DOS)/VXH.386: $(B)/tests/vxhddb.o $(B)/tests/vxh.o $(W386)/vxd/vxdrt.o tests/vxd/vxh.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/vxd/vxh.lnk name $@ file { $(B)/tests/vxhddb.o $(B)/tests/vxh.o $(W386)/vxd/vxdrt.o }
+	python3 tools/leautodata.py $@
+# PGT.COM: the DOS side of VXH.386 (tests/dos/pgt.asm)
+$(DOS)/PGT.COM: tests/dos/pgt.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
 # VXB.386: the Sound Blaster VxD's probe (tests/vxd/vxm.c built with SBPROBE)
 $(B)/tests/vxb.o: tests/vxd/vxm.c $(W386VXDHDRS)
 	@mkdir -p $(@D)

@@ -1,0 +1,5 @@
+# VXH.386: the memory services probe VxD (tests/vxd/vxh.c)
+format windows vxd
+option quiet
+option nodefaultlibs
+export VXH_DDB.1
