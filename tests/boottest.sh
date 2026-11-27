@@ -189,6 +189,10 @@
 #              CodeView for Windows comes up as under Windows 3.1; with
 #              WXSRVR.EXE on VMB.386 Program Manager is painted and its
 #              menus open as under 3.1
+#   msvccl     Visual C++ 1.52's CL.EXE (Phar Lap's DOSXNT, a DPMI client)
+#              builds and runs hello world in a DOS box under w16's WIN386
+#              as under Microsoft's, with DOSXNT.386 and without
+#              (tests/msvcvxd.sh cl; skipped without $W16_MSVC_DIR)
 #   win386doscad  a DOS program's #GP (VX12 G: the stop box) and Ctrl+Alt+Del
 #              with the MS-DOS Prompt full screen (its screen; Return closes
 #              the box, vx12gc.txt; Escape goes back, dosbox386cad.txt)
@@ -1067,7 +1071,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386dpmi vsd vdmad win386vxc msvc bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386dpmi vsd vdmad win386vxc msvc msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1974,6 +1978,15 @@ runcase() {
         if grep -q '^ok' "$out/win386vxc.txt" && ! grep -q '^FAIL' "$out/win386vxc.txt"; then
             echo "ok   win386vxc: PM vectors and callbacks, Log_Proc_Call, pages, selector 40h as 3.1's; a missing service named"
         else echo "FAIL win386vxc: $(grep -m1 '^FAIL' "$out/win386vxc.txt" || echo 'no result') ($out/win386vxc.txt)"; fails=$((fails + 1)); fi ;;
+    msvccl)
+        # the user's report (2026-11-26): CL.EXE stopped with "Phar Lap err
+        # 35" in a w16 box (tests/msvcvxd.sh cl; skip without $W16_MSVC_DIR)
+        "$root/tests/msvcvxd.sh" -o "$out/msvccl" cl > "$out/msvccl.txt" 2>&1 || true
+        if grep -q '^FAIL' "$out/msvccl.txt"; then
+            echo "FAIL msvccl: $(grep -m1 '^FAIL' "$out/msvccl.txt") ($out/msvccl.txt)"; fails=$((fails + 1))
+        elif grep -q '^skip' "$out/msvccl.txt"; then echo "ok   msvccl: $(grep -m1 '^skip' "$out/msvccl.txt")"
+        elif grep -q '^ok' "$out/msvccl.txt"; then echo "ok   msvccl: $(grep -m1 '^ok' "$out/msvccl.txt" | sed 's/^ok *cl: //')"
+        else echo "FAIL msvccl: no result ($out/msvccl.txt)"; fails=$((fails + 1)); fi ;;
     msvc)
         # Visual C++ 1.52's devices (tests/msvcvxd.sh; skip without $W16_MSVC_DIR)
         "$root/tests/msvcvxd.sh" -o "$out/msvc" boot cvw wx > "$out/msvc.txt" 2>&1 || true

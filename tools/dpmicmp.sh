@@ -19,8 +19,13 @@ esac
 for t in $logs; do
     [ -s "$a/DP$t.LOG" ] || { echo "FAIL DP$t.LOG: none from Windows 3.1 ($a)"; exit 1; }
     [ -s "$b/DP$t.LOG" ] || { echo "FAIL DP$t.LOG: none ($b; the reference: $(tail -n 1 "$a/DP$t.LOG"))"; exit 1; }
-    grep -v '^INFO\|^MEM' "$a/DP$t.LOG" > "$b/DP$t.ref"
-    grep -v '^INFO\|^MEM' "$b/DP$t.LOG" > "$b/DP$t.cmp"
+    # the nested client (F): its selectors follow what the outer one and
+    # the host hold then, which differs between Windows 3.1's own runs
+    # (its environment's D7h once, DFh another time): left out
+    m='s/=00[0-9A-F][0-9A-F]\b/=..../g'
+    [ "$t" = F ] || m=
+    grep -v '^INFO\|^MEM' "$a/DP$t.LOG" | sed "$m" > "$b/DP$t.ref"
+    grep -v '^INFO\|^MEM' "$b/DP$t.LOG" | sed "$m" > "$b/DP$t.cmp"
     if ! cmp -s "$b/DP$t.ref" "$b/DP$t.cmp"; then
         echo "FAIL DP$t.LOG differs from Windows 3.1's: $(diff "$b/DP$t.ref" "$b/DP$t.cmp" | grep '^[<>]' | head -2 | tr '\n' ' ')(diff $b/DP$t.ref $b/DP$t.cmp)"
         exit 1

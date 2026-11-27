@@ -1328,6 +1328,8 @@ $(DOS)/VXC.386: tests/vxd/vxc.asm tests/vxd/vxc.lnk
 	@mkdir -p $(@D) $(B)/tests
 	$(NASM) -f obj -DUNKNOWN -o $(B)/tests/vxcu.o tests/vxd/vxc.asm
 	$(WLINK) @tests/vxd/vxc.lnk name $(DOS)/VXCU.386 file $(B)/tests/vxcu.o
+	$(NASM) -f obj -DDOSVM -o $(B)/tests/vxcd.o tests/vxd/vxc.asm
+	$(WLINK) @tests/vxd/vxc.lnk name $(DOS)/VXCD.386 file $(B)/tests/vxcd.o
 	$(NASM) -f obj -o $(B)/tests/vxc.o tests/vxd/vxc.asm
 	$(WLINK) @tests/vxd/vxc.lnk name $@ file $(B)/tests/vxc.o
 # SPK.COM: the Virtual Sound Device's DOS-side probe (tests/vsdprobe.sh)
