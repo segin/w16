@@ -333,10 +333,17 @@ UINT WINAPI GetCaretBlinkTime(void)
 BOOL WINAPI ExitWindows(DWORD rc, UINT reserved)
 {
     HWND h;
+    HQUEUE me = cur_hq();
     (void)reserved;
     ulogx("ExitWindows ", LOWORD(rc));
+    /* the top-level windows of the other tasks only (Pietrek ch. 1,
+       QueryQuitEnum: "Don't bother with windows in the current
+       task/queue"; observed with TK77's own window, boot-test case
+       exitexec). w16 asked the caller's windows too: Win32s 1.30c's
+       Setup, calling ExitWindowsExec, answered its own WM_QUERYENDSESSION
+       with "Please exit the Program normally" and Windows did not end */
     for (h = PW(hwndDesktop)->hwndChild; h; h = PW(h)->hwndNext)
-        if (!send_message(h, WM_QUERYENDSESSION, 0, 0))
+        if (PW(h)->hq != me && !send_message(h, WM_QUERYENDSESSION, 0, 0))
             return FALSE;
     /* BOOTLOG.TXT gets these from 3.1's USER here (KERNEL calls
        ExitWindows when the shell ends: US1/userboot); UNVERIFIED what 3.1
@@ -344,7 +351,8 @@ BOOL WINAPI ExitWindows(DWORD rc, UINT reserved)
     diag("INIT=TSRQuery\r\n");
     diag("INITDONE=TSRQuery\r\n");
     for (h = PW(hwndDesktop)->hwndChild; h; h = PW(h)->hwndNext)
-        send_message(h, WM_ENDSESSION, TRUE, 0);
+        if (PW(h)->hq != me)
+            send_message(h, WM_ENDSESSION, TRUE, 0);
     drivers_exit_session();             /* DRV_EXITSESSION ... (driver.c) */
     /* then, as 3.1's USER does (US1 trace of ExitWindows, Microsoft's
        USER between forwarders; Pietrek ch. 1): the cursor off
@@ -360,6 +368,65 @@ BOOL WINAPI ExitWindows(DWORD rc, UINT reserved)
         K_EXITKERNEL(LOWORD(rc));
     }
     return FALSE;
+}
+
+/* ExitWindowsExec (USER.246): end Windows, run a DOS program, start
+   Windows again. Pietrek (Windows Internals ch. 1): it asks WIN.COM for
+   its buffer (INT 2Fh AX=4B20h, DX:CX a real-mode address), copies the
+   program there and ends Windows with 44h, after which WIN.COM runs the
+   program and restarts Windows. Observed on Windows 3.1 (TK77,
+   tests/apps/tk77.c, boot-test case exitexec): Microsoft's USER ends with
+   ExitKernel(44h); its buffer then holds the program as given (a path or
+   a bare name), NUL-terminated, the rest of the first 80h bytes zero, and
+   at 80h the parameters as a DOS command tail (length, text, CR; NULL
+   parameters as 00 00 0Dh; the rest zero), which WIN.COM gives the
+   program. w16 does the same. FALSE when no WIN.COM answers or a window refuses to end the
+   session (ExitWindows). w16 had no ExitWindowsExec: Win32s 1.30c's Setup
+   said "Unable to Restart Windows" at its end. */
+static WORD exec_seg, exec_off;         /* INT 2Fh 4B20h: DX:CX */
+static void win_exec_buf(void);
+#pragma aux win_exec_buf = \
+    "mov ax, 4B20h" "xor cx, cx" "xor dx, dx" "int 2Fh" \
+    "test ax, ax" "jz l1" "xor dx, dx" "l1:" \
+    "mov exec_seg, dx" "mov exec_off, cx" \
+    modify [ax bx cx dx si di es];
+static WORD seg_to_sel(WORD seg);       /* DPMI 0002h */
+#pragma aux seg_to_sel = \
+    "mov ax, 0002h" "int 31h" "jnc l1" "xor ax, ax" "l1:" \
+    parm [bx] value [ax] modify [ax];
+
+BOOL WINAPI U_EXITWINDOWSEXEC(LPCSTR exe, LPCSTR params)
+{
+    WORD sel, n;
+    char __far *b;
+
+    win_exec_buf();
+    ulogx("ExitWindowsExec: WIN.COM's buffer at segment ", exec_seg);
+    if (exe) {
+        ulog(exe);
+        ulog("\r\n");
+    }
+    if (params) {
+        ulog(params);
+        ulog("\r\n");
+    }
+    if (!exec_seg || !exe || !*exe || !(sel = seg_to_sel(exec_seg)))
+        return FALSE;
+    b = (char __far *)MAKELP(sel, exec_off);
+    for (n = 0; n < 0x100; n++)         /* zero-filled, as 3.1 leaves it */
+        b[n] = 0;
+    for (n = 0; *exe && n < 0x7F; n++)
+        b[n] = *exe++;
+    b = b + 0x80;                       /* the parameters: a DOS tail */
+    n = 0;
+    if (params)
+        for (; params[n] && n < 126; n++)
+            b[1 + n] = params[n];
+    else
+        b[1 + n++] = 0;                 /* NULL: 00 00 0Dh, as 3.1 */
+    b[0] = (char)(params ? n : 0);
+    b[1 + n] = 0x0D;
+    return ExitWindows(0x44, 0);
 }
 
 BOOL WINAPI SwapMouseButton(BOOL swap)

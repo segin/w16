@@ -159,10 +159,16 @@ from `tests/scripts/installers/NAME.txt`, the files each installs
 compared with the same run on Windows 3.1; the installers are never in
 the repository: put each in its own directory under `$W16_INSTDIR`,
 default `~/Downloads/w16-installers` (WEP1, WEP2, WEP3: each pack's disks
-merged; BW/DISK1; W4/DISK1, W4/DISK2; JOHNNY), missing
+merged; BW/DISK1; W4/DISK1, W4/DISK2; JOHNNY; WP3/WP3V23B5.EXE;
+MP52/MP52BETA.EXE), missing
 ones are skipped; the boot-test case `installers`, one part per
 installer; ARCHITECTURE.md 9.12; `[w16] int21log=1` logs every INT 21h
 call and the traced imports into the debuglog),
+`tests/win32sinst.sh [-o OUTDIR] [k386|tree]` (Microsoft Win32s 1.30c's
+Setup from its disk images below `$W16_WIN32S_SRC`, default
+`.tools/win32s/src`, laid out as DISK1-DISK3: on 3.1 with w16's KRNL386 it
+must install and restart Windows, on w16's tree reach Setup's screen;
+skipped without the images; the boot-test case `win32s`),
 `tests/lzexpand/lzscen.sh` (w16's LZEXPAND.DLL against Microsoft's, the
 probe's log section by section; the boot-test case `lzexpand` runs it),
 `tests/ver/vscen.sh` (w16's VER.DLL against Microsoft's, the probe's log
@@ -416,3 +422,8 @@ The project's own runs use `installation-05`, the script's default host.
   are known, expected failures (each states why).
 - After every merge into master, both are run; see ARCHITECTURE.md §9.2 for
   how the tests are built and what each kind of check means.
+- A case that passes or fails with where code lands is a bug, not a flake.
+  `make build/kpad/N/KRNL386.EXE` links KRNL386 with N bytes of padding
+  after `thunk.o` (kernel/kpad.asm), shifting the rest of its code; swap it
+  into a tree to try a case at other layouts. Boot-test case `win386pad`
+  does that for `win386tree` (sizes 8 and 96, Makefile `KPADS`).

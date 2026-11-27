@@ -746,13 +746,15 @@ _mod_call:
         pop bp
         retf
 
-; u32 __cdecl pascal_call3(u16 cs, u16 ip, u16 ds, u16 nargs, u16 a0,
-;                          u16 a1, u16 a2)
-; Far-call the Pascal procedure cs:ip with DS = ds and nargs (0-3) word
-; arguments, a0 pushed first; returns DX:AX. A self-loading program's
-; BootApp and LoadAppSeg (loader.c). Relies on the callee keeping BP.
-global _pascal_call3
-_pascal_call3:
+; u32 __cdecl sl_call(u16 cs, u16 ip, u16 sel1, u16 hnd1, u16 nargs,
+;                     u16 a0, u16 a1, u16 a2)
+; A self-loading program's BootApp or LoadAppSeg (loader.c boot_app): the
+; far Pascal procedure cs:ip with nargs (0-3) word arguments, a0 pushed
+; first, and the registers Windows 3.1's KERNEL gives (TK78): DS =
+; KERNEL's data segment, CX = ES = sel1 (segment 1's selector), DX =
+; hnd1 (its handle). Returns DX:AX. Relies on the callee keeping BP.
+global _sl_call
+_sl_call:
         push bp
         mov bp, sp
         push si
@@ -762,16 +764,19 @@ _pascal_call3:
         push word [bp + 6]              ; far call target: cs
         push word [bp + 8]              ;                   ip
         mov bx, sp
-        mov cx, [bp + 12]
-        lea si, [bp + 14]
+        mov cx, [bp + 14]
+        lea si, [bp + 16]
 .arg:   jcxz .go
         push word [ss:si]
         add si, 2
         dec cx
         jmp .arg
-.go:    mov ds, [bp + 10]
+.go:    mov ax, DGROUP
+        mov ds, ax
+        mov cx, [bp + 10]
+        mov es, cx
+        mov dx, [bp + 12]
         xor ax, ax
-        mov es, ax
         call far [ss:bx]
         lea sp, [bp - 8]
         pop es
@@ -780,6 +785,40 @@ _pascal_call3:
         pop si
         pop bp
         retf
+
+; DWORD FAR PASCAL EntryAddrProc(WORD hBlock, WORD wEntryNo): the
+; self-loading table's (loader.c boot_app). DX:AX from sl_entry_c; as
+; Windows 3.1's (TK78): CX = AX | DX (ZF set for none, CF clear), ES =
+; hBlock, BX = the entry's record in the module table (sl_entry_c; the
+; caller's BX when there is none).
+extern _sl_entry_c              ; u32 __cdecl sl_entry_c(u16, u16, u16 far *)
+global sl_entryaddr
+sl_entryaddr:
+        push bp
+        mov bp, sp
+        push ds
+        push si
+        push di
+        push bx                         ; [bp - 8]: BX, or the record
+        mov ax, DGROUP
+        mov ds, ax
+        push ss
+        lea ax, [bp - 8]
+        push ax
+        push word [bp + 6]              ; wEntryNo
+        push word [bp + 8]              ; hBlock
+        cld
+        call far _sl_entry_c
+        add sp, 8
+        mov es, [bp + 8]
+        pop bx
+        pop di
+        pop si
+        pop ds
+        pop bp
+        mov cx, ax
+        or cx, dx
+        retf 4
 
 ; DOS3Call (KERNEL.102): issue INT 21h with the caller's registers.
 global DOS3CALL

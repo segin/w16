@@ -5,29 +5,10 @@ test is `tests/installers.sh` (boot-test cases `installers`, `nametable`,
 `dlgfocus`). Open items:
 
 1. **WinPlay3 2.3 beta 5 (WP3V23B5.EXE) and the MPEG player beta
-   (MP52BETA.EXE)**: self-loading programs with Blinker's loader.
-   `kernel/loader.c` boot_app runs BootApp and LoadAppSeg as the SDK
-   documents. With `[w16] int21log=1`, the debuglog shows the
-   following. MyAlloc(5150h, 0, 0) is answered with a handle only.
-   Blinker GlobalReAllocs it to 4440h, takes a CS-to-DS alias, and reads
-   segment 2 (2D03h bytes from 1558h, compressed) and its 88 relocation
-   records (2C0h bytes). It resolves nine imports through EntryAddrProc
-   (USER, GDI, KERNEL.49), then shows "BLINKER - Unknown relocation
-   type". The next record is KERNEL.90 (lstrlen), which never reaches
-   EntryAddrProc. Next steps:
-   - write a self-loading probe (a NASM segment 1 with the loader table,
-     BootApp and LoadAppSeg that log what KERNEL gives: MyAlloc's
-     selectors and their access rights for code and data segments, the
-     module table's segment entries, the table's other slots, Pietrek's
-     fourth pointer);
-   - run it on 3.1 (`tests/dropin.sh -r`) and on w16, and match the two;
-   - suspects: the in-memory entry table or segment table of w16's
-     KERNEL module, which Blinker may read itself for some imports; the
-     selector type MyAlloc gives a code segment (Wine's MyAlloc16, X11
-     era, makes it a code selector at once).
-   To run it: `tests/installers.sh` has no WP3 script yet; start it by
-   hand with File > Run as the other scripts do (the installers are kept
-   on installation-05 in /mnt/build/w16-inst-apps).
+   (MP52BETA.EXE)**: done (2026-11-26). Blinker's loader read BX, CX and
+   ES after EntryAddrProc; the self-loading probe TK78 (boot-test case
+   `selfload`) recorded what 3.1's KERNEL gives a self-loader
+   (ARCHITECTURE.md 9.12). Both run in `tests/installers.sh` (WP3, MP52).
 2. **"Cannot decompress file" (WEP4, Best of)**: not reproduced. With the
    disks in `..\DISK1`, `..\DISK2` as Setup's INF expects, both install
    on w16 as on 3.1. Ask the user how the disks were laid out. Whether

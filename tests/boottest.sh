@@ -39,6 +39,12 @@
 #              (WH_CBT, WH_CALLWNDPROC, WH_GETMESSAGE, WH_MSGFILTER;
 #              Visual C++ 1.52's OLE2VIEW); the rest of TK71's log (other
 #              registers, shown windows, WM_MDICREATE) is not compared yet
+#   selfload   TK78 (tests/apps/tk78.c), a self-loading program, as the
+#              shell on 3.1 (KRNL386), w16's KRNL286 and KRNL386 and w16's
+#              tree: what its BootApp gets (registers, the loader table,
+#              the module table, the file position) and what KERNEL's
+#              MyAlloc, EntryAddrProc and SetOwner give it; the logs the
+#              same but the "~" lines (selectors, sizes)
 #   mdistyle   TK75 (tests/apps/tk75.c) as the shell on 3.1 and on w16's
 #              tree: what WM_MDICREATE makes of the child's style (with
 #              and without MDIS_ALLCHILDSTYLES, hidden, maximised,
@@ -152,6 +158,12 @@
 #              MS-DOS Prompt full screen, Alt+Enter to a window and back,
 #              EXIT (tests/scripts/input/dosbox386tree.txt), against the
 #              same tree under Microsoft's WIN386.EXE (DOSBox-X)
+#   win386pad  win386tree's run under Microsoft's WIN386 with w16's KRNL386
+#              built with its code shifted (build/kpad/8 and 96: padding
+#              after thunk.o, Makefile KPADS): the box must still come back
+#              to Windows after EXIT. A layout-dependent failure here
+#              (2026-11-26: the typed EXIT lost with some KERNELs and not
+#              others) is a real bug, never a flake
 #   win386plain  the user's way: the install tree alone in plain DOSBox
 #              (DOSBox's own DOS), `WIN /3` (WIN.COM's logo, no /B), the DOS
 #              Prompt full screen must be a text screen, EXIT, then Exit
@@ -469,6 +481,25 @@
 #              15): TK74 as the shell (tests/apps/tk74.c), its log on
 #              w16's KRNL286 (part k286) and KRNL386 (k386) the same as
 #              on Microsoft's KRNL386
+#   exitexec   ExitWindowsExec: TK77 as the shell (tests/apps/tk77.c) has
+#              TK77D.COM (tests/dos/tk77d.asm) run with a full path and
+#              parameters, a bare name without, and NULL parameters, and
+#              Windows restarted after each; the log (TK77D's command
+#              tails, TK77's rounds) as 3.1's with w16's KRNL386 (part
+#              k386: ExitKernel's 44h), w16's USER (user: what it leaves
+#              in Microsoft's WIN.COM's buffer), w16's WIN.COM (wincom: how
+#              it reads Microsoft's USER's) and w16's tree (tree)
+#   win32s     Microsoft Win32s 1.30c's Setup (tests/win32sinst.sh;
+#              skipped without its disk images below $W16_WIN32S_SRC,
+#              default .tools/win32s/src): part k386, Windows 3.1 with
+#              w16's KRNL386, installs and restarts Windows as on 3.1
+#              (Setup's script binds KERNEL's SETERRORMODE by name, a
+#              non-resident name: TK76; the restart is ExitKernel's 44h);
+#              part treems, w16's tree with Microsoft's WIN386 put in, the
+#              same (ExitWindowsExec in w16's USER and WIN.COM: exitexec);
+#              part tree, w16's install tree alone, gets past the
+#              bindings to Setup's screen (w16's WIN386 has no paging
+#              file: Setup then stops as 3.1 does with Paging=no)
 #   dlgfocus   the focus after CreateDialog of a dialog not shown or shown
 #              without activation, Return on a focused push button,
 #              DM_GETDEFID: US37 as the shell (tests/apps/us37.c), its log
@@ -476,7 +507,7 @@
 #   installers third-party installers on w16's install tree in 386
 #              Enhanced mode, against Windows 3.1 (tests/installers.sh):
 #              the files each installs the same as on 3.1; one part per
-#              installer (WEP1 WEP2 WEP3 BW W4 JOHNNY), each skipped
+#              installer (WEP1 WEP2 WEP3 BW W4 JOHNNY WP3 MP52), each skipped
 #              when $W16_INSTDIR (default ~/Downloads/w16-installers) does
 #              not hold it: they are never part of w16
 #   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
@@ -1076,7 +1107,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad win386vxc msvc msvcapps faultrep bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad win386vxc msvc msvcapps faultrep bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1550,6 +1581,28 @@ runcase() {
             r="differs from 3.1 ($out/mdistyle.diff)"
         if [ "$r" = ok ]; then echo "ok   mdistyle: WM_MDICREATE's styles, showing, activation and focus as 3.1's"
         else echo "FAIL mdistyle: $r"; fails=$((fails + 1)); fi ;;
+    selfload)
+        # TK78: Microsoft's KRNL386 against w16's kernels and tree
+        for k in ref k286 k386 tree; do
+            case $k in ref) o="-r -3" c='WIN /S /B' ;; k286) o= c='WIN /S /B' ;; k386) o=-3 c='WIN /S /B' ;;
+                       tree) o="-T $root/build/w16 -3" c='WIN /3' ;; esac
+            # shellcheck disable=SC2086
+            DROPIN_WSECS=4 "$root/tests/dropin.sh" $o -c "$c" -t 120 -W TK78.LOG -o "$out/selfload-$k" \
+                -f "$root/build/dos/TK78.EXE=TK78.EXE" -i 'boot:shell=C:\TK78.EXE' > "$out/selfload-$k.txt" 2>&1 &
+        done
+        wait
+        for k in ref k286 k386 tree; do
+            tr -d '\r' < "$out/selfload-$k/c/TK78.LOG" 2>/dev/null | grep -v '^~' > "$out/selfload-$k.log"
+        done
+        r=ok
+        grep -q '^T done' "$out/selfload-ref.log" || r="ref did not finish ($out/selfload-ref.log)"
+        for k in k286 k386 tree; do
+            [ "$r" = ok ] || break
+            diff "$out/selfload-ref.log" "$out/selfload-$k.log" > "$out/selfload-$k.diff" ||
+                r="$k: differs from 3.1 ($out/selfload-$k.diff)"
+        done
+        if [ "$r" = ok ]; then echo "ok   selfload: a self-loading program's BootApp, MyAlloc, EntryAddrProc as 3.1's"
+        else echo "FAIL selfload: $r"; fails=$((fails + 1)); fi ;;
     staroff)
         # StarOffice 3.1's CD (tests/staroff.sh; skip without the image)
         "$root/tests/staroff.sh" -o "$out/staroff" > "$out/staroff.txt" 2>&1 || true
@@ -2506,6 +2559,41 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
         done
         if [ "$r" = ok ]; then echo "ok   win386tree: the tree's DOS box full screen, windowed, full screen, EXIT: as under Microsoft's WIN386"
         else echo "FAIL win386tree: $r ($out/win386tree-w16)"; fails=$((fails + 1)); fi ;;
+    win386pad)
+        # win386tree's reference side (the tree under Microsoft's WIN386)
+        # on KRNL386s with their code shifted (Makefile, KPADS): the case
+        # passed or failed with the size of an unused function added to
+        # KERNEL (w16's USER sent no WM_SETFOCUS when the active icon of
+        # the full-screen box was opened, so Microsoft's WINOA386 never
+        # gave the windowed box the keyboard, and whether the Alt of
+        # Alt+Enter was ever released in the VM depended on timing).
+        # Full screen, window, full screen and back to Windows after EXIT,
+        # by the screens' sizes (text 720x400, Windows 640x480; the
+        # screens themselves are win386tree's)
+        scr=$root/tests/scripts/input/dosbox386tree.txt
+        r=ok
+        for p in 8 96; do
+            t=$out/win386pad-tree$p
+            rm -rf "$t"; cp -a "$root/build/w16" "$t"
+            cp "$root/build/kpad/$p/KRNL386.EXE" "$t/SYSTEM/KRNL386.EXE"
+            set -- -p 386 -T "$t" -3 -c "WIN /3 /B" \
+                -f "$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/WIN386.EXE=W16/SYSTEM/WIN386.EXE"
+            for f in WINOA386.MOD EGA80WOA.FON EGA40WOA.FON CGA80WOA.FON CGA40WOA.FON; do
+                set -- "$@" -f "$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/$f=W16/SYSTEM/$f"
+            done
+            DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" \
+                "$out/win386pad-$p" "$@" > "$out/win386pad-$p.txt" 2>&1 || true
+            rm -rf "$t"
+            for s in 01-full:720x400 02-window:640x480 03-full:720x400 04-back:640x480; do
+                a=$out/win386pad-$p/${s%%:*}.png
+                [ -f "$a" ] || { r="KRNL386 shifted by $p: no ${s%%:*} screen"; break; }
+                g=$(magick identify -format '%wx%h' "$a")
+                [ "$g" = "${s#*:}" ] || { r="KRNL386 shifted by $p: ${s%%:*} is $g, not ${s#*:} ($out/win386pad-$p)"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   win386pad: win386tree under Microsoft's WIN386 with KRNL386's code shifted by 8 and 96 bytes"
+        else echo "FAIL win386pad: $r"; fails=$((fails + 1)); fi ;;
     win386w16dos)
         # the MS-DOS Prompt with w16's install tree (build/w16, every
         # program, driver and library but the INI files and groups) over
@@ -4057,6 +4145,46 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   $c"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    exitexec)
+        # TK77 (ExitWindowsExec) against 3.1's log
+        p=${part:-k386}
+        # eerun NAME dropin-options...: TK77's log in NAME.log
+        eerun() {
+            _n=$1; shift
+            rm -rf "$out/exitexec-$_n"
+            "$root/tests/dropin.sh" -c 'WIN /3' -t 240 -W TK77.END -o "$out/exitexec-$_n" \
+                -f "$root/build/dos/TK77.EXE=TK77.EXE" -f "$root/build/dos/TK77D.COM=TK77D.COM" \
+                -i 'boot:shell=C:\TK77.EXE' "$@" > "$out/exitexec-$_n.txt" 2>&1 || true
+            tr -d '\r' < "$out/exitexec-$_n/c/TK77.LOG" > "$out/exitexec-$_n.log" 2>/dev/null || : > "$out/exitexec-$_n.log"
+        }
+        case $p in
+        k386) set -- -3 ;;
+        user) set -- -r -3 -f "$user=WINDOWS/SYSTEM/USER.EXE" ;;
+        wincom) set -- -r -3 -w ;;
+        *) set -- -T "$root/build/w16" -3 -f "$root/build/dos/TK77D.COM=W16/TK77D.COM" ;;
+        esac
+        [ "$p" = tree ] || set -- "$@" -f "$root/build/dos/TK77D.COM=WINDOWS/TK77D.COM"
+        eerun "$p" "$@" &
+        eerun "ref-$p" -r -3 -f "$root/build/dos/TK77D.COM=WINDOWS/TK77D.COM" &
+        wait
+        r=ok
+        grep -q '^T done' "$out/exitexec-ref-$p.log" || r="3.1 did not finish ($out/exitexec-ref-$p.log)"
+        [ "$r" != ok ] || diff "$out/exitexec-ref-$p.log" "$out/exitexec-$p.log" > "$out/exitexec-$p.diff" ||
+            r="$p: differs from 3.1 ($out/exitexec-$p.diff)"
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   exitexec"
+        else echo "FAIL exitexec: $r"; fails=$((fails + 1)); fi ;;
+    win32s)
+        # Win32s 1.30c's Setup (tests/win32sinst.sh; skipped without its
+        # disk images)
+        p=${part:-k386}
+        "$root/tests/win32sinst.sh" -o "$out/win32s-$p" "$p" > "$out/win32s-$p.txt" 2>&1 || true
+        if grep -q '^skip' "$out/win32s-$p.txt"; then r=ok
+        elif grep -q "^ok   $p" "$out/win32s-$p.txt"; then r=ok
+        else r="$p: $(grep -m1 FAIL "$out/win32s-$p.txt" || echo 'no result') ($out/win32s-$p.txt)"; fi
+        if [ -n "$part" ]; then partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   win32s"
+        else echo "FAIL win32s: $r ($out)"; fails=$((fails + 1)); fi ;;
     installers)
         # third-party installers on the install tree against 3.1
         # (tests/installers.sh); skipped where $W16_INSTDIR lacks them
@@ -4542,7 +4670,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         rsys=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
         scr=$root/tests/scripts/input/swapesc.txt
         refrun swapesc-ref swapesc env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 300 "$scr" "$out/swapesc-ref" \
-            -3 -r -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+            -3 -r -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP' -i 'WIN.INI:windows:MouseSpeed=0'
         r=ok
         for k in ${part:-k386 k286 mswoa}; do
             case $k in
@@ -4551,7 +4679,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             *)     set -- ;;
             esac
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 300 "$scr" "$out/swapesc-$k" \
-                -T "$root/build/w16" -i 'NonWindowsApp:SwapDisk=C:\W16' "$@" \
+                -T "$root/build/w16" -i 'NonWindowsApp:SwapDisk=C:\W16' -i 'WIN.INI:windows:MouseSpeed=0' "$@" \
                 > "$out/swapesc-$k.txt" 2>&1 || true
             a=$out/swapesc-$k b=$out/swapesc-ref
             for s in 01-dos:640x400:- 02-ver:640x400:- 03-win:640x480:w 04-dos:640x400:02-ver \
@@ -6460,7 +6588,9 @@ caseparts() {
     bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;
     filecdr) echo "$1@k286 $1@k386 $1@userk" ;;
     nametable) echo "$1@k286 $1@k386" ;;
-    installers) echo "$1@WEP1 $1@WEP2 $1@WEP3 $1@BW $1@W4 $1@JOHNNY" ;;
+    installers) echo "$1@WEP1 $1@WEP2 $1@WEP3 $1@BW $1@W4 $1@JOHNNY $1@WP3 $1@MP52" ;;
+    win32s) echo "$1@k386 $1@treems $1@tree" ;;
+    exitexec) echo "$1@k386 $1@user $1@wincom $1@tree" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
@@ -6545,6 +6675,12 @@ partsummary() {
     nametable)
         if [ $pbad = 0 ]; then echo "ok   nametable: TK74's FindResource through a name table as on 3.1 (w16's KRNL286, KRNL386)"
         else echo "FAIL nametable: $pfirst ($out)"; fi ;;
+    exitexec)
+        if [ $pbad = 0 ]; then echo "ok   exitexec: ExitWindowsExec's programs, tails and restarts as 3.1's (w16's KRNL386, USER, tree)"
+        else echo "FAIL exitexec: $pfirst ($out)"; fi ;;
+    win32s)
+        if [ $pbad = 0 ]; then echo "ok   win32s: Win32s 1.30c's Setup installs and restarts Windows with w16's KRNL386 and on w16's tree with Microsoft's WIN386, and starts on w16's tree (or skipped without its disks)"
+        else echo "FAIL win32s: $pfirst ($out)"; fi ;;
     installers)
         if [ $pbad = 0 ]; then echo "ok   installers: each installer at hand installed the same files on w16's tree as on 3.1 (those missing skipped)"
         else echo "FAIL installers: $pfirst ($out)"; fi ;;

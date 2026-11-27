@@ -119,9 +119,12 @@ s_windir:   db 'windir='
 windir:     times PATHMAX db 0  ; WIN.COM's directory, no trailing "\"
 prog_path:  times PATHMAX db 0  ; WIN386.EXE or WSWAP.EXE
 dswap_path: times PATHMAX db 0  ; DSWAP.EXE (standard mode's DOS programs)
-; ExitWindowsExec's buffer (INT 2Fh AX=4B20h returns DX:CX = it). What
-; KERNEL writes there is UNVERIFIED (WC9 could not make Windows 3.1 call
-; it); w16 takes a program path, a blank, its arguments.
+; ExitWindowsExec's buffer (INT 2Fh AX=4B20h returns DX:CX = it). As
+; Windows 3.1's USER fills it (TK77, tests/apps/tk77.c, which dumps it on
+; 3.1 with Microsoft's WIN.COM): the program as given (a path or a bare
+; name), NUL-terminated, the rest of the first 80h bytes zero; at 80h the
+; parameters as a DOS command tail (a length byte, the text without a
+; leading blank, CR). WIN.COM runs it with that tail.
 exec_buf:   times 2*PATHMAX db 0
 exec_tail:  times PATHMAX db 0
 exec_pb:    dw 0, exec_tail, 0, 5Ch, 0, 6Ch, 0
@@ -600,34 +603,22 @@ exec:
         pop es
         ret
 
-; run the program ExitWindowsExec left in exec_buf: "path args"
+; run the program ExitWindowsExec left in exec_buf (its tail at 80h)
 exec_program:
-        mov si, exec_buf
-.p:     lodsb
-        test al, al
-        jz .nul
-        cmp al, ' '
-        jne .p
-        mov byte [si - 1], 0            ; the path ends here
-        mov di, exec_tail + 1           ; the rest is the tail (" args")
-        mov byte [di], ' '
-        inc di
-        xor cx, cx
-        inc cx
-.t:     lodsb
-        test al, al
-        jz .te
-        cmp cx, PATHMAX - 3             ; a DOS limit: tails are 127 bytes
-        jae .te
-        stosb
-        inc cx
-        jmp .t
-.nul:   mov di, exec_tail + 1
-        xor cx, cx
-.te:    mov byte [di], 0Dh
-        mov [exec_tail], cl
         cmp byte [exec_buf], 0
         je .r
+        mov byte [exec_buf + 7Fh], 0    ; (the path ends in its 80h bytes)
+        mov si, exec_buf + 80h          ; the tail, at most 126 characters
+        mov di, exec_tail
+        lodsb
+        cmp al, 126
+        jbe .l
+        mov al, 126
+.l:     stosb
+        xor ch, ch
+        mov cl, al
+        rep movsb
+        mov byte [di], 0Dh
         mov ax, [env_src]
         mov [exec_pb], ax
         mov [exec_pb + 4], cs
@@ -636,7 +627,6 @@ exec_program:
         mov dx, exec_buf
         mov bx, exec_pb
         call exec
-        mov byte [exec_buf], 0
 .r:     ret
 
 ; Build the environment for Windows at env_area: ours, then
