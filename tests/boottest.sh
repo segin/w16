@@ -584,7 +584,11 @@
 #              Control Panel's Fonts applet (MAIN.CPL) adding a font under
 #              real keys with each VER.DLL, with nothing installed and over
 #              a newer copy (tests/ver/vfonts.sh), every screen 0 pixels
-#              and the same files installed
+#              and the same files installed; w32s: Win32 (PE) files'
+#              versions with Win32s's W32SYS.DLL there (expanded from its
+#              disk image, found as tests/win32sinst.sh finds them;
+#              skipped without), sections size and query, w16's against
+#              Microsoft's
 #   toolhelp   w16's TOOLHELP.DLL (ARCHITECTURE.md 22, tests/toolhelp/
 #              thcase.sh): parts ref286, ref386, ref3: the probe THP.EXE
 #              (tests/toolhelp/thp.c, every section) on Windows 3.1 under
@@ -4645,6 +4649,30 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 r="$part: other files installed ($d-ms/fonts.txt, $d-w16/fonts.txt)"
             [ "$r" = ok ] && ! grep -q '^WINDOWS/SYSTEM/W16TEST.*: the new one' "$d-ms/fonts.txt" &&
                 r="$part: Microsoft's run installed nothing ($d-ms/fonts.txt)" ;;
+        w32s)
+            # Win32 files' versions through Win32s's W32SYS.DLL (expanded
+            # from its Setup disks, not committed; skipped without them):
+            # sections size and query, w16's against Microsoft's
+            img=$(find "${W16_WIN32S_SRC:-$root/.tools/win32s/src}" -iname disk3.img 2>/dev/null | head -1)
+            if [ -z "$img" ]; then
+                echo "  (ver@w32s: no Win32s disk3.img: skipped)"
+            else
+                mkdir -p "$d"
+                rm -f "$d/W32SYS.DL_" "$d/W32SYS.DLL"
+                mcopy -n -i "$img" ::/W32SYS.DL_ "$d/W32SYS.DL_" &&
+                    python3 "$root/tools/szdd.py" "$d/W32SYS.DL_" "$d/W32SYS.DLL" ||
+                    r="w32s: W32SYS.DLL not expanded ($d)"
+                for l in ms w16; do
+                    [ "$r" = ok ] || break
+                    VRUN_EXTRA="$d/W32SYS.DLL=WINDOWS/SYSTEM/W32SYS.DLL" VRUN_ARG=sq \
+                        "$root/tests/ver/vrun.sh" "$d/$l" "$l" > /dev/null 2>&1 || true
+                    grep -q '^VRP end' "$d/$l/vrp.log" 2>/dev/null || r="w32s: no complete log from $l ($d/$l)"
+                done
+                [ "$r" = ok ] && ! grep -q 'PE32.DLL: size [1-9]' "$d/ms/vrp.log" &&
+                    r="w32s: Microsoft's VER.DLL read no Win32 version ($d/ms/vrp.log)"
+                [ "$r" = ok ] && { python3 "$root/tests/ver/vcmp.py" "$d/ms/vrp.log" "$d/w16/vrp.log" "$d/cmp" \
+                    > "$d.txt" 2>&1 || r="w32s: $(grep -m1 'FAIL' "$d.txt") ($d.txt)"; }
+            fi ;;
         esac
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   ver"
@@ -6791,7 +6819,7 @@ caseparts() {
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     ddeml) printf '%s@tree286 %s@tree386 %s@term ' "$1" "$1" "$1"; for v in $(cd "$root/tests/ddeml/scripts" && ls *.dm | grep -v '^x' | sed 's/\.dm$//'); do printf '%s@%s ' "$1" "$v"; grep -q '^start ' "$root/tests/ddeml/scripts/$v.dm" && printf '%s@%s+x ' "$1" "$v"; done ;;
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
-    ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
+    ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew $1@w32s" ;;
     timer) echo "$1@s $1@3 $1@qt" ;;
     quicktime) echo "$1@over $1@tree $1@tree386 $1@enh $1@cpl" ;;
     mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;

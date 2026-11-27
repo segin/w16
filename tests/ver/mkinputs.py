@@ -15,6 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'tools'))
 import mkne  # noqa: E402
+import mkpe  # noqa: E402
 import mkver  # noqa: E402
 import szddenc  # noqa: E402
 from mkver import node  # noqa: E402
@@ -254,6 +255,21 @@ def main():
         node('Extra', b'value', [node('Child', b'cv\0')])])
     t.mod('VT\\ODD.DLL', [ver(blk)])
     t.put('VT\\ODD.BIN', blk)
+
+    # ---- Win32 (PE) files: what VER.DLL makes of a 32-bit file's version
+    # (Win32s's setup and W32SYS.DLL read those of OLE32.DLL and the like)
+    fx = mkver.fixed('2.0.1.4', '3.10.0.103', 0x40004, 2)
+    v32 = mkpe.versioninfo32(fx, [('040904B0', STRINGS)], [(0x409, 1200)])
+    t.put('VT\\PE32.DLL', mkpe.pe([(16, 1, v32, 0x409)]))
+    t.put('VT\\PE32EXE.EXE', mkpe.pe([(16, 1, v32, 0x409)], dll=False))
+    t.put('VT\\PE32L0.DLL', mkpe.pe([(16, 1, v32, 0)]))
+    t.put('VT\\PE32ID2.DLL', mkpe.pe([(16, 2, v32, 0x409)]))
+    t.put('VT\\PE32TWO.DLL', mkpe.pe([(10, 5, b'rcdata five', 0x409), (16, 1, v32, 0x407),
+                                       (16, 1, mkpe.versioninfo32(mkver.fixed('9.0.0.0')), 0x409)]))
+    t.put('VT\\PE16V.DLL', mkpe.pe([(16, 1, good, 0x409)]))     # a 16-bit block in a PE file
+    t.put('VT\\PENOVER.DLL', mkpe.pe([(10, 1, b'just some data', 0x409)]))
+    t.put('VT\\PENAMED.DLL', mkpe.pe([('VERSION', 1, v32, 0x409)]))
+    t.put('VT\\BIN\\PE32.BIN', v32)
 
     # ---- install pool (copied into place by the probe before each case)
     pool = [('V300', vi('3.0.0.0')), ('V310', vi()), ('V310B', vi('3.10.0.104')),
