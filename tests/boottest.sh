@@ -6879,7 +6879,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   exitexec: ExitWindowsExec's programs, tails and restarts as 3.1's (w16's KRNL386, USER, tree)"
         else echo "FAIL exitexec: $pfirst ($out)"; fi ;;
     win32s)
-        if [ $pbad = 0 ]; then echo "ok   win32s: Win32s 1.30c's Setup installs, Windows restarts and Freecell runs with w16's KRNL386, on w16's tree with Microsoft's WIN386 and on w16's tree alone (or skipped without its disks)"
+        if [ $pbad = 0 ]; then echo "ok   win32s: Win32s 1.30c's Setup installs and Windows restarts with w16's KRNL386, on w16's tree with Microsoft's WIN386 and on w16's tree alone with w16's W32S (or skipped without its disks; Freecell's start is reported as open)"
         else echo "FAIL win32s: $pfirst ($out)"; fi ;;
     installers)
         if [ $pbad = 0 ]; then echo "ok   installers: each installer at hand installed the same files on w16's tree as on 3.1 (those missing skipped)"
