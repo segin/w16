@@ -298,11 +298,23 @@ int pager_map(u32 lin, u32 n)
     if (n > pager_avail()) return 0;
     for (i = 0; i < n; i++) {
         if (!map_page_noflush(lin + i * 4096, 0x1000, 0)) {     /* the page table */
-            while (i--) { pte = pte_of(lin + i * 4096); if (pte) *pte = 0; committed--; }
+            while (i--) {
+                pte = pte_of(lin + i * 4096);
+                if (pte && (*pte & 1)) { page_free(*pte & ~0xFFFu); resident--; }
+                if (pte) *pte = 0;
+                committed--;
+            }
             return 0;
         }
         pte = pte_of(lin + i * 4096);
         *pte = PTE_PAGEABLE | 6;
+        /* while memory is plentiful the page is there at once, as before
+         * the paging file (a fault for every first touch slowed the boot
+         * and the timing tests); else it comes when first touched */
+        if (pages_free() > 4 * RESERVE) {
+            u32 p = page_alloc();
+            if (p) { *pte = p | PTE_PAGEABLE | 7; resident++; }
+        }
         committed++;
     }
     vmm_flush_tlb();
