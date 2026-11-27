@@ -1,8 +1,8 @@
 # Win32s on w16's WIN386: virtual memory and W32S.386 (handover)
 
 Branches `w16-vm` (first agent), `w16-vm2` (second), `w16-vm3` (third:
-w16-vm2 with master merged, the fixes below) and a fourth (W32S.386
-observed, then stopped). Spec: ARCHITECTURE.md 9.8
+w16-vm2 with master merged, the fixes below), a fourth (W32S.386
+observed, then stopped) and `w16-w32s2` (fifth: observed fully, stopped). Spec: ARCHITECTURE.md 9.8
 (PE files and W32SYS.DLL), 12.17 (paging), 12.18 (W32S.386), 20.2 (VER
 and Win32 files).
 
@@ -14,41 +14,52 @@ and Win32 files).
 - **KERNEL registers Win32s relies on** (w16-vm3, TK43 on 3.1): FarSetOwner keeps AX, BX, CX, DX, ES (WIN32S16 passes the DX it had, GlobalDOSAlloc's segment, to W32S.386); KRNL386's GlobalUnlock returns the handle in DX.
 - **Debugging aids** (w16-vm3): `[w16] trace=` now also covers procedures found with GetProcAddress; `[w16] vxdlog=1` logs every call through a VxD API entry (INT 2Fh 1684h) with 32-bit registers before/after (`kernel/vxlog.asm`). Earlier: `vmmtrace=3/4` (W32S.386's Device_Init watched/stepped under w16's WIN386).
 
-## W32S.386 on w16's WIN386: stopped again, after observing it (12.18)
+## W32S.386 on w16's WIN386: stopped, after observing it fully (12.18)
 
-Fourth round (run directory `w16-w32s`), under the decision that w16 may carry
-the minimal bytes W32S.386 checks for, learnt at run time:
-- Tools: VXY.386 (`tests/vxd/vxy.c`: steps the next device's Device_Init
-  under Microsoft's WIN386; `[386Enh] VXYHook=`, `VXYWatch=`/`VXYWatchLen=`/
-  `VXYQuiet=` for what happens later) and w16's oracle (`[w16]
-  vmmtrace=5`, `w32soracle=`, `w32sprefix=`; the loader's interop page at
-  80001000h, `W386_MARK_OFF`).
-- Learnt: the 56h search fails on 3.1 and WfW alike (not needed); the C1h
-  search compares 13 bytes and reads two operands (the arena base and a
-  table of 16-byte per-page records); the 87h search compares 8 bytes and
-  reads one operand, a table whose entry 0 W32S.386 replaces.
-- What they are: entry 0 is the VMM's page-fault pager for the arena
-  (an undocumented register contract both ways); W32S.386 reads and
-  writes all four fields of the per-page records (links, page table
-  entries, sentinels).
-- Reported as more than a marker; the user then chose to go on (fifth
-  round, same branch, master merged at 4131ffb, which dropped the taskman
-  case): carry both markers in the interop page, keep per-page state where
-  W32S.386 edits it, call w16's own not-present handler through a table
-  whose entry 0 W32S.386 replaces. Not built yet: 12.18 "Open before
-  building it" lists what must be observed first (whether [B]..[B+4] is one
-  record table or a pool with page tables and free lists in it; the T[0]
-  contract's values; where Win32s's memory must sit given w16's window at
-  80000000h). Next: VXY with VXYWatch over [B]..[B+4] logging the value
-  after each write too, and with no 6-per-field cap, on 3.1 and WfW; then
-  the design.
+Fourth round (run directory `w16-w32s`): the searches and markers learnt
+(the 56h search fails on 3.1 and WfW alike; the C1h search compares 13
+bytes and reads operands A and B; the 87h search compares 8 bytes and reads
+operand T). The user chose to go on, under the rule that w16 may carry the
+minimal bytes, expose its own paging bookkeeping in the observed layout and
+a fault-table entry with the observed convention, all learnt at run time.
 
-Hand runs on installation-05, `/mnt/build/w16-runs/w16-w32s` (synced by
-hand): `build/vxyrun.sh NAME REFDIR [dropin args]` (VXY on a reference
-C:, COM1 to `build/NAME.com1`), `build/fcms.sh NAME REFDIR [args]` (the
-same with Freecell started by WIN.INI `run=`), `build/w32boot.sh NAME
-[args]` (the treems tree after Setup, `build/wt`, with this build's
-WIN386).
+Fifth round (branch `w16-w32s2`, run directory `w16-w32s2`): observed in
+full with VXY (now: values before and after each access, no per-field cap,
+several ranges, VMM EIPs skippable, memory-service hooks, the DDB chain for
+attribution, 115200 baud, and exception handlers that pass V86 and ring-3
+faults straight on: the old ones read their flags through a null DS and
+stopped Windows, so the fourth round's watch runs never reached Freecell).
+Findings (12.18 has them in full):
+- [A] = 80400000h, [B] = 80050000h, [B+4] = 8008C000h on 3.1 16 MB: one
+  table of 16-byte records for the arena 80400000h-83FFFFFFh. The fourth
+  round's 8004D000h/80089000h and its "W32S.386 code at 80281xxxh" were
+  wrong: 8028xxxxh is everyone's discardable init code; W32S.386's locked
+  object is at 80013E14h-80015D07h (from its DDB and LE object table).
+- T is a pager table by page type (PTE bits 9-11). W32S.386 leaves T[0]
+  alone and puts its pager in T[2] (80015094h); it marks its pages type 2
+  in their PTEs and records (207h -> 403h, 006h -> 402h); its own page
+  tables (directory entries 221h, 2BFh, 2C0h...) hold type-2 entries naming
+  arena pages, and T[2] maps them (copy-on-write-like aliases).
+- Of the records W32S.386 touches only +0 (the PTE copy: read, written)
+  and the word at +0Ah (read).
+- The VMM calls T[type] for any not-present entry: EAX address, EBX VM,
+  ECX page, EDX the PTE's address via the 4 MB physical alias, ESI type*4,
+  the PTE on the stack; T[0] returns ESI the record, ECX 6, EAX n<<16|200h;
+  T[2] returns ECX the new PTE for its own pages.
+- Decision: this is the VMM's paging architecture (typed PTEs with a pager
+  per type, one arena for system and client memory with records kept in
+  step, the dispatching fault path), not a marker; stopped and reported,
+  as the user's rule says. Nothing of it is built; the interop page has no
+  marker. If the user decides to build it anyway, 12.18 "What W32S.386
+  depends on" is the interface and "Size" what would change.
+
+Hand runs on installation-05, `/mnt/build/w16-runs/w16-w32s2` (synced by
+hand with rsync; scripts in its `build/`): `vx2.sh NAME 31|wfw [args]`
+(VXY over the records, T[0] hooked, services hooked, Freecell),
+`vx3.sh` (the same without the VMM's own EIPs), `vx5.sh` (Freecell with
+any VXY, `VXY=none` for none). Logs: `build/NAME.com1`. Analysis: one
+line per access, grep by EIP; W32S.386's first object is
+80013E14h-80015D07h on 3.1 (80013E28h- on WfW).
 
 ## Open
 
