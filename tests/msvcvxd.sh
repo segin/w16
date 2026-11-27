@@ -451,8 +451,10 @@ msquery)
             # shellcheck disable=SC2046
             set -- "$@" $(mqf WINDOWS)
         else
+            # FontAliases off: no Arial in the font list, as on 3.1 without
+            # Arial, so the Cue Cards' box comes up on both
             # shellcheck disable=SC2046
-            set -- -T "$root/build/w16" -3 -c "WIN /3 /B" \
+            set -- -T "$root/build/w16" -3 -c "WIN /3 /B" -i 'w16:FontAliases=' \
                 -i 'WIN.INI:windows:run=C:\W16\MSAPPS\MSQUERY\MSQUERY.EXE' $(mqf W16)
         fi
         timeout 500 "$root/tests/inputrun.sh" -s -b 150 -t 300 "$scr" "$out/msquery-$s" -p 386 "$@" \
