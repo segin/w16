@@ -211,7 +211,8 @@
 #              object viewer (OLE2VIEW.EXE, with the OLE 2.01 libraries
 #              from $W16_OLE2_DIR) and HeapWalk on w16's tree
 #              (tests/msvcvxd.sh wps ole2view heapwalk; skipped without
-#              $W16_MSVC_DIR): no fault, and their frames as under 3.1
+#              $W16_MSVC_DIR): no fault, and their frames as under 3.1;
+#              HeapWalk's list painted within twice 3.1's time and 4 s
 #   faultrep   KERNEL's fault report (kernel/fault.c) with TK79
 #              (tests/apps/tk79.c) on w16's tree: a fault with SS a
 #              32-byte segment (WIN /3 and WIN /S), at SP 0, with SS
