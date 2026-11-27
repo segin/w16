@@ -497,6 +497,9 @@
 #              15): TK74 as the shell (tests/apps/tk74.c), its log on
 #              w16's KRNL286 (part k286) and KRNL386 (k386) the same as
 #              on Microsoft's KRNL386
+#   pestart    WinExec of a PE file with Win32s' loader there: TK80 as the
+#              shell (tests/apps/tk80.c), TK80D.DLL as W32SYS.DLL logging
+#              what its third entry is given; w16's KRNL386 as Microsoft's
 #   exitexec   ExitWindowsExec: TK77 as the shell (tests/apps/tk77.c) has
 #              TK77D.COM (tests/dos/tk77d.asm) run with a full path and
 #              parameters, a bare name without, and NULL parameters, and
@@ -1123,7 +1126,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386dpmi vsd vdmad vmprobe win386vxc msvc msvcapps faultrep msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386dpmi vsd vdmad vmprobe win386vxc msvc msvcapps faultrep msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -4196,6 +4199,34 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   $c"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    pestart)
+        # TK80 (a PE file started with W32SYS.DLL there: TK80D.DLL in its
+        # place logs what KERNEL hands its third entry) against 3.1's log:
+        # WinExec's results, LoadModule's, W32SYS's usage, and the name and
+        # command tail its entry gets (S 0005, S 0003); the stack words, the
+        # rest of the stack's strings and the module handle are layout
+        python3 -I "$root/tests/scripts/runassocfiles.py" "$out/pestart-files"
+        psrun() {
+            _n=$1; shift
+            rm -rf "$out/pestart-$_n"
+            "$root/tests/dropin.sh" -c 'WIN /3' -t 180 -W TK80.END -o "$out/pestart-$_n" \
+                -f "$root/build/dos/TK80.EXE=TK80.EXE" -f "$root/build/dos/TK80D.DLL=WINDOWS/SYSTEM/W32SYS.DLL" \
+                -f "$out/pestart-files/PE.EXE=PE.EXE" \
+                -i 'boot:shell=C:\TK80.EXE' "$@" > "$out/pestart-$_n.txt" 2>&1 || true
+            tr -d '\r' < "$out/pestart-$_n/c/TK80.LOG" > "$out/pestart-$_n.log" 2>/dev/null || : > "$out/pestart-$_n.log"
+            sed -n -e '/^[ABCT] /p' -e 's/^M [0-9A-F]* /M h /p' -e '/^S 000[35] /p' -e 's/^E .*/E/p' \
+                "$out/pestart-$_n.log" > "$out/pestart-$_n.cmp"
+        }
+        psrun k386 -3 &
+        psrun ref -r -3 &
+        wait
+        echo "   pestart ref: $(tr '\n' '|' < "$out/pestart-ref.log")"
+        echo "   pestart k386: $(tr '\n' '|' < "$out/pestart-k386.log")"
+        if ! grep -q '^T done' "$out/pestart-ref.log"; then
+            echo "FAIL pestart: 3.1 did not finish ($out/pestart-ref.log)"; fails=$((fails + 1))
+        elif diff "$out/pestart-ref.cmp" "$out/pestart-k386.cmp" > "$out/pestart.diff"; then
+            echo "ok   pestart: a PE file goes to W32SYS.DLL's third entry as on 3.1 (w16's KRNL386)"
+        else echo "FAIL pestart: differs from 3.1 ($out/pestart.diff)"; fails=$((fails + 1)); fi ;;
     exitexec)
         # TK77 (ExitWindowsExec) against 3.1's log
         p=${part:-k386}

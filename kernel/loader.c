@@ -1816,8 +1816,7 @@ int module_init_dll(u16 hmod)
    Windows directory, SYSTEM, the task's directory, the PATH), once only:
    later PE files in the same session were not followed by another
    search. w16 does the same search, once, and closes the file again.
-   UNVERIFIED (no Win32s in the reference install): what 3.1 does with a
-   W32SYS.DLL it finds; w16 then starts the file as without PEError. */
+   With one there, WinExec hands the file to it (exec_pe). */
 static int win32s_installed(void)
 {
     static int known, found;
@@ -1830,6 +1829,39 @@ static int win32s_installed(void)
             f_close(fh);
     }
     return found;
+}
+
+/* WinExec of a PE file with Win32s there: Win32s' loader starts it.
+   Pietrek (Windows Internals ch. 3, ExecPE): KERNEL loads W32SYS.DLL with
+   SetErrorMode(8000h) and goes on in its third entry. Observed on Windows
+   3.1 (TK80, its TK80D.DLL as W32SYS.DLL, 386 Enhanced mode): the entry
+   gets, Pascal convention, the program's name as WinExec made it (".EXE"
+   added, no path searched: "PE.EXE"), its DOS command tail (a length byte,
+   the text, CR; the tail WinExec builds for any program) and nCmdShow,
+   and takes them off the stack; what it returns is WinExec's result
+   (2 gave 2). W32SYS.DLL is loaded once and stays (usage 1 after two
+   WinExecs). LoadModule of a PE file gives 21 and calls nothing.
+   UNVERIFIED: what 3.1 does when W32SYS.DLL does not load or has no
+   third entry (here: 21, as without Win32s). */
+u16 KAPI LoadLibrary(const char FAR *name);
+u32 KAPI GetProcAddress(u16 h, const char FAR *name);
+u16 KAPI_ES SetErrorMode(u16 mode);
+typedef u16 (__far __pascal *pe_entry)(const char FAR *name, const void FAR *tail, u16 show);
+
+static u16 exec_pe(const char FAR *name, const loadparms FAR *lp)
+{
+    static u32 entry;
+    if (!entry) {
+        u16 mode = SetErrorMode(0x8000), h = LoadLibrary("W32SYS.DLL");
+        SetErrorMode(mode);
+        if (h < 32)
+            return LE_WIN32;
+        entry = GetProcAddress(h, (const char FAR *)MK_FP(0, 3));
+        if (!entry)
+            return LE_WIN32;
+    }
+    return ((pe_entry)entry)(name, lp->cmd,
+                             lp->show ? ((const u16 FAR *)lp->show)[1] : 1);
 }
 
 /* A DOS program (a file that is not a Windows module): Windows starts
@@ -1960,7 +1992,9 @@ static u16 load_module(const char FAR *name, void FAR *params, int oldapp)
                LoadModule gives 21, WinExec hands the file to WINOLDAP
                (DOS runs the program's stub) */
             int w32s = win32s_installed();
-            if (oldapp && winboot_active && (w32s || !pe_error))
+            if (oldapp && w32s)
+                return exec_pe(name, lp);
+            if (oldapp && winboot_active && !pe_error)
                 return start_oldapp(name, lp);
             return LE_WIN32;
         }
