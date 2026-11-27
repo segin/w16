@@ -34,7 +34,7 @@ probe=$root/build/dos/VX18.EXE
 w386=$root/build/win386/WIN386.EXE
 [ -f "$probe" ] || { echo "FAIL vmprobe: no $probe (make vxprobes)"; exit 1; }
 # observations that depend on each WIN386's own memory use, not on paging
-skip='dpmi_0500_0[0-8]|dpmi_0500_1[01]|free|big_bad|disk'
+skip='flags|dpmi_0500_0[0-8]|dpmi_0500_1[01]|free|disk'
 
 ini() {
     case $1 in

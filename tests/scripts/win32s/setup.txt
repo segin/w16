@@ -53,3 +53,14 @@ key Return
 sleep 30
 settle 240 10
 shot restarted
+; Win32s's own Freecell (a Win32 program) from File > Run, once Windows
+; is back
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\WIN32APP\FREECELL\FREECELL.EXE
+key Return
+sleep 15
+settle 180 10
+shot freecellrun

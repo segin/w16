@@ -21,12 +21,19 @@
 #          reference install, .tools/ref/win31/cdrive) put in its place and
 #          a swap file: the same as k386, with w16's KERNEL, USER, GDI,
 #          WIN.COM, Program Manager and drivers (ExitWindowsExec: TK77)
-#   tree   w16's install tree alone (C:\W16, its WIN386): Setup's script
-#          must get past its bindings, to its own full-screen window
-#          (at least 40,000 pixels of its blue, 0000AAh, in one of the
-#          first three screens). w16's WIN386 has no paging file, so Setup then says
-#          "Win32s requires Virtual Memory" and "Microsoft Win32s System
-#          Setup has failed.", as Windows 3.1 does with Paging=no.
+#   tree   w16's install tree alone (C:\W16, its WIN386 and its paging
+#          file): the same as treems. Until w16's WIN386 had a paging file
+#          Setup said "Win32s requires Virtual Memory" and "Microsoft Win32s
+#          System Setup has failed." here, as Windows 3.1 does with
+#          Paging=no (ARCHITECTURE.md 12.16); then Windows did not come back
+#          with SYSTEM.INI's device= line for W32S.386
+# Every part then starts Win32s's Freecell (a Win32 program) from File >
+# Run once Windows is back: its window must come up (at least 40,000
+# pixels of its green, 008000h, in the shot freecellrun).
+# WIN32SINST_ARGS: more tests/dropin.sh options for every part (blanks
+# split them), e.g. "-p 386 -i w16:vmmtrace=1" with DROPIN_CONF's
+# serial1=file for the VMM's trace; WIN32SINST_SCRIPT: another input
+# script; WIN32SINST_SECS: the time limit (default 1500).
 # Win32s is not w16's: nothing of it is committed. Its three 1.44 MB disk
 # images disk1.img, disk2.img, disk3.img are found anywhere below
 # $W16_WIN32S_SRC (default .tools/win32s/src, as tests/win32ssetup.sh
@@ -76,8 +83,10 @@ done
 run() {
     p=$1; shift
     rm -rf "$out/$p"
+    # shellcheck disable=SC2086
     "$root/tests/inputrun.sh" -s -b 90 -t "${WIN32SINST_SECS:-1500}" \
-        "$root/tests/scripts/win32s/setup.txt" "$out/$p" -c 'WIN /3' "$@" > "$out/$p.txt" 2>&1 || true
+        "${WIN32SINST_SCRIPT:-$root/tests/scripts/win32s/setup.txt}" "$out/$p" -c 'WIN /3' "$@" \
+        ${WIN32SINST_ARGS:-} > "$out/$p.txt" 2>&1 || true
 }
 
 # PART WINDIR: Setup's result on that part's drive ("ok" or what is wrong)
@@ -94,12 +103,21 @@ installed() {
     echo ok
 }
 
+# PART: Freecell's window in its shot ("ok" or what is wrong)
+freecell() {
+    m=$(magick "$out/$1/freecellrun.png" -fill black +opaque '#008000' -fill white -opaque '#008000' \
+        -format '%[fx:int(mean*w*h+0.5)]' info: 2>/dev/null || echo 0)
+    if [ "$m" -ge 40000 ]; then echo ok
+    else echo "Freecell did not come up ($m pixels of its green in freecellrun.png)"; fi
+}
+
 for p in $parts; do
     case $p in
     k386)
         run k386 -3 "$@"
         r=$(installed k386 WINDOWS)
-        if [ "$r" = ok ]; then echo "ok   k386: Win32s installed and Windows restarted, with w16's KRNL386"
+        [ "$r" != ok ] || r=$(freecell k386)
+        if [ "$r" = ok ]; then echo "ok   k386: Win32s installed, Windows restarted and Freecell ran, with w16's KRNL386"
         else echo "FAIL k386: $r ($out/k386)"; fails=$((fails + 1)); fi ;;
     treems)
         w386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/WIN386.EXE
@@ -107,19 +125,15 @@ for p in $parts; do
         run treems -T "$root/build/w16" -3 -f "$w386=W16/SYSTEM/WIN386.EXE" \
             -i '386Enh:PagingFile=C:\W16\WIN386.SWP' "$@"
         r=$(installed treems W16)
-        if [ "$r" = ok ]; then echo "ok   treems: Win32s installed and Windows restarted on w16's tree with Microsoft's WIN386"
+        [ "$r" != ok ] || r=$(freecell treems)
+        if [ "$r" = ok ]; then echo "ok   treems: Win32s installed, Windows restarted and Freecell ran on w16's tree with Microsoft's WIN386"
         else echo "FAIL treems: $r ($out/treems)"; fails=$((fails + 1)); fi ;;
     tree)
         run tree -T "$root/build/w16" -3 "$@"
-        # (the most of it in any of the first screens)
-        n=0
-        for s in welcome share target; do
-            m=$(magick "$out/tree/$s.png" -fill black +opaque '#0000AA' -fill white -opaque '#0000AA' \
-                -format '%[fx:int(mean*w*h+0.5)]' info: 2>/dev/null || echo 0)
-            [ "$m" -le "$n" ] || n=$m
-        done
-        if [ "$n" -ge 40000 ]; then echo "ok   tree: Setup's script bound and started on w16's tree ($n pixels of its screen)"
-        else echo "FAIL tree: Setup's screen did not come up ($n pixels; $out/tree/welcome.png)"; fails=$((fails + 1)); fi ;;
+        r=$(installed tree W16)
+        [ "$r" != ok ] || r=$(freecell tree)
+        if [ "$r" = ok ]; then echo "ok   tree: Win32s installed, Windows restarted and Freecell ran on w16's tree alone"
+        else echo "FAIL tree: $r ($out/tree)"; fails=$((fails + 1)); fi ;;
     *) echo "FAIL win32s: unknown part $p"; fails=$((fails + 1)) ;;
     esac
 done

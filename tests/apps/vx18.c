@@ -97,6 +97,7 @@ int __cdecl tmain(void)
 
     out("VX18 virtual memory\r\n");
     obsd("flags", GetWinFlags());
+    obs("wf_paging", (GetWinFlags() & 0x0800) != 0);   /* (the processor bits differ: w16's DPMI 0400h gives a 386) */
     obsd("free", GetFreeSpace(0) / 1024);
     clr(); r[0] = 0x0400; vx_int31(r);
     obs("dpmi_0400_bx", r[1]);
