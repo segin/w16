@@ -1,27 +1,22 @@
 # Win32s on w16's WIN386: virtual memory and W32S.386 (handover)
 
-Branch `w16-vm`. Spec: ARCHITECTURE.md 12.17 (paging) and 12.18 (W32S.386).
+Branches `w16-vm` (first agent) and `w16-vm2` (second: master merged, the
+fixes below). Spec: ARCHITECTURE.md 9.8 (PE files and W32SYS.DLL), 12.17
+(paging) and 12.18 (W32S.386).
 
 ## Done
 
-- **Paging file and demand paging** (`win386/ldr/swap.c`, `win386/vmm/pager.c`, hooks in `dpmi.c`, `vmm.c`, `vxd.c`). Temporary WIN386.SWP (2,048 KB as 3.1's) or permanent 386SPART.PAR from PermSwapDOSDrive/PermSwapSizeK; demand-zero client memory, clock eviction to the file through DOS, faults from ring 3 and ring 0; DPMI 0500h with 3.1's figures, 0600h/0601h locks; `_GetFreePageCount`, `_GetDemandPageInfo`, PageSwap device 0007h (Get_Version 0200h/EBX 2 as 3.1, Test_Create, Test_IO_Valid).
-- **What Win32s Setup checks**: no `[386Enh]` key, no PageFile API; KERNEL's WF_PAGING / GetFreeSpace from 0500h. On w16's tree with w16's WIN386 Setup now installs.
-- **Probes**: VX18 + `tests/vmprobe.sh` (boot-test `vmprobe`): equal to 3.1 in every scenario but GetWinFlags' processor bits (left out); 0501h past physical memory pages through the file and reads back. VXW.386 (`tests/vxd/vxw.c`): page directory and PageSwap under 3.1.
-- **Hook_PM_Fault / Hook_V86_Fault / Hook_VMM_Fault** (vxd.c); PM chain called, V86/VMM kept only.
-- **`[w16] vmmtrace=3`**: watch of a device's reads of a VMM page it maps with `_MapPhysToLinear` (vxd.c `vxd_watch_fault`).
+- **Paging file and demand paging** (`win386/ldr/swap.c`, `win386/vmm/pager.c`, hooks in `dpmi.c`, `vmm.c`, `vxd.c`): temporary WIN386.SWP or permanent 386SPART.PAR; demand-zero client memory, clock eviction, faults from ring 3 and ring 0; DPMI 0500h with 3.1's figures, 0600h/0601h; `_GetFreePageCount`, `_GetDemandPageInfo`, PageSwap 0007h.
+- **Paging speed** (w16-vm2): transfers go through the page-aligned part of the loader's transfer buffer (shared by every VM) by pointing the current VM's page table entries at the pages moved: up to 4 pages per INT 21h, no copy. Eviction writes a run of slots; a fault reads the following pages that went out with it. Slot search starts at the last freed slot (with the file full, the old linear search cost more than the I/O). A DOS VM's own 2 KB buffer is no longer used (a 4 KB page ran into its reflection stack). The trace has `VMM: paging:` counts every 1024 pages with the BIOS tick. TK63 at 128 MB (bigmem e128) now ends, paging ~100 s.
+- **KERNEL ExecPE** (w16-vm2, `kernel/loader.c` exec_pe): WinExec of a PE file with W32SYS.DLL present calls its ordinal 3 (name, DOS tail, nCmdShow; Pascal) as 3.1 does (TK80 + TK80D.DLL; boot-test case `pestart`). Before, w16 ran the MS-DOS stub, so Win32s programs never started.
+- **Debugging aids**: `[w16] vmmtrace=3` watches every page of the VMM window through the alias a device's `_MapPhysToLinear` gets; `vmmtrace=4` traces each instruction of W32S.386's Device_Init (EIP and registers). VXW.386 dumps 3.1's system page tables at Device_Init.
 
-## Open: W32S.386 fails Device_Init
+## Open
 
-Trace (boot the Win32s-installed tree with `tests/dropin.sh -p 386 -T TREE -3 -c "WIN /3" -i w16:vmmtrace=1` and DROPIN_CONF `serial1=file`): Call_When_Task_Switched, Hook_PM_Fault 0Dh/0Eh, PageSwap_Get_Version, `_MapPhysToLinear(CR3, 1)`, reads PDEs 201h.. up to the first not present, fails, no more service calls. Tried without effect: PageSwap version as 3.1's; PDEs 200h-210h present; bit 9 and user bit in every PDE; previous handler 0 at Sys_Critical_Init. Ideas: watch the page tables the PDEs point to (W32S may read them by physical-to-linear arithmetic from the directory's mapping); move the System VM's high linear window to 3.1's 84000000h (inside the 200h-210h run); 3.1's client memory base 80604000h (DILinear_Base_Addr). Installed tree for experiments: run `tests/win32sinst.sh -o OUT treems` and take `OUT/treems/work/c/W16`, put w16's WIN386.EXE in its SYSTEM.
+1. **W32S.386 under w16's WIN386** (12.18): after scanning PDEs from 201h, it searches the VMM's own code (4 KB from where its `_MapPhysToLinear` link leads, byte 56h) and the VMM's first 64 KB at 80001000h (dword 000000C1h), checking what follows each hit. Those are Microsoft VMM internals the DDK does not describe; tried and ruled out: 3.1's PDE layout/flags, a mirror of the System VM's table after the window (and CB_High_Linear there), `_MapPhysToLinear` = phys + 400000h as 3.1. Likely not doable clean-room; Win32s works with Microsoft's WIN386.
+2. **Freecell on w16's tree with Microsoft's WIN386** (`treems`): with the KERNEL fix W32SYS.DLL now runs, then says "At least one system component is out of date. Please reinstall" with **w16's VER.DLL** (`shell/ver/ver.c`: NE resources only; Win32s reads version info of its files, among them the PE `SYSTEM\WIN32S\OLE32.DLL`). With Microsoft's VER.DLL swapped in, it goes on: WIN32S.EXE starts (task W32SXXXX), reads `w32skrnl.dll`, and then Microsoft's WIN386 crashes (DOSBox "Illegal write to 80005c4x, CS:IP 28:80006ec4" with paging off, core dump). The `k386` part (3.1 + w16's KRNL386) ends the same way. Next: a VER probe of what 3.1's VER.DLL returns for a PE file (GetFileVersionInfoSize/GetFileVersionInfo/VerQueryValue on OLE32.DLL and W32SYS.DLL); then find what W32SKRNL needs from KERNEL (`[w16] trace=KERNEL.*`, `tracefrom=WIN32S16` / `W32SYS`, `int21log=1`; compare with 3.1's KERNEL on the `win31s` reference). Hand runs: on installation-05, `/mnt/build/w16-runs/w16-vm2x/build/fc/go.sh NAME [dropin args]` boots `build/fc.t` (the treems tree after Setup, Microsoft's VER.DLL in it now) and runs Freecell.
+3. **taskman tree** (below) must pass before merge; then the full boot test against master.
 
-## Tests
+## Test state (2026-11-27, w16-vm2 at "Tests: bigmem's stock ...")
 
-`win32s` part `tree` is strict (install, restart, Freecell) and fails until W32S.386 loads. Not added: a Virtual Memory dialog check (no existing case covers CPWIN386's 386 Enhanced dialog).
-
-## Test state (2026-11-27, HEAD of w16-vm)
-
-make test passes. Full boot test on w16-vm (before the last two pager commits): win32s, vmprobe, msvc, win386*, k386e, vsd, quicktime, sb16 ok. Failing on master too (not this branch's): cplclick co-tree, trails, lzexpand.
-
-Open regressions of this branch, still to fix:
-- **bigmem e128**: with new client pages mapped at once while half the memory is free (the last commit), TK63 (allocates until refused, past the memory) does not end: once memory is short every touch writes a page to the file through DOS. With every page coming on first touch instead (commit "0500h's unlocked pages..."), bigmem passed but holdbtn, taskman (tree 21-dosesc), vdmad and toolhelp (tree386 e) failed; with the current setting those pass in one run, taskman's tree part failed in another (974 pixels, also seen once before). Paging out is slow (one INT 21h write per 4 KB page through V86 DOS) and that is what makes TK63 too slow: write several pages per call, or have 0501h commit against the file without touching pages.
-- **holdbtn** failed in three runs here and passed on master, and passed in the last run here: timing; recheck.
+Run by hand on installation-05 (`/mnt/build/w16-runs/w16-vm2x`, `sh tests/boottest.sh CASES`; the slot queue of `tools/remote-test.sh` was hours long): make test passes; ok: pestart, bigmem (all parts, e128 and e256 included), holdbtn, vdmad, vmprobe, win386dpmi. toolhelp's tree286 part fails in its module list (the `m` scenario: the W16SANS, W16SERIF... font modules master's install tree added; not checked on master). **taskman's tree part fails here and passes on master** (same host, same day): 10-cascade.png differs by 39 pixels in two runs, at an icon title of Program Manager's at the left (taskman-tree-10-cascade-diff.png); at 16 MB nothing is paged, so look at the first agent's commits (eager/lazy client pages, 0500h) rather than the I/O. Not run yet: the full boot test, msvc, msvccl, the win386 cases, win32s (k386/treems install and restart ok by hand; Freecell open as above).
