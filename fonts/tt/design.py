@@ -57,7 +57,7 @@ class Style:
             self.sh = 214 if b else 164          # horizontal strokes
             self.shc = 226 if b else 172
             self.hair = self.sh
-            self.n, self.ni = 2.35, 2.6
+            self.n, self.ni = 2.2, 2.4             # (rounder than 2.35, 2.6: the squarish bowls filled their corners at 9 pt)
             self.thin = self.sh                  # thin diagonals
         elif kind == 'serif':
             self.sv = 258 if b else 172
@@ -776,7 +776,7 @@ def mono_w(s, x0, x1, top, sv):
     q = (x1 - x0) / 4
     t = sv * 0.82
     ha = top * 0.7
-    b1, b2, m = x0 + q * 1.05, x1 - q * 1.05, (x0 + x1) / 2
+    b1, b2, m = x0 + q * 0.7, x1 - q * 0.7, (x0 + x1) / 2     # (steep outer strokes: four strokes in seven pixels)
     h1 = dw(t, b1 - x0, top)
     h2 = dw(t, m - b1, ha)
     out = slanted(x0 + h1 / 2, b1, top, 0, h1) + slanted(x1 - h1 / 2, b2, top, 0, h1)

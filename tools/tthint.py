@@ -540,8 +540,17 @@ class Hinter:
             ys = {a[0]: a[3], a[1]: a[5], b[0]: b[3], b[1]: b[5]}
             level = [(p, q) for p in (a[0], a[1]) for q in pb if abs(ys[p] - ys[q]) <= 1]
             if level and all(p not in touched for p, q in level):
+                # (the stem's control value, not the rounded width: z's
+                # 1.5-pixel cut came out 2 pixels a row)
+                thin = bool(self.ystems) and w < self.main * 0.7
+                base = min(self.ystems, key=lambda v: abs(v - w)) if thin else None
+                cv = self.ystem_cvt.get(base) if thin else self._stem_cvt(self.xstem_cvt, self.main)
                 for p, q in level:
-                    code += push([p]) + bytes([MDAP_R]) + push([q]) + bytes([MDRP_LINK])
+                    code += push([p]) + bytes([MDAP_R])
+                    if cv is None:
+                        code += push([q]) + bytes([MDRP_LINK])
+                    else:
+                        code += push([q, cv, p, FN_LINK]) + bytes([CALL])
                     touched |= {p, q}
                 continue
             cos = abs(a[7])
