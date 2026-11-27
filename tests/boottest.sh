@@ -4382,7 +4382,9 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             bmcheck bigmem-stocks dpmi_largest 32768 65536 total 114688 131072
             if [ "$r" = ok ]; then
                 bmrun bigmem-stocke 128 -3 -c 'WIN /3 /B' -f "$w386=WINDOWS/SYSTEM/WIN386.EXE" -i w16:LargeMemory=0
-                bmcheck bigmem-stocke total 114688 131072
+                # (the paging file adds to it in 386 Enhanced mode, as under
+                # 3.1 itself: refe below, ARCHITECTURE.md 12.17)
+                bmcheck bigmem-stocke total 114688 262144
             fi ;;
         ref)
             refrun bigmem-refs bigmem bmrun bigmem-refs 128 -3 -r
