@@ -219,6 +219,17 @@
 #              builds and runs hello world in a DOS box under w16's WIN386
 #              as under Microsoft's, with DOSXNT.386 and without
 #              (tests/msvcvxd.sh cl; skipped without $W16_MSVC_DIR)
+#   msquery    US39 (tests/apps/us39.c) as the shell on 3.1 and on w16's
+#              USER: SetFocus on disabled and minimised windows and their
+#              children, and another task's MessageBox owned by the
+#              shell's window; the OBS lines identical. Then Microsoft
+#              Query and its Cue Cards closed on w16's tree as on 3.1
+#              (tests/msvcvxd.sh msquery; skipped without its files,
+#              $W16_MSQUERY_DIR)
+#   cvdos      CodeView for MS-DOS in a full-screen DOS box on w16's tree,
+#              the mouse moved over it, quit: DOSBox-X stays alive, its
+#              menu bar as under Microsoft's WIN386, Windows back after EXIT
+#              (tests/msvcvxd.sh cvdos; skipped without $W16_MSVC_DIR)
 #   win386doscad  a DOS program's #GP (VX12 G: the stop box) and Ctrl+Alt+Del
 #              with the MS-DOS Prompt full screen (its screen; Return closes
 #              the box, vx12gc.txt; Escape goes back, dosbox386cad.txt)
@@ -1116,7 +1127,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386dpmi vsd vdmad win386vxc msvc msvccl msvcapps faultrep bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386dpmi vsd vdmad win386vxc msvc msvccl msvcapps faultrep msquery cvdos bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2054,6 +2065,47 @@ runcase() {
         elif grep -q '^skip' "$out/msvccl.txt"; then echo "ok   msvccl: $(grep -m1 '^skip' "$out/msvccl.txt")"
         elif grep -q '^ok' "$out/msvccl.txt"; then echo "ok   msvccl: $(grep -m1 '^ok' "$out/msvccl.txt" | sed 's/^ok *cl: //')"
         else echo "FAIL msvccl: no result ($out/msvccl.txt)"; fails=$((fails + 1)); fi ;;
+    msquery)
+        # the user's report (2026-11-26): closing Microsoft Query ended w16
+        # (exception). US39 (tests/apps/us39.c): SetFocus and another
+        # task's MessageBox, on 3.1 and w16's USER
+        e39() {   # LABEL dropin.sh options...: US39's run, its log in LABEL.log
+            _l=$1; shift
+            DROPIN_WSECS=20 "$root/tests/dropin.sh" -t 200 -W 'WINDOWS/TK.LOG' -o "$out/$_l" \
+                -f "$root/build/dos/US39.EXE=US39.EXE" -i 'boot:shell=C:\US39.EXE' -r "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            { tr -d '\r' < "$out/$_l/c/WINDOWS/TK.LOG"; } > "$out/$_l.log" 2>/dev/null
+        }
+        e39 msquery-ref &
+        e39 msquery-w16 -f "$user=WINDOWS/SYSTEM/USER.EXE" &
+        wait
+        r=ok
+        for k in ref w16; do
+            grep -q '^US39 end' "$out/msquery-$k.log" ||
+                { [ "$r" = ok ] && r="US39 did not finish ($k: $out/msquery-$k.log)"; }
+            grep '^OBS [^~]' "$out/msquery-$k.log" > "$out/msquery-$k.obs"
+        done
+        [ "$r" != ok ] || cmp -s "$out/msquery-ref.obs" "$out/msquery-w16.obs" ||
+            r="US39: $(diff "$out/msquery-ref.obs" "$out/msquery-w16.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/msquery-ref.obs, msquery-w16.obs)"
+        # Microsoft Query itself (tests/msvcvxd.sh; skip without its files)
+        if [ "$r" = ok ]; then
+            "$root/tests/msvcvxd.sh" -o "$out/msquery" msquery > "$out/msquery.txt" 2>&1 || true
+            if grep -q '^FAIL' "$out/msquery.txt"; then r="$(grep -m1 '^FAIL' "$out/msquery.txt" | sed 's/^FAIL *//') ($out/msquery.txt)"
+            elif grep -q '^skip' "$out/msquery.txt"; then q="US39 as 3.1; $(grep -m1 '^skip' "$out/msquery.txt")"
+            elif grep -q '^ok' "$out/msquery.txt"; then q="US39 as 3.1 (SetFocus, another task's MessageBox; w16 USER); $(grep -m1 '^ok' "$out/msquery.txt" | sed 's/^ok *msquery: //')"
+            else r="no result ($out/msquery.txt)"; fi
+        fi
+        if [ "$r" = ok ]; then echo "ok   msquery: $q"
+        else echo "FAIL msquery: $r"; fails=$((fails + 1)); fi ;;
+    cvdos)
+        # the user's report (2026-11-26): CodeView for MS-DOS ended DOSBox-X
+        # (tests/msvcvxd.sh cvdos; skip without $W16_MSVC_DIR)
+        "$root/tests/msvcvxd.sh" -o "$out/cvdos" cvdos > "$out/cvdos.txt" 2>&1 || true
+        if grep -q '^FAIL' "$out/cvdos.txt"; then
+            echo "FAIL cvdos: $(grep -m1 '^FAIL' "$out/cvdos.txt") ($out/cvdos.txt)"; fails=$((fails + 1))
+        elif grep -q '^skip' "$out/cvdos.txt"; then echo "ok   cvdos: $(grep -m1 '^skip' "$out/cvdos.txt")"
+        elif grep -q '^ok' "$out/cvdos.txt"; then echo "ok   cvdos: $(grep -m1 '^ok' "$out/cvdos.txt" | sed 's/^ok *cvdos: //')"
+        else echo "FAIL cvdos: no result ($out/cvdos.txt)"; fails=$((fails + 1)); fi ;;
     msvc)
         # Visual C++ 1.52's devices (tests/msvcvxd.sh; skip without $W16_MSVC_DIR)
         "$root/tests/msvcvxd.sh" -o "$out/msvc" boot cvw wx > "$out/msvc.txt" 2>&1 || true
