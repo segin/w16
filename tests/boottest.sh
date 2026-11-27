@@ -4227,7 +4227,11 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             # all but what DOS, the BIOS and Windows itself keep (16 MB
             # is generous), and no more than the machine has
             lo=$((m * 1024 - 16384)) hi=$((m * 1024))
-            bmcheck bigmem-$p dpmi_largest $lo $hi freespace $lo $hi total $lo $hi ;;
+            # (in 386 Enhanced mode the paging file adds to what a program
+            # can have: 3.1's largest block was 258,964 KB with 128 MB,
+            # ARCHITECTURE.md 9.6, 12.16; at most PageOverCommit's 4 times)
+            case $p in e*) vh=$((hi * 4)) ;; *) vh=$hi ;; esac
+            bmcheck bigmem-$p dpmi_largest $lo $vh freespace $lo $vh total $lo $hi ;;
         s256ms)
             bmrun bigmem-s256ms 256 -3 -x
             bmcheck bigmem-s256ms dpmi_largest 65536 262144 total 245760 262144 ;;

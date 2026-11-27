@@ -358,7 +358,12 @@ void pager_meminfo(u32 *p)
     linfree = lin_total > committed ? lin_total - committed : 0;
     unlocked = f + (committed > slots_used ? committed - slots_used : 0);
     if (nslots) {
+        /* the free linear space less one, but no more than the memory and
+         * the file can hold: 3.1 gave 258,964 KB with 128 MB (ARCHITECTURE.md
+         * 9.6), and its 0501h of more than memory and a 2 MB file failed */
+        u32 c = pager_avail(), t = c / 1025 + 2;
         p[1] = linfree ? linfree - 1 : 0;
+        if (p[1] > (c > t ? c - t : 0)) p[1] = c > t ? c - t : 0;
         p[2] = unlocked > 7 ? unlocked - 7 : 0;
     } else {
         u32 t = f / 1025 + 2;           /* page tables (dpmi.c mem_largest_pages) */
