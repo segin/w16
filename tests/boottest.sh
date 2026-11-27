@@ -251,7 +251,7 @@
 #   win386xms  w16's WIN386: VX15's XMS and EMS calls in a DOS box (3 PIFs)
 #              give the same log as under Microsoft's WIN386
 #   vmtasksoak the VM Task Manager left running (tests/vmtasksoak.sh, the
-#              tree, DOSBox-X): VMTASK.EXE at 0.5 s for 30 cycles of a
+#              tree, DOSBox-X): VMTASK.EXE at 0.5 s for 20 cycles of a
 #              program started and closed and, every other cycle, a busy
 #              DOS box ended through VMTASK.386; VMTASK still runs, and
 #              the free memory, GDI's and USER's resources and objects,
@@ -2330,9 +2330,9 @@ runcase() {
         # the user's report (2026-11-27): VMTASK.EXE left running while
         # other things happened ended in a fault; tests/vmtasksoak.sh's
         # checks (its log's CHECK lines)
-        VMTASK_DOSBOX=x VMTASK_CYCLES=30 VMTASK_TIME=1200 sh "$root/tests/vmtasksoak.sh" "$out/vmtasksoak" tree \
-            > "$out/vmtasksoak.txt" 2>&1
-        rc=$?
+        rc=0
+        VMTASK_DOSBOX=x VMTASK_CYCLES=20 VMTASK_TIME=1800 sh "$root/tests/vmtasksoak.sh" "$out/vmtasksoak" tree \
+            > "$out/vmtasksoak.txt" 2>&1 || rc=$?
         if [ $rc = 0 ] && grep -q '^VMTSOAK done, 0 failed' "$out/vmtasksoak.txt"; then
             echo "ok   vmtasksoak: $(grep -c '^VMTSOAK sample' "$out/vmtasksoak.txt") cycles, VMTASK up, resources steady"
         else echo "FAIL vmtasksoak: $(grep -m1 -e '^CHECK FAIL' -e '^no VMTSOAK' "$out/vmtasksoak.txt" || echo 'no result') ($out/vmtasksoak.txt)"

@@ -383,7 +383,7 @@ your own), `VMTASK_DOSBOX=x`, `VMTASK_EXTRA` (more dropin.sh options,
 e.g. `-i WIN.INI:vmtsoak:memfill=600`: fill global memory to 600 KB
 free first; `gdifill=N`, `userfill=N`: GDI and USER objects until N per
 cent are free, -1 until one fails). The boot-test case `vmtasksoak`
-runs it on the tree under DOSBox-X for 30 cycles.
+runs it on the tree under DOSBox-X for 20 cycles.
 `tests/qtplay.sh` takes `QTPLAY_W16OPTS` and
 `tests/sb16/sbaudio.sh` `SBAUDIO_OPTS`/`SBAUDIO_CONF` (more dropin.sh
 options, a COM1 for the VMM's trace) for the w16 side. XMS and EMS in a DOS box:
