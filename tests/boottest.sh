@@ -34,9 +34,11 @@
 #              tree: AX, CX, ES and DS a window procedure is called with
 #              (AX the window's instance's data segment), and the messages
 #              CreateWindow sends a hidden child and popup (WM_SIZE and
-#              WM_MOVE right after WM_CREATE); the rest of TK71's log
-#              (other registers, shown windows, WM_MDICREATE) is not
-#              compared yet
+#              WM_MOVE right after WM_CREATE), and AX, ES and DS a hook
+#              procedure set without MakeProcInstance is called with
+#              (WH_CBT, WH_CALLWNDPROC, WH_GETMESSAGE, WH_MSGFILTER;
+#              Visual C++ 1.52's OLE2VIEW); the rest of TK71's log (other
+#              registers, shown windows, WM_MDICREATE) is not compared yet
 #   mdistyle   TK75 (tests/apps/tk75.c) as the shell on 3.1 and on w16's
 #              tree: what WM_MDICREATE makes of the child's style (with
 #              and without MDIS_ALLCHILDSTYLES, hidden, maximised,
@@ -1509,7 +1511,7 @@ runcase() {
         wait
         for k in ref tree; do
             tr -d '\r' < "$out/wpregs-$k/c/TK71.LOG" 2>/dev/null |
-                sed -n 's/^\(M [0-9A-F]*\) AX=\([^ ]*\) BX=[^ ]* CX=\([^ ]*\) .* ES=\([^ ]*\) DS=\([^ ]*\)$/\1 AX=\2 CX=\3 ES=\4 DS=\5/p; /hidden$/p; /^T done/p' > "$out/wpregs-$k.log"
+                sed -n 's/^\(M [0-9A-F]*\) AX=\([^ ]*\) BX=[^ ]* CX=\([^ ]*\) .* ES=\([^ ]*\) DS=\([^ ]*\)$/\1 AX=\2 CX=\3 ES=\4 DS=\5/p; s/^\(H [0-9A-F]*[a-zA-Z0-9 ]*\) AX=\([^ ]*\) .* ES=\([^ ]*\) DS=\([^ ]*\)$/\1 AX=\2 ES=\3 DS=\4/p; /hidden$/p; /^T done/p' > "$out/wpregs-$k.log"
         done
         r=ok
         grep -q '^T done' "$out/wpregs-ref.log" || r="ref did not finish ($out/wpregs-ref.log)"
