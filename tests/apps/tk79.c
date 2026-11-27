@@ -1,9 +1,9 @@
 /*
- * tk76.c - faults for w16's fault report (kernel/fault.c): a program that
+ * tk79.c - faults for w16's fault report (kernel/fault.c): a program that
  * faults with a stack the report must not trust. Visual C++ 1.52's WPS
  * and OLE2VIEW faulted on w16 and the report died after "w16: exc"; the
  * report now runs on a stack of its own and checks every read.
- * The first letter of C:\TK76.ARG picks the fault (WIN.INI's run= takes
+ * The first letter of C:\TK79.ARG picks the fault (WIN.INI's run= takes
  * no arguments: its blanks separate programs):
  *   S  SS a 32-byte data segment, SP 10h (a word pushed), BP 7777h
  *      (outside it), ES null, then DS loaded with FFFFh: a general
@@ -91,7 +91,7 @@ static WORD seg(WORD limit, WORD rights)
 int __cdecl tmain(void)
 {
     char c = 0;
-    HFILE f = _lopen("C:\\TK76.ARG", OF_READ);
+    HFILE f = _lopen("C:\\TK79.ARG", OF_READ);
     if (f != HFILE_ERROR) {
         _lread(f, &c, 1);
         _lclose(f);

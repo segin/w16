@@ -196,8 +196,8 @@
 #              from $W16_OLE2_DIR) on w16's tree (tests/msvcvxd.sh wps
 #              ole2view; skipped without $W16_MSVC_DIR): no fault, and
 #              their frames as under Windows 3.1
-#   faultrep   KERNEL's fault report (kernel/fault.c) with TK76
-#              (tests/apps/tk76.c) on w16's tree: a fault with SS a
+#   faultrep   KERNEL's fault report (kernel/fault.c) with TK79
+#              (tests/apps/tk79.c) on w16's tree: a fault with SS a
 #              32-byte segment (WIN /3 and WIN /S), at SP 0, with SS
 #              expand-down, and with [w16] faultreptest
 #              making the report's own steps fault: the whole report must
@@ -2003,7 +2003,7 @@ runcase() {
             echo "ok   msvcapps: $(grep '^\(ok\|skip\)' "$out/msvcapps.txt" | tr '\n' ' ')"
         else echo "FAIL msvcapps: no result ($out/msvcapps.txt)"; fails=$((fails + 1)); fi ;;
     faultrep)
-        # TK76's faults on w16's tree: KERNEL's report must come out whole
+        # TK79's faults on w16's tree: KERNEL's report must come out whole
         for k in S S2 P X N2 N4; do
             set -- -T "$root/build/w16" -3 -c 'WIN /3 /B'
             a=${k%[0-9]}
@@ -2013,8 +2013,8 @@ runcase() {
             N4) a=S; set -- "$@" -i w16:faultreptest=99 ;;      # and QUIET, OEM
             esac
             printf '%s' "$a" > "$out/faultrep-$k.arg"
-            "$root/tests/dropin.sh" "$@" -t 90 -o "$out/faultrep-$k" -f "$out/faultrep-$k.arg=TK76.ARG" \
-                -f "$root/build/dos/TK76.EXE=TK76.EXE" -i 'WIN.INI:windows:run=C:\TK76.EXE' \
+            "$root/tests/dropin.sh" "$@" -t 90 -o "$out/faultrep-$k" -f "$out/faultrep-$k.arg=TK79.ARG" \
+                -f "$root/build/dos/TK79.EXE=TK79.EXE" -i 'WIN.INI:windows:run=C:\TK79.EXE' \
                 > "$out/faultrep-$k.txt" 2>&1 &
         done
         wait
