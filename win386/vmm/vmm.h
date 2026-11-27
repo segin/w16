@@ -294,6 +294,7 @@ struct cregs *vmm_hold_delivery(struct cregs *r);
 void vxd_pm_app(int begin, struct cregs *r);
 void vxd_exit(struct cregs *r);
 void vxd_link(struct tframe *f);
+int vxd_step(struct tframe *f);      /* [w16] vmmtrace=4 */
 void vxd_pm_fault(struct cregs *r, int vec, u32 err);
 int vxd_watch_fault(u32 vec, u32 *eflags, u32 eip);    /* [w16] vmmtrace=3 */   /* Hook_PM_Fault's chain, then DPMI */
 u32 vm_handle(void);

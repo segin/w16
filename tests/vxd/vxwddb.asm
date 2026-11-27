@@ -26,3 +26,8 @@ VXW_DDB:
         VXDCALL _pageswap_get_version, 7, 0
         VXDCALL _pageswap_test_create, 7, 1
         VXDCALL _pageswap_test_io_valid, 7, 2
+        VXDCALL _vmm_get_version, 1, 0
+        VXDCALL _vmm_get_sys_vm, 1, 3
+        VXDCALLC _vmm_sys_pages, 1, 5Bh, 1
+        VXDCALLC _vmm_first_v86, 1, 6Bh, 0
+        VXDCALLC _vmm_last_v86, 1, 0D5h, 0

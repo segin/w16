@@ -1088,10 +1088,10 @@ int main(int argc, char **argv)
     info.log_port = 0x3F8;              /* the VMM's trace goes to COM1 */
     {   /* [w16] vmmtrace=1 (w16's own key) turns on the detailed trace;
          * vmmtrace=2 the DOS VMs' trace (their interrupts, VM switches,
-         * the VDD's API) */
+         * the VDD's API); 3 and 4 the device watch and step (vxd.c) */
         char __far *q;
         for (q = ini; q && *q; q++)
-            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=", 9) && q[9] >= '1' && q[9] <= '3')
+            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=", 9) && q[9] >= '1' && q[9] <= '4')
                 info.trace = q[9] - '0';
     }
     read_sched(&info);

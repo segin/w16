@@ -440,6 +440,7 @@ _shell_hk_entry:
 ; u32 vxd_control(proc, msg, ebx, esi, edx, edi, ebp): call a VxD's
 ; control procedure with EAX = msg and those registers; returns its carry
 global _vxd_control
+extern _vxd_step_on
 _vxd_control:
         push ebp
         push ebx
@@ -453,7 +454,15 @@ _vxd_control:
         mov ebp, [esp+20+24]
         push dword [esp+20]             ; the procedure
         pop ecx
-        call ecx
+        cmp dword [_vxd_step_on], 0     ; [w16] vmmtrace=4: stepped (vxd.c)
+        je .go
+        pushfd
+        or dword [esp], 100h
+        popfd
+.go:    call ecx
+        pushfd
+        and dword [esp], ~100h
+        popfd
         mov eax, 0
         setc al
         pop edi

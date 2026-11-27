@@ -33,6 +33,12 @@ vu32 __cdecl vmm_demand_info(vu32 info, vu32 flags);
 void __cdecl pageswap_get_version(struct vregs *r);
 void __cdecl pageswap_test_create(struct vregs *r);
 void __cdecl pageswap_test_io_valid(struct vregs *r);
+void __cdecl vmm_get_version(struct vregs *r);
+void __cdecl vmm_get_sys_vm(struct vregs *r);
+vu32 __cdecl vmm_sys_pages(vu32 flags);
+vu32 __cdecl vmm_first_v86(void);
+vu32 __cdecl vmm_last_v86(void);
+static void regs(const char *what, struct vregs *r);
 
 static void putc_(int c)
 {
@@ -44,6 +50,89 @@ static void puts_(const char *s) { while (*s) putc_(*s++); }
 static void hex(vu32 v, int n)
 {
     while (n--) putc_("0123456789ABCDEF"[(v >> (n * 4)) & 15]);
+}
+
+static int detail;                      /* the tables too: at Device_Init */
+
+/* the system's half of the address space (entries 200h up) in detail:
+ * each present entry's value, the runs of present entries in its page
+ * table (flags, the first physical page, physically contiguous), and
+ * where the page directory and the tables themselves are mapped there */
+static void tables(vu32 *pd)
+{
+    vu32 i, j, k, runs, *pt, cr3 = get_cr3() & ~0xFFFu;
+    puts_("VXW  pdlin ");
+    hex((vu32)pd, 8);
+    puts_("\r\n");
+    for (i = 0; i < 5; i++) {
+        puts_("VXW  pde ");
+        hex(i, 3);
+        puts_(" = ");
+        hex(pd[i], 8);
+        puts_("\r\n");
+    }
+    for (i = 0x200; i < 1024; i++) {
+        if (!(pd[i] & 1)) continue;
+        pt = (vu32 *)vmm_map_phys(pd[i] & ~0xFFFu, 4096, 0);
+        puts_("VXW  pde ");
+        hex(i, 3);
+        puts_(" = ");
+        hex(pd[i], 8);
+        puts_(" at ");
+        hex((vu32)pt, 8);
+        puts_("\r\n");
+        if (!pt || pt == (vu32 *)0xFFFFFFFF) continue;
+        for (j = 0, runs = 0; j < 1024 && runs < 24; j = k) {
+            if (!pt[j]) { k = j + 1; continue; }
+            for (k = j + 1; k < 1024 && pt[k] && (pt[k] & 0xFFF) == (pt[j] & 0xFFF)
+                 && ((pt[k] & 1) == 0 || (pt[k] & ~0xFFFu) == (pt[j] & ~0xFFFu) + (k - j) * 4096); k++) ;
+            puts_("VXW   pte ");
+            hex(j, 3); putc_('-'); hex(k - 1, 3);
+            puts_(" ");
+            hex(pt[j], 8);
+            puts_("\r\n");
+            runs++;
+        }
+        for (j = 0; j < 1024; j++) {
+            vu32 p = pt[j] & ~0xFFFu;
+            if (!(pt[j] & 1)) continue;
+            if (p == cr3) {
+                puts_("VXW   the page directory at ");
+                hex((i << 22) | (j << 12), 8);
+                puts_("\r\n");
+            }
+            for (k = 0x200; k < 1024; k++)
+                if ((pd[k] & 1) && (pd[k] & ~0xFFFu) == p) {
+                    puts_("VXW   table ");
+                    hex(k, 3);
+                    puts_(" at ");
+                    hex((i << 22) | (j << 12), 8);
+                    puts_("\r\n");
+                }
+        }
+    }
+}
+
+static void services(void)
+{
+    struct vregs v;
+    vu32 i;
+    for (i = 0; i < sizeof(v) / 4; i++) ((vu32 *)&v)[i] = 0;
+    vmm_get_version(&v);
+    regs("Get_VMM_Version", &v);
+    for (i = 0; i < sizeof(v) / 4; i++) ((vu32 *)&v)[i] = 0;
+    vmm_get_sys_vm(&v);
+    regs("Get_Sys_VM_Handle", &v);
+    puts_("VXW  sysvm high ");
+    hex(((vu32 *)v.ebx)[1], 8);
+    puts_("\r\n");
+    puts_("VXW  _GetSysPageCount ");
+    hex(vmm_sys_pages(0), 8);
+    puts_(" _GetFirstV86Page ");
+    hex(vmm_first_v86(), 8);
+    puts_(" _GetLastV86Page ");
+    hex(vmm_last_v86(), 8);
+    puts_("\r\n");
 }
 
 static void dump(const char *what)
@@ -70,6 +159,7 @@ static void dump(const char *what)
     puts_("VXW  demand");
     for (i = 0; i < 6; i++) { putc_(' '); hex(d[i], 8); }
     puts_("\r\n");
+    if (detail) tables(pd);
 }
 
 static void regs(const char *what, struct vregs *r)
@@ -114,7 +204,7 @@ void __cdecl vxw_control(struct vregs *r)
 {
     switch (r->eax) {
     case 0: dump("Sys_Critical_Init"); break;
-    case 1: dump("Device_Init"); pageswap(); break;
+    case 1: detail = 1; dump("Device_Init"); detail = 0; services(); pageswap(); break;
     case 2: dump("Init_Complete"); pageswap(); break;
     case 3: dump("Sys_VM_Init"); break;
     case 5: dump("System_Exit"); break;

@@ -225,14 +225,29 @@ void vxd_send_rev(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi)
 
 /* send msg to every device, in init order (rev: the reverse); a device
  * that fails an init message (carry) is dropped */
+#define NBUILTIN 5
+static u32 step_init;                   /* [w16] vmmtrace=4: step outside devices' Device_Init */
+u32 vxd_step_on;                        /* (vmmasm.asm: TF set for the control call) */
+static u32 step_lo, step_hi, step_n;
+
 static void broadcast(u32 msg, u32 esi, u32 edx, u32 edi, int rev)
 {
-    u32 i, j;
+    u32 i, j, fail;
     for (j = 0; j < ndevs; j++) {
         i = rev ? ndevs - 1 - j : j;
         if (!devs[i] || !devs[i]->control) continue;
-        if (vxd_control(devs[i]->control, msg, (u32)sys_cb, esi, edx, edi, (u32)sys_client)
-            && msg <= INIT_COMPLETE) {
+        if (step_init && msg == DEVICE_INIT && !memcmp(devs[i]->name, "W32S    ", 8)) {   /* (Win32s's: 12.18) */
+            /* (the device's own code: around its control procedure) */
+            step_lo = devs[i]->control > 0x10000 ? devs[i]->control - 0x10000 : 0;
+            step_hi = devs[i]->control + 0x10000;
+            step_n = 0;
+            trace("VMM: stepping %c%c%c%c's Device_Init at %x\n", devs[i]->name[0], devs[i]->name[1],
+                  devs[i]->name[2], devs[i]->name[3], devs[i]->control);
+            vxd_step_on = 1;
+        }
+        fail = vxd_control(devs[i]->control, msg, (u32)sys_cb, esi, edx, edi, (u32)sys_client);
+        vxd_step_on = 0;
+        if (fail && msg <= INIT_COMPLETE) {
             trace("VMM: device %c%c%c%c%c%c%c%c failed message %x: not loaded\n",
                   devs[i]->name[0], devs[i]->name[1], devs[i]->name[2], devs[i]->name[3],
                   devs[i]->name[4], devs[i]->name[5], devs[i]->name[6], devs[i]->name[7], msg);
@@ -245,7 +260,7 @@ static void broadcast(u32 msg, u32 esi, u32 edx, u32 edi, int rev)
  * win386-vxds.md). Its services as Windows 3.1's answered VXP:
  * VTD_Get_Version AX=030Ah, the fastest period 1 ms in EBX, the slowest
  * 54 ms (36h) in ECX; VTD_Get_Interrupt_Period 54 ms. */
-#define NBUILTIN 5
+
 static void vtd_init(void);
 /* w16's VDD (vdd.c, in this module): its DDB for other devices' dynamic
  * links (Windows 3.1's: "VDD", 000Ah, 2.00, init order 28000000h, 14
@@ -744,12 +759,31 @@ static u32 link_alloc_run(u32 n, u32 align, u32 max_phys, u32 *phys)
 
 static u32 watch_on;                    /* [w16] vmmtrace=3: map_phys's watch (below) */
 
+/* [w16] vmmtrace=4: each instruction of W32S.386's Device_Init
+ * (in its own code: the VMM's are not shown) is traced with the
+ * registers before it runs: a debugging aid that follows what a device
+ * does with what it is given (black box: addresses and registers, never
+ * its code bytes) */
+int vxd_step(struct tframe *f)
+{
+    static u32 last;                    /* (a REP instruction once) */
+    if (!vxd_step_on) return 0;
+    if (f->eip >= step_lo && f->eip < step_hi && step_n < 8000 && f->eip != last) {
+        step_n++;
+        last = f->eip;
+        trace("STEP %x a %x b %x c %x d %x si %x di %x bp %x f %x\n", f->eip, f->eax, f->ebx,
+              f->ecx, f->edx, f->esi, f->edi, f->ebp, f->eflags & 0xFFF);
+    }
+    return 1;                           /* (TF stays as it is: vmmasm.asm clears it) */
+}
+
 void vxd_init(void)
 {
     u32 n = 1 + NBUILTIN + info->vxd_count, i, j;
     u32 *list = (u32 *)(W386_VMM_LIN + info->vxd_list);
 
     if (info->trace == 3) { watch_on = 1; info->trace = 1; }
+    if (info->trace == 4) { step_init = 1; info->trace = 1; }
 
     devs = kmalloc(n * sizeof(*devs));
     sys_acb = kmalloc(256);
@@ -1388,28 +1422,33 @@ static u32 physmap_next;
 static struct { u32 phys, n, lin; } physmaps[16];
 static u32 nphysmaps;
 
-/* [w16] vmmtrace=3: a device's _MapPhysToLinear of a page in the VMM's
- * own memory gets an alias of it whose page is not present; each read or
- * write of it there faults, is traced (the offset and the device's EIP)
- * and is let through for one instruction (the trap flag). A debugging aid
+/* [w16] vmmtrace=3: a device's first _MapPhysToLinear of the VMM's own
+ * memory gets an alias of the whole window (every page of it, not
+ * present, at the same offsets as in the window); each read or write of
+ * it there faults, is traced (the physical address, the dword there, the
+ * device's EIP) and is let through for one instruction (the trap flag).
+ * A device that finds more of the VMM's memory from the address it got
+ * (another page by its physical address) shows that too. A debugging aid
  * for the VMM's memory a device looks at (black box: what it reads, not
  * its code) */
-static u32 watch_lin, watch_phys, watch_armed;
+static u32 watch_lin, watch_size, watch_armed, *watch_pte;
 
 int vxd_watch_fault(u32 vec, u32 *eflags, u32 eip)
 {
-    u32 *pt;
+    u32 a = get_cr2();
     if (!watch_lin) return 0;
-    pt = (u32 *)phys_to_lin(vmm_pdir_entry_get(watch_lin >> 22) & ~0xFFFu) + ((watch_lin >> 12) & 0x3FF);
-    if (vec == 14 && (get_cr2() & ~0xFFFu) == watch_lin && !watch_armed) {
-        trace("VMM: watch: %s reads offset %x at %x\n", vxd_owner(eip), get_cr2() & 0xFFF, eip);
-        *pt = watch_phys | 3;
+    if (vec == 14 && !watch_armed && a >= watch_lin && a - watch_lin < watch_size) {
+        u32 pg = a & ~0xFFFu, phys = info->xms_phys + (pg - watch_lin);
+        watch_pte = (u32 *)phys_to_lin(vmm_pdir_entry_get(pg >> 22) & ~0xFFFu) + ((pg >> 12) & 0x3FF);
+        trace("VMM: watch: %s at %x: phys %x = %x\n", vxd_owner(eip), eip,
+              phys + (a & 0xFFF), *(u32 *)phys_to_lin(phys + (a & 0xFFC)));
+        *watch_pte = phys | 3;
         *eflags |= EFL_TF;
         watch_armed = 1;
         return 1;
     }
     if (vec == 1 && watch_armed) {
-        *pt = watch_phys | 2;           /* not present again */
+        *watch_pte = (*watch_pte & ~1u) | 2;   /* not present again */
         vmm_flush_tlb();
         *eflags &= ~EFL_TF;
         watch_armed = 0;
@@ -1422,17 +1461,19 @@ static u32 map_phys(u32 phys, u32 bytes)
 {
     u32 first = phys & ~0xFFFu, n = ((phys & 0xFFF) + bytes + 0xFFF) >> 12, i, lin;
     if (!bytes) n = 1;
-    if (watch_on && n == 1 && !watch_lin && first >= info->xms_phys
+    if (watch_on && !watch_lin && first >= info->xms_phys
         && phys + bytes <= info->xms_phys + info->xms_size) {
         if (!physmap_next) physmap_next = W386_VMM_LIN + ((info->xms_size + 0x3FFFFFu) & ~0x3FFFFFu);
-        watch_lin = physmap_next;
-        physmap_next += 4096;
-        watch_phys = first;
-        map_page(watch_lin, first, 3);
-        map_page(watch_lin, first, 2);  /* (the entry, not present) */
+        watch_lin = W386_VMM_LIN + W386_WINDOW_MAX - ((info->xms_size + 0x3FFFFFu) & ~0x3FFFFFu);   /* (the top: away from the rest) */
+        watch_size = info->xms_size & ~0xFFFu;
+        for (i = 0; i < watch_size; i += 4096) {
+            map_page_noflush(watch_lin + i, info->xms_phys + i, 3);
+            map_page_noflush(watch_lin + i, info->xms_phys + i, 2);  /* (the entry, not present) */
+        }
         vmm_flush_tlb();
-        return watch_lin + (phys & 0xFFF);
     }
+    if (watch_lin && first >= info->xms_phys && phys + bytes <= info->xms_phys + info->xms_size)
+        return watch_lin + (phys - info->xms_phys);
     if (first >= info->xms_phys && phys + bytes <= info->xms_phys + info->xms_size)
         return phys_to_lin(phys);
     for (i = 0; i < nphysmaps; i++)

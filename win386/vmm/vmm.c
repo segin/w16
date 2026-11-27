@@ -1137,6 +1137,7 @@ void __cdecl trap(struct tframe *f)
          * paging file (or not used yet): pager.c brings it in */
         if (vec == 14 && pager_fault(get_cr2())) return;
         if ((vec == 14 || vec == 1) && vxd_watch_fault(vec, &f->eflags, f->eip)) return;
+        if (vec == 1 && vxd_step(f)) return;
         panic("exception %x err %x at %x:%x cr2 %x eax %x esi %x edi %x",
               vec, f->err, f->cs, f->eip, get_cr2(), f->eax, f->esi, f->edi);
     }
