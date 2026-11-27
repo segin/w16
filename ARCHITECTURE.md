@@ -2148,6 +2148,8 @@ A detail of the LE format found on the way: an LE data object with no page of it
 
 **Found in w16 on the way (w16's USER and WINOA386, not VMTASK's; open):** a dialog or message box owned by a window that is Always on Top (HWND_TOPMOST) is drawn behind its owner under w16's USER (under 3.1 in front); a dialog procedure that set the focus to a control (Cancel) and answered FALSE to WM_INITDIALOG had it on the first tab stop (OK) once the dialog was shown under w16's USER (3.1: Cancel kept; VMTASK.EXE now also posts WM_NEXTDLGCTL); a DOS box started minimised and not active takes the activation under w16's tree (12.15's open point), so the test starts VMTASK.EXE after the box; the tree's task list order changes from one TaskFirst walk to the next (rows move; VMTASK keeps the selection on its task). The test's right click (inputrun's pointer) does not reach Windows in these 386 Enhanced runs (the pointer stays put, under 3.1 too): the shortcut menu is checked through Shift+F10.
 
+**Left running** (the user's report, 2026-11-27: VMTASK.EXE open while other things happened, then a fault report and "back to DOS"; the frames DispatchMessage, VMTASK's WM_TIMER refresh). The cause was w16's TOOLHELP, not VMTASK: it kept the Burgermaster's linear address from the first heap walk, and once KRNL386 had moved the Burgermaster to a larger block (enough blocks allocated since VMTASK started) the walk every 5 s read freed pages, a page fault in GlobalNext (22.3). Reproduced on the user's own tree, VMTASK beside Control Panel opened and closed again and again (each run left 14 USER objects and 15 global blocks behind, which brought the move on sooner). VMTASK itself neither leaks nor holds stale handles: alone for 100 refreshes its blocks, the free memory and GDI's and USER's objects did not move. The soak (`tests/vmtasksoak.sh`, VMTSOAK.EXE `tests/apps/vmtsoak.c`; boot-test case `vmtasksoak`) also found leaks of w16's elsewhere that a long session with programs and DOS boxes coming and going adds up: WINOA386 kept the four grabber fonts and their files' modules of every box (3.1's are gone once the box has ended), USER kept every CS_OWNDC window's DC in its cache (Write: a DC and three regions a run) and every icon and cursor LoadIcon/LoadCursor had loaded for a module that was gone (an entry, an atom count and the block a run of Notepad, Calculator, Cardfile or Write, 14 for a Control Panel). All three are fixed (`winoa386/winoa386.c` free_fonts, `user/dc.c` own_dce_gone, `user/icon.c` icons_module_gone); with them, 20 cycles of programs and boxes beside VMTASK leave the counts where they were once each program had run (Control Panel on the user's tree still leaves three pens a session, from a third-party applet or its tree's older GDI: not looked into). Also seen and left for GDI: with a third-party screen saver of the user's (Sierra's Screen Antics) running, GDI's bitmaps grew to over 600 within minutes under w16, with VMTASK or without, where 3.1 stayed at 7.
+
 **UNVERIFIED, and not done:** whether a third-party VxD uses 5716h; the other SGVMI_ bits under w16; a task's time while KERNEL runs no task (between NFY_TASKOUT and NFY_TASKIN: counted to nobody); boxes that existed before VMTASK.EXE started and never had the focus are paired by the Z order, which a user can change; no Help file.
 
 ## 16. OLE
@@ -3829,6 +3831,24 @@ BP (`kentry.asm`); a deleted module's FREESEG notifications come in
 the hModule, the name in the resident-name table (`kernel/toolhelp.c`);
 USER's UserSeeUserDo (USER.216) answers requests 1-5 (`user/class.c`);
 `tests/refrun.sh` kills a DOSBox that ignores the time limit's TERM.
+
+The Burgermaster's linear address (KRNL386's arenas are read through a
+scratch selector) is asked for at each arena read, never kept: w16's
+KRNL386 moves the Burgermaster to a larger block when its room for
+arenas is used up (2,048 arenas, then 256 at a time; `bm_grow`), its
+selector staying, and frees the old block. The address kept from the
+first walk then pointed at freed pages: the VM Task Manager, which walks
+the heap every 5 s, ended Windows with a page fault (exception 0Eh in
+GlobalNext's arena read, ES the scratch selector) once enough blocks had
+been allocated after its first walk (the user's report, 2026-11-27:
+fault frames DispatchMessage, VMTASK's WM_TIMER refresh, GlobalNext;
+reproduced on the user's own tree with Control Panel opened and closed
+some 25 times, `tests/vmtasksoak.sh`). Section h of THP (2,400 blocks
+allocated between two walks, each found by the walk and by
+GlobalEntryHandle, then freed) checks it against 3.1: with the old
+TOOLHELP on w16's KRNL386 in Standard mode, whose DPMI host leaves the
+freed pages mapped, the walk read the stale copy and ended at 2,048
+blocks, none of the 2,400 found.
 
 Found and left (`tests/toolhelp/tree.mask`): 3.1 gives a code segment
 one byte more than its minimum allocation, rounded (2B0h: 2D0h under

@@ -338,8 +338,10 @@ HICON load_icon_cursor(HINSTANCE hinst, LPCSTR name, BOOL cursor)
         mod = (ISATOM(name) && n >= 32512 && n < 32646) ? hModDisplay : hModUser;
     } else
         mod = K_GETEXEPTR(hinst);
-    key = ISATOM(name) ? LOWORD((DWORD)name) : AddAtom(name);
-    for (c = (PCACHE)cache; c; c = (PCACHE)c->next)
+    /* (a string name's atom is added once, for a new entry: an AddAtom
+       on every call raised its count for good) */
+    key = ISATOM(name) ? LOWORD((DWORD)name) : FindAtom(name);
+    for (c = (PCACHE)cache; key && c; c = (PCACHE)c->next)
         if (c->mod == mod && c->id == key && c->cursor == (WORD)cursor)
             return (HICON)c->h;
     r = FindResource(mod ? mod : hinst, name, cursor ? RT_GROUP_CURSOR : RT_GROUP_ICON);
@@ -362,6 +364,8 @@ HICON load_icon_cursor(HINSTANCE hinst, LPCSTR name, BOOL cursor)
     FreeResource(gi);
     if (!h)
         return 0;
+    if (!ISATOM(name))
+        key = AddAtom(name);
     c = (PCACHE)LocalAlloc(LPTR, sizeof(CACHE));
     if (c) {
         c->mod = mod;
@@ -372,6 +376,35 @@ HICON load_icon_cursor(HINSTANCE hinst, LPCSTR name, BOOL cursor)
         cache = (WORD)c;
     }
     return (HICON)h;
+}
+
+/* A module goes (its last instance ended, or the library was freed):
+   its icons and cursors go from the cache, as Windows 3.1 frees a
+   module's resources with it. w16 kept them for good: a cache entry and
+   its block for each program run (tests/vmtasksoak.sh: a USER heap item
+   and a global block for every run of Notepad, Calculator, Cardfile or
+   Write), and the next module given the same handle was answered with
+   the old one's icon. A block that is still the cursor or a class's icon
+   or cursor stays (only its entry goes). */
+void icons_module_gone(HMODULE m)
+{
+    WORD __far *link = &cache;
+    PCACHE c;
+    if (!m || m == hModUser || m == hModDisplay)
+        return;
+    while (*link) {
+        c = (PCACHE)*link;
+        if (c->mod != m) {
+            link = &c->next;
+            continue;
+        }
+        *link = c->next;
+        if (c->h && (HCURSOR)c->h != GetCursor() && !class_uses((HANDLE)c->h))
+            GlobalFree(c->h);
+        if (c->id >= 0xC000u)
+            DeleteAtom(c->id);
+        LocalFree((HLOCAL)c);
+    }
 }
 
 /* a bad name: 0 (3.1, US27; LoadBitmap too) */

@@ -190,6 +190,16 @@ void purge_classes(HMODULE m)
     }
 }
 
+/* some class has h for its icon or cursor (icons_module_gone) */
+BOOL class_uses(HANDLE h)
+{
+    PCLS c;
+    for (c = (PCLS)classes; c; c = (PCLS)c->next)
+        if ((HANDLE)c->hIcon == h || (HANDLE)c->hCursor == h)
+            return TRUE;
+    return FALSE;
+}
+
 /* a bad class name or WNDCLASS: FALSE (3.1, US27) */
 BOOL WINAPI GetClassInfo(HINSTANCE hinst, LPCSTR name, WNDCLASS __far *wc)
 {

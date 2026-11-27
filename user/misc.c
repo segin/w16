@@ -68,8 +68,10 @@ static void app_exit(HTASK task, BOOL fault)
        the hooks after a fault too) */
     if (m && (fault || GetModuleUsage(m) <= 1))
         hooks_module_gone(m);
-    if (m && GetModuleUsage(m) <= 1)
+    if (m && GetModuleUsage(m) <= 1) {
         purge_classes(m);
+        icons_module_gone(m);
+    }
     kill_queue_timers(hq);
     if (hqInput == hq)
         hqInput = 0;
@@ -95,6 +97,7 @@ LONG WINAPI U_SIGNALPROC(HANDLE h, WORD code, WORD exitfn, HINSTANCE hinst, HQUE
             m = (HMODULE)h;
         hooks_module_gone(m);
         purge_classes(m);
+        icons_module_gone(m);
     }
     if (code == 0x20)
         user_heaps_shrink();    /* not after a fault (Pietrek ch. 3) */

@@ -192,6 +192,8 @@ PCLS find_class(LPCSTR name, HINSTANCE hinst);
 LPCSTR class_menu_name(PCLS c); /* lpszMenuName as GetClassInfo gives it */
 void register_system_classes(void);
 void purge_classes(HMODULE m);  /* the module's classes go */
+BOOL class_uses(HANDLE h);      /* a class's icon or cursor */
+void icons_module_gone(HMODULE m);      /* icon.c: its icons and cursors go */
 void free_class_dc(PCLS c);     /* dc.c: CS_CLASSDC's DC */
 void hooks_queue_gone(HQUEUE hq, HTASK task);   /* hook.c */
 void hooks_module_gone(HMODULE m);

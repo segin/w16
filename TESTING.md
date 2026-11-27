@@ -368,6 +368,22 @@ End VM on a busy box (3.1's Terminate warning), End Task on VMTH.EXE
 Shift+F10's shortcut menu, the IDs columns; VMT1 logs the tasks' and
 VMs' IDs for comparison and checks at the end that VMTH and the box are
 gone (shots e0-e8 in OUTDIR).
+`tests/vmtasksoak.sh OUTDIR [tree|ms]` leaves VMTASK.EXE running (0.5 s)
+while VMTSOAK.EXE (`tests/apps/vmtsoak.c`) starts and closes Clock,
+Notepad, Calculator, Cardfile and Write and, every other cycle, a busy
+DOS box it ends through VMTASK.386; after each cycle it logs the free
+memory, GDI's and USER's resources and objects (GDI's by type), the
+global blocks, the tasks, VMTASK's own blocks and the *WOA.FON modules,
+and at the end checks that VMTASK still runs and nothing grew past a
+small margin (exit 1 otherwise; KERNEL's output, a fault report, in
+OUTDIR/OUT.TXT). `VMTASK_CYCLES` (40), `VMTASK_APPS` (the list; empty:
+none), `VMTASK_BOX=0`, `VMTASK_LAUNCH=0` (without VMTASK: what the rest
+leaves by itself), `VMTASK_TREE` (another install tree, e.g. a copy of
+your own), `VMTASK_DOSBOX=x`, `VMTASK_EXTRA` (more dropin.sh options,
+e.g. `-i WIN.INI:vmtsoak:memfill=600`: fill global memory to 600 KB
+free first; `gdifill=N`, `userfill=N`: GDI and USER objects until N per
+cent are free, -1 until one fails). The boot-test case `vmtasksoak`
+runs it on the tree under DOSBox-X for 20 cycles.
 `tests/qtplay.sh` takes `QTPLAY_W16OPTS` and
 `tests/sb16/sbaudio.sh` `SBAUDIO_OPTS`/`SBAUDIO_CONF` (more dropin.sh
 options, a COM1 for the VMM's trace) for the w16 side. XMS and EMS in a DOS box:
