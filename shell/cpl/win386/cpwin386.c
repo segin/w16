@@ -37,7 +37,9 @@
  *   space (the recommended maximum: half the free space, at most
  *   MaxPagingFileSize: UNVERIFIED), and a permanent swap file is written as
  *   [386Enh] PermSwapDOSDrive and PermSwapSizeK (the keys 3.1's SETUP
- *   documents) without making 386SPART.PAR: w16's WIN386 does no paging yet.
+ *   documents) without making 386SPART.PAR: w16's WIN386 makes it from
+ *   those keys when it starts, and takes a temporary file's size by the
+ *   same rule as the recommended size here (ARCHITECTURE.md 12.17).
  * UNVERIFIED: the idle range (w16: 1-1000 by the arrows, not checked on
  *   OK), what None and Permanent show in New Settings, the restart dialog
  *   for Permanent.

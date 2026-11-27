@@ -728,6 +728,7 @@ static void pages_release(u32 lin, u32 size)
     u32 a, p, t, i, *pt;
     int need_flush = 0;
     for (a = lin; a < lin + size; a += 4096) {
+        if (pager_drop(a)) continue;    /* in the paging file, or never used */
         p = lin_to_phys(a);
         if (!p) continue;
         if (map_page_noflush(a, 0, 0) == 2) need_flush = 1;
@@ -774,6 +775,7 @@ static int pages_map(u32 lin, u32 n)
 {
     u32 i, p;
     int need_flush = 0, mr;
+    if ((mr = pager_map(lin, n)) >= 0) return mr;  /* with a paging file: pager.c */
     for (i = 0; i < n; i++) {
         p = page_alloc();
         if (!p || (mr = map_page_noflush(lin + i * 4096, p, 7)) == 0) {
@@ -794,7 +796,7 @@ static struct memblk *mem_alloc(u32 size)
     u32 n = size / 4096 + (size % 4096 != 0);
     /* the pages and their page tables free, and room in the client's
        linear space (a guard page after each block) */
-    if (!size || n > mem_largest_pages(pages_free())) return NULL;
+    if (!size || n > mem_largest_pages(pager_avail())) return NULL;
     b = kmalloc(sizeof(*b));
     if (!b) return NULL;
     b->lin = lin_alloc(n * 4096 + 4096);
@@ -841,7 +843,7 @@ static int mem_resize(struct memblk *o, u32 size)
         o->size = n * 4096;
         return 1;
     }
-    if (n - m <= mem_largest_pages(pages_free())
+    if (n - m <= mem_largest_pages(pager_avail())
         && lin_take(o->lin + (m + 1) * 4096, (n - m) * 4096)) {
         if (pages_map(o->lin + m * 4096, n - m)) {
             o->size = n * 4096;
@@ -927,7 +929,7 @@ struct dosblk { struct dosblk *next; u32 sel, tiles, handle; };
 
 static u32 dosblk_largest(void)
 {
-    u32 n = mem_largest_pages(pages_free());
+    u32 n = mem_largest_pages(pager_avail());
     return n >= 0x1000 ? 0xFFFE : n * 0x100;
 }
 
@@ -1277,20 +1279,10 @@ static void dpmi_call(struct cregs *r)
         SETLO(r->ecx, 3);
         SETW(r->edx, 0x0870);
         break;
-    case 0x0500: {                      /* free memory information */
+    case 0x0500: {                      /* free memory information (pager.c) */
         u32 *p = (u32 *)cl_ptr(r->es, r->edi, 48, 1);
-        u32 f = pages_free();
         if (!p) { set_cf(r, 1); break; }
-        for (i = 0; i < 12; i++) p[i] = 0xFFFFFFFF;
-        p[0] = mem_largest_pages(f) * 4096;     /* largest free block (0501h gives it) */
-        p[1] = f;                       /* maximum unlocked page allocation */
-        p[2] = f;                       /* maximum locked page allocation */
-        p[3] = f;                       /* linear address space, pages */
-        p[4] = f;                       /* total unlocked pages */
-        p[5] = f;                       /* free pages */
-        p[6] = info->xms_size / 4096;   /* total physical pages */
-        p[7] = f;                       /* free linear address space, pages */
-        p[8] = 0;                       /* paging file size, pages: none yet */
+        pager_meminfo(p);
         break;
     }
     case 0x0501:                        /* allocate a memory block */
@@ -1313,9 +1305,13 @@ static void dpmi_call(struct cregs *r)
         SETW(r->esi, o->handle >> 16); SETW(r->edi, o->handle);
         break;
     }
-    case 0x0600: case 0x0601: case 0x0602: case 0x0603:
+    case 0x0600: case 0x0601:           /* lock, unlock linear region (pager.c) */
+        if (!pager_lock((BX(r) << 16) | CX(r), (SI(r) << 16) | DI(r), fn == 0x0600))
+            { set_cf(r, 1); SETW(r->eax, 0x8013); }
+        break;
+    case 0x0602: case 0x0603:           /* real-mode memory: never paged */
     case 0x0702: case 0x0703:
-        break;                          /* nothing is paged out yet */
+        break;
     case 0x0604:
         SETW(r->ebx, 0); SETW(r->ecx, 4096);
         break;

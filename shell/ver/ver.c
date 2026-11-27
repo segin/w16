@@ -154,70 +154,150 @@ static HFILE vopen(LPCSTR name)
     return LZOpenFile(p, &of, OF_READ);
 }
 
-/* the resource (type, id) of an NE file: its offset and length. Only
-   integer types and names are found (observed: a named type or name, or
-   a "#n" string, never is); the file must start with "MZ" and its new
-   header with "NE" (observed); a file whose resource table is where its
-   resident names start has none (SDK Vol. 4); an alignment shift over
-   12 finds nothing (observed: 12 does, 13 and more do not) */
-static BOOL find_res(HFILE h, LPCSTR type, LPCSTR id, DWORD *off, DWORD *len)
+/* the resource (type, id) of an NE file: its offset and length (1), or
+   none (0), or -1 when the file is no NE file at all (its resources may
+   then come through Win32s: pe_res). Only integer types and names are
+   found (observed: a named type or name, or a "#n" string, never is);
+   the file must start with "MZ" and its new header with "NE" (observed);
+   a file whose resource table is where its resident names start has none
+   (SDK Vol. 4); an alignment shift over 12 finds nothing (observed: 12
+   does, 13 and more do not) */
+static int find_res(HFILE h, LPCSTR type, LPCSTR id, DWORD *off, DWORD *len)
 {
     BYTE hdr[64];
     DWORD ne, p;
     WORD shift, t, cnt, i, guard;
     BYTE ent[12];
     if (SELECTOROF(type) || SELECTOROF(id))
-        return FALSE;
+        return 0;
     if (!rd(h, 0, hdr, 64) || hdr[0] != 'M' || hdr[1] != 'Z')
-        return FALSE;
+        return -1;
     ne = *(DWORD *)(hdr + 0x3C);
     if (!rd(h, ne, hdr, 64) || hdr[0] != 'N' || hdr[1] != 'E')
-        return FALSE;
+        return -1;
     if (*(WORD *)(hdr + 0x24) == *(WORD *)(hdr + 0x26))
-        return FALSE;
+        return 0;
     p = ne + *(WORD *)(hdr + 0x24);
     if (!rd(h, p, &shift, 2) || shift > 12)
-        return FALSE;
+        return 0;
     p += 2;
     for (guard = 0; guard < 1000; guard++) {
         if (!rd(h, p, ent, 8))
-            return FALSE;
+            return 0;
         t = *(WORD *)ent;
         cnt = *(WORD *)(ent + 2);
         p += 8;
         if (!t)
-            return FALSE;
+            return 0;
         if (t == (0x8000 | OFFSETOF(type))) {
             for (i = 0; i < cnt; i++, p += 12) {
                 if (!rd(h, p, ent, 12))
-                    return FALSE;
+                    return 0;
                 if (*(WORD *)(ent + 6) == (0x8000 | OFFSETOF(id))) {
                     *off = (DWORD)*(WORD *)ent << shift;
                     *len = (DWORD)*(WORD *)(ent + 2) << shift;
-                    return TRUE;
+                    return 1;
                 }
             }
-            return FALSE;
+            return 0;
         }
         p += ((DWORD)cnt << 3) + ((DWORD)cnt << 2);    /* 12 bytes each */
     }
-    return FALSE;
+    return 0;
+}
+
+/* ---- Win32 (PE) files, through Win32s ----
+   Observed on Windows 3.1 with Win32s 1.30c installed (tests/ver/vrp.c on
+   the PE files of tests/ver/mkinputs.py; the calls seen with w16's KERNEL
+   tracing VER's imports and the procedures it looks up): for any file
+   that is not an NE file (a text file or an empty one too) VER.DLL loads
+   W32SYS.DLL (LoadLibrary under SetErrorMode(8000h), once: the library
+   stays loaded) and calls its exports 2 (IsPEFormat: a far name, NULL
+   here, and the open file's handle; nonzero for a PE file), 7
+   (GetPEResourceTable: the handle; a global handle to the file's
+   resource table) and, with that table locked, 6 (LoadPEResource: the
+   handle, the table, the name and the type as integer resources; a
+   global handle to the resource, a version resource already in the
+   16-bit layout), all Pascal far calls. The resource's size is its
+   block's GlobalSize; GetFileResourceSize gives offset 0 for it, and a
+   read copies at most that many bytes. Without W32SYS.DLL a PE file has
+   no resources, as on 3.1 without Win32s. */
+typedef BOOL (FAR PASCAL *ISPEFORMAT)(LPSTR, HFILE);
+typedef HGLOBAL (FAR PASCAL *GETPERESTABLE)(HFILE);
+typedef HGLOBAL (FAR PASCAL *LOADPERES)(HFILE, void FAR *, LPCSTR, LPCSTR);
+static ISPEFORMAT pe_is;
+static GETPERESTABLE pe_table;
+static LOADPERES pe_load;
+
+/* the resource (type, id) of the Win32 file open as h, through Win32s's
+   W32SYS.DLL: a global handle (the caller frees it), or 0 */
+static HGLOBAL pe_res(HFILE h, LPCSTR type, LPCSTR id)
+{
+    HGLOBAL ht, hr;
+    void FAR *t;
+    if (!pe_load) {
+        UINT mode = SetErrorMode(0x8000);
+        HINSTANCE lib = LoadLibrary("w32sys.dll");
+        SetErrorMode(mode);
+        if (lib < HINSTANCE_ERROR)
+            return 0;
+        pe_is = (ISPEFORMAT)GetProcAddress(lib, MAKEINTRESOURCE(2));
+        pe_table = (GETPERESTABLE)GetProcAddress(lib, MAKEINTRESOURCE(7));
+        pe_load = (LOADPERES)GetProcAddress(lib, MAKEINTRESOURCE(6));
+        if (!pe_is || !pe_table || !pe_load) {
+            pe_load = 0;
+            FreeLibrary(lib);
+            return 0;
+        }
+    }
+    if (!pe_is(NULL, h) || (ht = pe_table(h)) == 0)
+        return 0;
+    t = GlobalLock(ht);
+    hr = t ? pe_load(h, t, id, type) : 0;
+    GlobalUnlock(ht);
+    GlobalFree(ht);
+    return hr;
+}
+
+/* a Win32 file's resource (pe_res) copied: at most its block's size */
+static BOOL pe_copy(HFILE h, LPCSTR type, LPCSTR id, DWORD n, void FAR *buf)
+{
+    HGLOBAL r = pe_res(h, type, id);
+    void FAR *s;
+    if (!r)
+        return FALSE;
+    if (n > GlobalSize(r))
+        n = GlobalSize(r);
+    s = GlobalLock(r);
+    if (s)
+        hmemcpy(buf, s, n);
+    GlobalUnlock(r);
+    GlobalFree(r);
+    return s != NULL;
 }
 
 /* GetFileResourceSize (VER.2): the length in the resource table, the
    resource's file offset to *lpdwFileOffset (observed: with NULL there
-   the length is returned all the same); 0 if not found */
+   the length is returned all the same); 0 if not found. A Win32 file's
+   resource (pe_res): its block's size, offset 0 (observed) */
 DWORD VAPI GetFileResourceSize(LPCSTR lpszFileName, LPCSTR lpszResType, LPCSTR lpszResID,
                                DWORD FAR *lpdwFileOffset)
 {
     HFILE h = vopen(lpszFileName);
     DWORD off, len;
-    BOOL ok;
+    HGLOBAL r;
+    int ok;
     if (h < 0)
         return 0;
     ok = find_res(h, lpszResType, lpszResID, &off, &len);
+    if (ok < 0 && (r = pe_res(h, lpszResType, lpszResID)) != 0) {
+        off = 0;
+        len = GlobalSize(r);
+        GlobalFree(r);
+        ok = 1;
+    }
     LZClose(h);
-    if (!ok)
+    if (ok <= 0)
         return 0;
     if (lpdwFileOffset)
         *lpdwFileOffset = off;
@@ -227,7 +307,8 @@ DWORD VAPI GetFileResourceSize(LPCSTR lpszFileName, LPCSTR lpszResType, LPCSTR l
 /* GetFileResource (VER.3). With an offset, dwResLen bytes are read from
    there whatever the file is (observed: a text file's bytes too); with 0
    the resource is looked for and at most its length is read. TRUE only if
-   every byte asked for was read. */
+   every byte asked for was read; of a Win32 file's resource, whatever
+   part of it was asked for (observed). */
 BOOL VAPI GetFileResource(LPCSTR lpszFileName, LPCSTR lpszResType, LPCSTR lpszResID,
                           DWORD dwFileOffset, DWORD dwResLen, void FAR *lpvData)
 {
@@ -237,7 +318,13 @@ BOOL VAPI GetFileResource(LPCSTR lpszFileName, LPCSTR lpszResType, LPCSTR lpszRe
     if (h < 0)
         return FALSE;
     if (!off) {
-        ok = find_res(h, lpszResType, lpszResID, &off, &len);
+        int f = find_res(h, lpszResType, lpszResID, &off, &len);
+        if (f < 0) {
+            ok = pe_copy(h, lpszResType, lpszResID, dwResLen, lpvData);
+            LZClose(h);
+            return ok;
+        }
+        ok = f > 0;
         if (ok && len < dwResLen)
             dwResLen = len;
     }
@@ -252,28 +339,47 @@ BOOL VAPI GetFileResource(LPCSTR lpszFileName, LPCSTR lpszResType, LPCSTR lpszRe
    is the fixed part's signature (observed: nothing else is checked, not
    the key, not wValueLength); the handle is the resource's offset, set
    once the resource is found even if 0 is returned (with NULL there the
-   size is returned all the same: observed) */
+   size is returned all the same: observed). A Win32 file's version
+   (pe_res) is checked the same against its block's size, and its handle
+   is 0 (observed). */
 DWORD VAPI GetFileVersionInfoSize(LPCSTR lpszFileName, DWORD FAR *lpdwHandle)
 {
     HFILE h = vopen(lpszFileName);
     DWORD off, len;
     BYTE b[VS_SIGOFF + 4];
     DWORD r = 0;
+    int f;
     if (h < 0)
         return 0;
-    if (find_res(h, MAKEINTRESOURCE(RT_VER), MAKEINTRESOURCE(VER_ID), &off, &len)) {
+    f = find_res(h, MAKEINTRESOURCE(RT_VER), MAKEINTRESOURCE(VER_ID), &off, &len);
+    if (f > 0) {
         if (lpdwHandle)
             *lpdwHandle = off;
         if (rd(h, off, b, sizeof b) && *(WORD *)b && *(WORD *)b <= len &&
             *(DWORD *)(b + VS_SIGOFF) == VS_SIG)
             r = *(WORD *)b;
+    } else if (f < 0) {
+        HGLOBAL g = pe_res(h, MAKEINTRESOURCE(RT_VER), MAKEINTRESOURCE(VER_ID));
+        const BYTE FAR *p;
+        if (g) {
+            if (lpdwHandle)
+                *lpdwHandle = 0;
+            len = GlobalSize(g);
+            p = GlobalLock(g);
+            if (p && len >= sizeof b && *(const WORD FAR *)p && *(const WORD FAR *)p <= len &&
+                *(const DWORD FAR *)(p + VS_SIGOFF) == VS_SIG)
+                r = *(const WORD FAR *)p;
+            GlobalUnlock(g);
+            GlobalFree(g);
+        }
     }
     LZClose(h);
     return r;
 }
 
 /* GetFileVersionInfo (VER.7): the handle is the file offset, read from
-   as GetFileResource does (observed: no check of what is there) */
+   as GetFileResource does (observed: no check of what is there); with 0
+   the version is looked for (a Win32 file's through Win32s: observed) */
 BOOL VAPI GetFileVersionInfo(LPCSTR lpszFileName, DWORD handle, DWORD cbBuf, void FAR *lpvData)
 {
     return GetFileResource(lpszFileName, MAKEINTRESOURCE(RT_VER), MAKEINTRESOURCE(VER_ID),

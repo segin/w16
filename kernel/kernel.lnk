@@ -139,7 +139,7 @@ export SETHANDLECOUNT.199 resident
 export ISTASK.320 resident
 export _HREAD.349 resident
 export _HWRITE.350 resident
-export K403.403=FARSETOWNER resident
+export K403.403=FARSETOWNERX resident
 export K404.404=FARGETOWNER resident
 # Selector services and the lock calls that are not GlobalLock
 # (kernel/selector.c)

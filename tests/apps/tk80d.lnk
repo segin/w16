@@ -1,0 +1,4 @@
+@tests/apps/dll.lnk
+option modname=W32SYS
+export E3.3=E3
+export WEP.4 resident

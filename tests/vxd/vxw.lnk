@@ -1,0 +1,5 @@
+# VXW.386: the page directory probe VxD (tests/vxd/vxw.c), an LE VxD with no device ID
+format windows vxd
+option quiet
+option nodefaultlibs
+export VXW_DDB.1

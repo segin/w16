@@ -582,6 +582,9 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
         return 0;
     if (is_const)
         sel = 0xFFFF;
+    else if (trace_wanted(m->name, ord))
+        thunk_trace(m->name, ord, &sel, &off);  /* [w16] trace=: a procedure
+                                                   found at run time too */
     return ((u32)sel << 16) | off;
 }
 

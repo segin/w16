@@ -568,6 +568,36 @@ static void t_size(void)
         r = GetFileVersionInfo("C:\\VT\\PLAIN.TXT", 0x1000, 20, buf);
         lg(" GFVI(PLAIN.TXT, 1000h, 20) = %d %s", r, (LPSTR)summ(buf, 24));
     }
+    {
+        /* Win32 files: the resource functions, and how much of the block
+           GetFileVersionInfo copies (with Win32s's W32SYS.DLL there) */
+        static const char *const pes[] = { "PE32.DLL", "PE32TWO.DLL", "PE16V.DLL", 0 };
+        static const WORD rt[][2] = { { 16, 1 }, { 10, 5 }, { 16, 2 }, { 0, 0 } };
+        char q[100];
+        int i, j;
+        DWORD off, n;
+        BOOL r;
+        for (i = 0; pes[i]; i++) {
+            wsprintf(q, "C:\\VT\\%s", (LPSTR)pes[i]);
+            for (j = 0; rt[j][0]; j++) {
+                off = 0xDEADBEEFL;
+                n = GetFileResourceSize(q, MAKEINTRESOURCE(rt[j][0]), MAKEINTRESOURCE(rt[j][1]),
+                                        &off);
+                fill(buf, 0xAA, 1100);
+                r = GetFileResource(q, MAKEINTRESOURCE(rt[j][0]), MAKEINTRESOURCE(rt[j][1]), 0,
+                                    1000, buf);
+                lg(" %s: GetFileResourceSize(%u, %u) = %ld off %08lX; GetFileResource(0, 1000)"
+                   " = %d %s", (LPSTR)pes[i], rt[j][0], rt[j][1], n, off, r,
+                   (LPSTR)summ(buf, 1100));
+            }
+            fill(buf, 0xAA, 2100);
+            r = GetFileVersionInfo(q, 0, 2000, buf);
+            for (n = 2100; n && buf[(unsigned)n - 1] == 0xAA; n--)
+                ;
+            lg(" %s: GFVI(0, 2000) = %d, %ld bytes written: %s", (LPSTR)pes[i], r, n,
+               (LPSTR)summ(buf, n));
+        }
+    }
     if (hasd)
         size1("D:\\VT\\SRC\\V300.DLL", "D:\\VT\\SRC\\V300.DLL");
 }
@@ -675,6 +705,9 @@ static void t_query(void)
     qfile("SIG.DLL");
     qfile("STRUC.DLL");
     qfile("KEYCASE.DLL");
+    qfile("PE32.DLL");
+    qfile("PE16V.DLL");
+    qraw("PE32.BIN");
     qraw("GOOD.BIN");
     qraw("OW.BIN");
     qraw("NOFIXED.BIN");

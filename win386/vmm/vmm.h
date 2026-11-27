@@ -300,6 +300,9 @@ struct cregs *vmm_hold_delivery(struct cregs *r);
 void vxd_pm_app(int begin, struct cregs *r);
 void vxd_exit(struct cregs *r);
 void vxd_link(struct tframe *f);
+int vxd_step(struct tframe *f);      /* [w16] vmmtrace=4 */
+void vxd_pm_fault(struct cregs *r, int vec, u32 err);
+int vxd_watch_fault(u32 vec, u32 *eflags, u32 eip);    /* [w16] vmmtrace=3 */   /* Hook_PM_Fault's chain, then DPMI */
 u32 vm_handle(void);
 u32 vxd_pm_api(u32 id);
 void vxd_call_api(u32 proc, struct cregs *r);
@@ -400,6 +403,21 @@ void vdd_window(struct vm *v, int on);   /* SHELL: windowed or full screen */
 void vdd_tick(void);
 int shell_display_changed(struct vm *v, int cursor);
 #define SEL_FLAT7B  0x7B            /* SHELL's flat selector (its function 9; GDT index 15) */
+
+/* pager.c: demand paging to the paging file (ARCHITECTURE.md 12.17) */
+void pager_init(void);
+int pager_on(void);
+u32 pager_file_pages(void);
+u32 pager_avail(void);                  /* pages a client may still be given */
+int pager_map(u32 lin, u32 n);          /* new pageable pages; -1: no paging file */
+int pager_drop(u32 lin);                /* a pageable page goes; 1: nothing left to free */
+int pager_fault(u32 lin);               /* a page fault: 1 if the page is there now */
+int pager_present(u32 lin);             /* bring lin's page in if it is the pager's */
+int pager_lock(u32 lin, u32 size, int lock);
+void pager_meminfo(u32 *p);             /* DPMI 0500h */
+u32 pager_page(void);
+int pager_service(u32 dev, u32 svc, struct svcregs *s);
+void pager_stats(u32 *ins, u32 *outs, u32 *used);
 
 /* io.c: I/O port trapping */
 void io_trap_bit(u32 port, int on);                 /* vmm.c: the TSS's I/O bitmap */

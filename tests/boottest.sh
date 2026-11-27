@@ -193,6 +193,13 @@
 #              it (tools/vsdcmp.py); then Reboot's "not responding" screen
 #              (vsdhung.txt): keys it has no use for each beep a bell of
 #              Windows 3.1's tone and length
+#   vmprobe    virtual memory (ARCHITECTURE.md 12.17): VX18 as the shell
+#              under Microsoft's WIN386 and w16's (tests/vmprobe.sh) with
+#              the default paging file, Paging=no and MaxPagingFileSize=2048:
+#              WF_PAGING, the paging file's place and size, the PageFile
+#              API's version, and 0501h of more than the physical memory
+#              (given and read back with a file, refused with a small one
+#              or none) the same as 3.1's
 #   vdmad      the Virtual DMA Device (win386/vxd/vdmad.c): tests/vdmadprobe.sh
 #              under w16's WIN386 and Microsoft's (DOSBox-X as a Sound
 #              Blaster 16, the sound recorded): SBD.COM in a full-screen
@@ -530,6 +537,9 @@
 #              15): TK74 as the shell (tests/apps/tk74.c), its log on
 #              w16's KRNL286 (part k286) and KRNL386 (k386) the same as
 #              on Microsoft's KRNL386
+#   pestart    WinExec of a PE file with Win32s' loader there: TK80 as the
+#              shell (tests/apps/tk80.c), TK80D.DLL as W32SYS.DLL logging
+#              what its third entry is given; w16's KRNL386 as Microsoft's
 #   exitexec   ExitWindowsExec: TK77 as the shell (tests/apps/tk77.c) has
 #              TK77D.COM (tests/dos/tk77d.asm) run with a full path and
 #              parameters, a bare name without, and NULL parameters, and
@@ -546,9 +556,9 @@
 #              non-resident name: TK76; the restart is ExitKernel's 44h);
 #              part treems, w16's tree with Microsoft's WIN386 put in, the
 #              same (ExitWindowsExec in w16's USER and WIN.COM: exitexec);
-#              part tree, w16's install tree alone, gets past the
-#              bindings to Setup's screen (w16's WIN386 has no paging
-#              file: Setup then stops as 3.1 does with Paging=no)
+#              part tree, w16's install tree alone with its WIN386 and
+#              paging file (ARCHITECTURE.md 12.17), the same; every part
+#              then starts Win32s's Freecell (its window must come up)
 #   dlgfocus   the focus after CreateDialog of a dialog not shown or shown
 #              without activation, Return on a focused push button,
 #              DM_GETDEFID: US37 as the shell (tests/apps/us37.c), its log
@@ -584,7 +594,11 @@
 #              Control Panel's Fonts applet (MAIN.CPL) adding a font under
 #              real keys with each VER.DLL, with nothing installed and over
 #              a newer copy (tests/ver/vfonts.sh), every screen 0 pixels
-#              and the same files installed
+#              and the same files installed; w32s: Win32 (PE) files'
+#              versions with Win32s's W32SYS.DLL there (expanded from its
+#              disk image, found as tests/win32sinst.sh finds them;
+#              skipped without), sections size and query, w16's against
+#              Microsoft's
 #   toolhelp   w16's TOOLHELP.DLL (ARCHITECTURE.md 22, tests/toolhelp/
 #              thcase.sh): parts ref286, ref386, ref3: the probe THP.EXE
 #              (tests/toolhelp/thp.c, every section) on Windows 3.1 under
@@ -1156,7 +1170,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2168,6 +2182,13 @@ runcase() {
         elif [ "$(grep -c '^ok' "$out/msvc.txt")" = 3 ]; then
             echo "ok   msvc: w16's tree with Visual C++'s four devices comes up; CodeView, WXSRVR on VMB and Program Manager as under 3.1"
         else echo "FAIL msvc: no result ($out/msvc.txt)"; fails=$((fails + 1)); fi ;;
+    vmprobe)
+        "$root/tests/vmprobe.sh" -o "$out/vmprobe" default nopaging max > "$out/vmprobe.txt" 2>&1 || true
+        if ! grep -q FAIL "$out/vmprobe.txt" && [ "$(grep -c '^ok' "$out/vmprobe.txt")" = 3 ]; then
+            echo "ok   vmprobe: WF_PAGING, the paging file and 0501h past the memory as Windows 3.1's"
+        else
+            echo "FAIL vmprobe: $(grep -m1 FAIL "$out/vmprobe.txt" || echo 'no result') ($out/vmprobe.txt)"; fails=$((fails + 1))
+        fi ;;
     msvcapps)
         # WPS and OLE2VIEW (tests/msvcvxd.sh; skip without $W16_MSVC_DIR)
         "$root/tests/msvcvxd.sh" -o "$out/msvcapps" wps ole2view heapwalk > "$out/msvcapps.txt" 2>&1 || true
@@ -4339,6 +4360,34 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   $c"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    pestart)
+        # TK80 (a PE file started with W32SYS.DLL there: TK80D.DLL in its
+        # place logs what KERNEL hands its third entry) against 3.1's log:
+        # WinExec's results, LoadModule's, W32SYS's usage, and the name and
+        # command tail its entry gets (S 0005, S 0003); the stack words, the
+        # rest of the stack's strings and the module handle are layout
+        python3 -I "$root/tests/scripts/runassocfiles.py" "$out/pestart-files"
+        psrun() {
+            _n=$1; shift
+            rm -rf "$out/pestart-$_n"
+            "$root/tests/dropin.sh" -c 'WIN /3' -t 180 -W TK80.END -o "$out/pestart-$_n" \
+                -f "$root/build/dos/TK80.EXE=TK80.EXE" -f "$root/build/dos/TK80D.DLL=WINDOWS/SYSTEM/W32SYS.DLL" \
+                -f "$out/pestart-files/PE.EXE=PE.EXE" \
+                -i 'boot:shell=C:\TK80.EXE' "$@" > "$out/pestart-$_n.txt" 2>&1 || true
+            tr -d '\r' < "$out/pestart-$_n/c/TK80.LOG" > "$out/pestart-$_n.log" 2>/dev/null || : > "$out/pestart-$_n.log"
+            sed -n -e '/^[ABCT] /p' -e 's/^M [0-9A-F]* /M h /p' -e '/^S 000[35] /p' -e 's/^E .*/E/p' \
+                "$out/pestart-$_n.log" > "$out/pestart-$_n.cmp"
+        }
+        psrun k386 -3 &
+        psrun ref -r -3 &
+        wait
+        echo "   pestart ref: $(tr '\n' '|' < "$out/pestart-ref.log")"
+        echo "   pestart k386: $(tr '\n' '|' < "$out/pestart-k386.log")"
+        if ! grep -q '^T done' "$out/pestart-ref.log"; then
+            echo "FAIL pestart: 3.1 did not finish ($out/pestart-ref.log)"; fails=$((fails + 1))
+        elif diff "$out/pestart-ref.cmp" "$out/pestart-k386.cmp" > "$out/pestart.diff"; then
+            echo "ok   pestart: a PE file goes to W32SYS.DLL's third entry as on 3.1 (w16's KRNL386)"
+        else echo "FAIL pestart: differs from 3.1 ($out/pestart.diff)"; fails=$((fails + 1)); fi ;;
     exitexec)
         # TK77 (ExitWindowsExec) against 3.1's log
         p=${part:-k386}
@@ -4481,7 +4530,11 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             # all but what DOS, the BIOS and Windows itself keep (16 MB
             # is generous), and no more than the machine has
             lo=$((m * 1024 - 16384)) hi=$((m * 1024))
-            bmcheck bigmem-$p dpmi_largest $lo $hi freespace $lo $hi total $lo $hi ;;
+            # (in 386 Enhanced mode the paging file adds to what a program
+            # can have: 3.1's largest block was 258,964 KB with 128 MB,
+            # ARCHITECTURE.md 9.6, 12.17; at most PageOverCommit's 4 times)
+            case $p in e*) vh=$((hi * 4)) ;; *) vh=$hi ;; esac
+            bmcheck bigmem-$p dpmi_largest $lo $vh freespace $lo $vh total $lo $vh ;;
         s256ms)
             bmrun bigmem-s256ms 256 -3 -x
             bmcheck bigmem-s256ms dpmi_largest 65536 262144 total 245760 262144 ;;
@@ -4490,7 +4543,9 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             bmcheck bigmem-stocks dpmi_largest 32768 65536 total 114688 131072
             if [ "$r" = ok ]; then
                 bmrun bigmem-stocke 128 -3 -c 'WIN /3 /B' -f "$w386=WINDOWS/SYSTEM/WIN386.EXE" -i w16:LargeMemory=0
-                bmcheck bigmem-stocke total 114688 131072
+                # (the paging file adds to it in 386 Enhanced mode, as under
+                # 3.1 itself: refe below, ARCHITECTURE.md 12.17)
+                bmcheck bigmem-stocke total 114688 262144
             fi ;;
         ref)
             refrun bigmem-refs bigmem bmrun bigmem-refs 128 -3 -r
@@ -4628,6 +4683,30 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
                 r="$part: other files installed ($d-ms/fonts.txt, $d-w16/fonts.txt)"
             [ "$r" = ok ] && ! grep -q '^WINDOWS/SYSTEM/W16TEST.*: the new one' "$d-ms/fonts.txt" &&
                 r="$part: Microsoft's run installed nothing ($d-ms/fonts.txt)" ;;
+        w32s)
+            # Win32 files' versions through Win32s's W32SYS.DLL (expanded
+            # from its Setup disks, not committed; skipped without them):
+            # sections size and query, w16's against Microsoft's
+            img=$(find "${W16_WIN32S_SRC:-$root/.tools/win32s/src}" -iname disk3.img 2>/dev/null | head -1)
+            if [ -z "$img" ]; then
+                echo "  (ver@w32s: no Win32s disk3.img: skipped)"
+            else
+                mkdir -p "$d"
+                rm -f "$d/W32SYS.DL_" "$d/W32SYS.DLL"
+                mcopy -n -i "$img" ::/W32SYS.DL_ "$d/W32SYS.DL_" &&
+                    python3 "$root/tools/szdd.py" "$d/W32SYS.DL_" "$d/W32SYS.DLL" ||
+                    r="w32s: W32SYS.DLL not expanded ($d)"
+                for l in ms w16; do
+                    [ "$r" = ok ] || break
+                    VRUN_EXTRA="$d/W32SYS.DLL=WINDOWS/SYSTEM/W32SYS.DLL" VRUN_ARG=sq \
+                        "$root/tests/ver/vrun.sh" "$d/$l" "$l" > /dev/null 2>&1 || true
+                    grep -q '^VRP end' "$d/$l/vrp.log" 2>/dev/null || r="w32s: no complete log from $l ($d/$l)"
+                done
+                [ "$r" = ok ] && ! grep -q 'PE32.DLL: size [1-9]' "$d/ms/vrp.log" &&
+                    r="w32s: Microsoft's VER.DLL read no Win32 version ($d/ms/vrp.log)"
+                [ "$r" = ok ] && { python3 "$root/tests/ver/vcmp.py" "$d/ms/vrp.log" "$d/w16/vrp.log" "$d/cmp" \
+                    > "$d.txt" 2>&1 || r="w32s: $(grep -m1 'FAIL' "$d.txt") ($d.txt)"; }
+            fi ;;
         esac
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   ver"
@@ -6774,7 +6853,7 @@ caseparts() {
     olesvr) printf '%s@tree ' "$1"; for v in $(cd "$root/tests/olesvr/scripts" && ls *.os2 | sed 's/\.os2$//'); do printf '%s@%s ' "$1" "$v"; done ;;
     ddeml) printf '%s@tree286 %s@tree386 %s@term ' "$1" "$1" "$1"; for v in $(cd "$root/tests/ddeml/scripts" && ls *.dm | grep -v '^x' | sed 's/\.dm$//'); do printf '%s@%s ' "$1" "$v"; grep -q '^start ' "$root/tests/ddeml/scripts/$v.dm" && printf '%s@%s+x ' "$1" "$v"; done ;;
     lzexpand) echo "$1@s $1@3 $1@tree286 $1@tree386 $1@quirks" ;;
-    ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew" ;;
+    ver) echo "$1@s $1@3 $1@x $1@tree286 $1@tree386 $1@mods $1@fonts $1@fontsnew $1@w32s" ;;
     timer) echo "$1@s $1@3 $1@qt" ;;
     quicktime) echo "$1@over $1@tree $1@tree386 $1@enh $1@cpl" ;;
     mmsystem) echo "$1@core $1@mmio $1@timer $1@qt $1@dev $1@mci $1@prog" ;;
@@ -6873,7 +6952,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   exitexec: ExitWindowsExec's programs, tails and restarts as 3.1's (w16's KRNL386, USER, tree)"
         else echo "FAIL exitexec: $pfirst ($out)"; fi ;;
     win32s)
-        if [ $pbad = 0 ]; then echo "ok   win32s: Win32s 1.30c's Setup installs and restarts Windows with w16's KRNL386 and on w16's tree with Microsoft's WIN386, and starts on w16's tree (or skipped without its disks)"
+        if [ $pbad = 0 ]; then echo "ok   win32s: Win32s 1.30c's Setup installs, Windows restarts and Freecell runs with w16's KRNL386, on w16's tree with Microsoft's WIN386 and on w16's tree alone (or skipped without its disks)"
         else echo "FAIL win32s: $pfirst ($out)"; fi ;;
     installers)
         if [ $pbad = 0 ]; then echo "ok   installers: each installer at hand installed the same files on w16's tree as on 3.1 (those missing skipped)"

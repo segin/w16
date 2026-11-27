@@ -301,6 +301,11 @@ u16 winboot(void)
             trace_dump = GetPrivateProfileInt("w16", "tracedump", 0, sysini);
         }
         profile_log = GetPrivateProfileInt("w16", "profilelog", 0, sysini) != 0;
+        {
+            extern void vx_hook(void);      /* thunk.c: [w16] vxdlog=1 */
+            if (GetPrivateProfileInt("w16", "vxdlog", 0, sysini))
+                vx_hook();
+        }
         GetPrivateProfileString("w16", "tracefrom", "", trace_from, sizeof trace_from,
                                 sysini);
         for (i = 0; trace_from[i]; i++)

@@ -380,6 +380,8 @@ int lin_user_ok(u32 lin, u32 len, int write)
         pde = pdir()[a >> 22];
         if ((pde & need) != need) return 0;
         pte = ((u32 *)phys_to_lin(pde & ~0xFFFu))[(a >> 12) & 0x3FF];
+        if (!(pte & 1) && pager_present(a))     /* in the paging file: back now */
+            pte = ((u32 *)phys_to_lin(pde & ~0xFFFu))[(a >> 12) & 0x3FF];
         if ((pte & need) != need) return 0;
         if (a >= (end & ~0xFFFu)) break;
     }
@@ -1170,6 +1172,11 @@ void __cdecl trap(struct tframe *f)
             return;
         }
         if (vec == 0x20) { vxd_link(f); return; }               /* a VxD's dynamic link */
+        /* the VMM or a device touching a client's page that is in the
+         * paging file (or not used yet): pager.c brings it in */
+        if (vec == 14 && pager_fault(get_cr2())) return;
+        if ((vec == 14 || vec == 1) && vxd_watch_fault(vec, &f->eflags, f->eip)) return;
+        if (vec == 1 && vxd_step(f)) return;
         panic("exception %x err %x at %x:%x cr2 %x eax %x esi %x edi %x",
               vec, f->err, f->cs, f->eip, get_cr2(), f->eax, f->esi, f->edi);
     }
@@ -1248,7 +1255,7 @@ void __cdecl trap(struct tframe *f)
         if (irq == 0 && vmm_last_time() - hb_ticks >= 20000) heartbeat(r);
         vpicd->hw_int(irq);
     } else if (vec == 13 && !(r->eflags & EFL_VM) && (op = code_ptr(r)) == NULL) {
-        dpmi_exception(r, 13, f->err);  /* code the VMM cannot read: the client's fault */
+        vxd_pm_fault(r, 13, f->err);    /* code the VMM cannot read: the client's fault */
     } else if (vec == 13) {
         if (f->err & 2) {
             /* INT n through a DPL 0 gate: CD n, CC (INT 3) or CE (INTO) */
@@ -1281,7 +1288,7 @@ void __cdecl trap(struct tframe *f)
             else if (!f->err && pm_cli_sti(r, op))
                 tk_count[TK_CLISTI]++;
             else
-                { tk_count[TK_EXC]++; dpmi_exception(r, 13, f->err); }
+                { tk_count[TK_EXC]++; vxd_pm_fault(r, 13, f->err); }
         }
     } else if (vec == 6 && (r->eflags & EFL_VM)) {
         u32 lin = v86_lin(r->cs, r->eip);
@@ -1298,8 +1305,10 @@ void __cdecl trap(struct tframe *f)
             else if (vec == 14) panic("V86 page fault at %x:%x cr2 %x", r->cs, r->eip, get_cr2());
             else
             v86_reflect(r, vec);
-        } else
-            { tk_count[TK_EXC]++; dpmi_exception(r, vec, f->err); }
+        } else if (vec == 14 && pager_fault(get_cr2()))
+            ;                           /* a page from the paging file (pager.c) */
+        else
+            { tk_count[TK_EXC]++; vxd_pm_fault(r, vec, f->err); }
     } else
         software_int(r, vec);           /* through a DPL 3 gate */
     if (!(r->eflags & EFL_VM)) {
@@ -1385,6 +1394,7 @@ void __cdecl vmm_main(struct w386_info *inf)
     /* the 8259s are VPICD's (it moves them to 50h/58h at Sys_Critical_Init) */
     vm_sys_init();
     dpmi_init();
+    pager_init();
     vxd_init();
     vm_snapshot();
 

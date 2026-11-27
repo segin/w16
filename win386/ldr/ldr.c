@@ -226,6 +226,15 @@ static char __far *ini_386(const char *key)
     return v;
 }
 
+/* (for swap.c) */
+char __far *ini_386_value(const char *key)
+{
+    return ini_386(key);
+}
+
+void swap_setup(struct w386_info *in, const char *windir);     /* swap.c */
+void swap_cleanup(void);
+
 /* a decimal number at *pq (advanced past it); def if none, or outside
  * lo..hi (the range Control Panel's 386 Enhanced applet takes: 1-10000) */
 static unsigned ini_num(char __far **pq, unsigned def, unsigned lo, unsigned hi)
@@ -1104,14 +1113,24 @@ int main(int argc, char **argv)
     info.log_port = 0x3F8;              /* the VMM's trace goes to COM1 */
     {   /* [w16] vmmtrace=1 (w16's own key) turns on the detailed trace;
          * vmmtrace=2 the DOS VMs' trace (their interrupts, VM switches,
-         * the VDD's API) */
+         * the VDD's API); 3 and 4 the device watch and step (vxd.c) */
         char __far *q;
         for (q = ini; q && *q; q++)
-            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=", 9) && (q[9] == '1' || q[9] == '2'))
+            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=", 9) && q[9] >= '1' && q[9] <= '4')
                 info.trace = q[9] - '0';
     }
     read_sched(&info);
     dma_setup(&info);
+    {   /* the paging file, in the Windows directory (SYSTEM's parent) by
+         * default */
+        static char windir[128];
+        strcpy(windir, sysdir);
+        p = windir + strlen(windir);
+        if (p > windir) p[-1] = 0;
+        p = strrchr(windir, '\\');
+        if (p) p[1] = 0; else windir[0] = 0;
+        swap_setup(&info, windir);
+    }
     /* [w16] V86HltYield=0: a HLT in V86 mode keeps the VM's time slice,
      * as Windows 3.1's WIN386 (ARCHITECTURE.md 12.12) */
     info.hlt_stock = ini_w16_zero("V86HltYield");
@@ -1128,6 +1147,7 @@ int main(int argc, char **argv)
         /* the VMM ended Windows before the System VM ran: its message */
         x.ax = 0x0400; xms_call(&x);
         xms_free_all();
+        swap_cleanup();
         out(fatalmsg);
         broadcast_1606();
         return 0xFF;                    /* UNVERIFIED exit code */
@@ -1136,6 +1156,7 @@ int main(int argc, char **argv)
     code = run_kernel();
     code = pm_exit(code);
     /* ---- real mode again ---- */
+    swap_cleanup();
     x.ax = 0x0400; xms_call(&x);        /* global A20 off */
     xms_free_all();
     broadcast_1606();

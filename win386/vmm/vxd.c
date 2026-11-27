@@ -225,14 +225,29 @@ void vxd_send_rev(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi)
 
 /* send msg to every device, in init order (rev: the reverse); a device
  * that fails an init message (carry) is dropped */
+#define NBUILTIN 5
+static u32 step_init;                   /* [w16] vmmtrace=4: step outside devices' Device_Init */
+u32 vxd_step_on;                        /* (vmmasm.asm: TF set for the control call) */
+static u32 step_lo, step_hi, step_n;
+
 static void broadcast(u32 msg, u32 esi, u32 edx, u32 edi, int rev)
 {
-    u32 i, j;
+    u32 i, j, fail;
     for (j = 0; j < ndevs; j++) {
         i = rev ? ndevs - 1 - j : j;
         if (!devs[i] || !devs[i]->control) continue;
-        if (vxd_control(devs[i]->control, msg, (u32)sys_cb, esi, edx, edi, (u32)sys_client)
-            && msg <= INIT_COMPLETE) {
+        if (step_init && msg == DEVICE_INIT && !memcmp(devs[i]->name, "W32S    ", 8)) {   /* (Win32s's: 12.18) */
+            /* (the device's own code: around its control procedure) */
+            step_lo = devs[i]->control > 0x10000 ? devs[i]->control - 0x10000 : 0;
+            step_hi = devs[i]->control + 0x10000;
+            step_n = 0;
+            trace("VMM: stepping %c%c%c%c's Device_Init at %x\n", devs[i]->name[0], devs[i]->name[1],
+                  devs[i]->name[2], devs[i]->name[3], devs[i]->control);
+            vxd_step_on = 1;
+        }
+        fail = vxd_control(devs[i]->control, msg, (u32)sys_cb, esi, edx, edi, (u32)sys_client);
+        vxd_step_on = 0;
+        if (fail && msg <= INIT_COMPLETE) {
             trace("VMM: device %c%c%c%c%c%c%c%c failed message %x: not loaded\n",
                   devs[i]->name[0], devs[i]->name[1], devs[i]->name[2], devs[i]->name[3],
                   devs[i]->name[4], devs[i]->name[5], devs[i]->name[6], devs[i]->name[7], msg);
@@ -245,7 +260,7 @@ static void broadcast(u32 msg, u32 esi, u32 edx, u32 edi, int rev)
  * win386-vxds.md). Its services as Windows 3.1's answered VXP:
  * VTD_Get_Version AX=030Ah, the fastest period 1 ms in EBX, the slowest
  * 54 ms (36h) in ECX; VTD_Get_Interrupt_Period 54 ms. */
-#define NBUILTIN 4
+
 static void vtd_init(void);
 /* w16's VDD (vdd.c, in this module): its DDB for other devices' dynamic
  * links (Windows 3.1's: "VDD", 000Ah, 2.00, init order 28000000h, 14
@@ -265,6 +280,12 @@ static struct ddb vdd_ddb = {
 static struct ddb shell_ddb = {
     0, 0x030A, 0x0017, 3, 0, 0, { 'S', 'H', 'E', 'L', 'L', ' ', ' ', ' ' },
     0xB0000000, 0, 0, 0, 0, 0, 0, 0, 6
+};
+/* PageSwap (pager.c): Windows 3.1's "PageSwap", 0007h, 2.10, init order
+ * 1C000000h, 7 services (the DDK documents the first three) */
+static struct ddb pageswap_ddb = {
+    0, 0x030A, 0x0007, 2, 10, 0, { 'P', 'a', 'g', 'e', 'S', 'w', 'a', 'p' },
+    0x1C000000, 0, 0, 0, 0, 0, 0, 0, 7
 };
 static struct ddb vtd_ddb = {
     0, 0x030A, 0x0005, 3, 10, 0, { 'V', 'T', 'D', ' ', ' ', ' ', ' ', ' ' },
@@ -736,10 +757,33 @@ static u32 link_alloc_run(u32 n, u32 align, u32 max_phys, u32 *phys)
     return phys_to_lin(p);
 }
 
+static u32 watch_on;                    /* [w16] vmmtrace=3: map_phys's watch (below) */
+
+/* [w16] vmmtrace=4: each instruction of W32S.386's Device_Init
+ * (in its own code: the VMM's are not shown) is traced with the
+ * registers before it runs: a debugging aid that follows what a device
+ * does with what it is given (black box: addresses and registers, never
+ * its code bytes) */
+int vxd_step(struct tframe *f)
+{
+    static u32 last;                    /* (a REP instruction once) */
+    if (!vxd_step_on) return 0;
+    if (f->eip >= step_lo && f->eip < step_hi && step_n < 8000 && f->eip != last) {
+        step_n++;
+        last = f->eip;
+        trace("STEP %x a %x b %x c %x d %x si %x di %x bp %x f %x\n", f->eip, f->eax, f->ebx,
+              f->ecx, f->edx, f->esi, f->edi, f->ebp, f->eflags & 0xFFF);
+    }
+    return 1;                           /* (TF stays as it is: vmmasm.asm clears it) */
+}
+
 void vxd_init(void)
 {
     u32 n = 1 + NBUILTIN + info->vxd_count, i, j;
     u32 *list = (u32 *)(W386_VMM_LIN + info->vxd_list);
+
+    if (info->trace == 3) { watch_on = 1; info->trace = 1; }
+    if (info->trace == 4) { step_init = 1; info->trace = 1; }
 
     devs = kmalloc(n * sizeof(*devs));
     sys_acb = kmalloc(256);
@@ -756,6 +800,8 @@ void vxd_init(void)
     devs[ndevs++] = &v86mm_ddb;
     shell_ddb.svc_table = (u32)make_slots(0x17, shell_ddb.svc_count);
     devs[ndevs++] = &shell_ddb;
+    pageswap_ddb.svc_table = (u32)make_slots(0x07, pageswap_ddb.svc_count);
+    devs[ndevs++] = &pageswap_ddb;
     for (i = 0; i < info->vxd_count; i++) {
         struct ddb *d = (struct ddb *)list[i];
         devs[ndevs++] = d;
@@ -1377,10 +1423,58 @@ static u32 physmap_next;
 static struct { u32 phys, n, lin; } physmaps[16];
 static u32 nphysmaps;
 
+/* [w16] vmmtrace=3: a device's first _MapPhysToLinear of the VMM's own
+ * memory gets an alias of the whole window (every page of it, not
+ * present, at the same offsets as in the window); each read or write of
+ * it there faults, is traced (the physical address, the dword there, the
+ * device's EIP) and is let through for one instruction (the trap flag).
+ * A device that finds more of the VMM's memory from the address it got
+ * (another page by its physical address) shows that too. A debugging aid
+ * for the VMM's memory a device looks at (black box: what it reads, not
+ * its code) */
+static u32 watch_lin, watch_size, watch_armed, *watch_pte;
+
+int vxd_watch_fault(u32 vec, u32 *eflags, u32 eip)
+{
+    u32 a = get_cr2();
+    if (!watch_lin) return 0;
+    if (vec == 14 && !watch_armed && a >= watch_lin && a - watch_lin < watch_size) {
+        u32 pg = a & ~0xFFFu, phys = info->xms_phys + (pg - watch_lin);
+        watch_pte = (u32 *)phys_to_lin(vmm_pdir_entry_get(pg >> 22) & ~0xFFFu) + ((pg >> 12) & 0x3FF);
+        trace("VMM: watch: %s at %x: phys %x = %x\n", vxd_owner(eip), eip,
+              phys + (a & 0xFFF), *(u32 *)phys_to_lin(phys + (a & 0xFFC)));
+        *watch_pte = phys | 3;
+        *eflags |= EFL_TF;
+        watch_armed = 1;
+        return 1;
+    }
+    if (vec == 1 && watch_armed) {
+        *watch_pte = (*watch_pte & ~1u) | 2;   /* not present again */
+        vmm_flush_tlb();
+        *eflags &= ~EFL_TF;
+        watch_armed = 0;
+        return 1;
+    }
+    return 0;
+}
+
 static u32 map_phys(u32 phys, u32 bytes)
 {
     u32 first = phys & ~0xFFFu, n = ((phys & 0xFFF) + bytes + 0xFFF) >> 12, i, lin;
     if (!bytes) n = 1;
+    if (watch_on && !watch_lin && first >= info->xms_phys
+        && phys + bytes <= info->xms_phys + info->xms_size) {
+        if (!physmap_next) physmap_next = W386_VMM_LIN + ((info->xms_size + 0x3FFFFFu) & ~0x3FFFFFu);
+        watch_lin = W386_VMM_LIN + W386_WINDOW_MAX - ((info->xms_size + 0x3FFFFFu) & ~0x3FFFFFu);   /* (the top: away from the rest) */
+        watch_size = info->xms_size & ~0xFFFu;
+        for (i = 0; i < watch_size; i += 4096) {
+            map_page_noflush(watch_lin + i, info->xms_phys + i, 3);
+            map_page_noflush(watch_lin + i, info->xms_phys + i, 2);  /* (the entry, not present) */
+        }
+        vmm_flush_tlb();
+    }
+    if (watch_lin && first >= info->xms_phys && phys + bytes <= info->xms_phys + info->xms_size)
+        return watch_lin + (phys - info->xms_phys);
     if (first >= info->xms_phys && phys + bytes <= info->xms_phys + info->xms_size)
         return phys_to_lin(phys);
     for (i = 0; i < nphysmaps; i++)
@@ -1591,6 +1685,85 @@ static int v86hook_service(u32 svc, struct svcregs *s)
     return 1;
 }
 
+/* ---- Hook_PM_Fault (80h), Hook_V86_Fault (7Fh), Hook_VMM_Fault (81h),
+ * the DDK's: EAX the fault (not 2, at most 4Fh, else carry), ESI the
+ * handler; ESI back the previous one. A handler is called with interrupts
+ * off, EBX the current VM, EBP its client registers; it handles the fault
+ * and returns, or chains to the previous one with every register kept.
+ * The DDK has the VMM's own handlers come first; w16's (the CLI/STI and
+ * breakpoint traps, I/O trapping, the pager) are done before any hook, and
+ * what none of them takes goes down the chain. The first handler hooked
+ * for a fault is handed, as its "previous" one, an entry of the VMM's that
+ * does what w16 does without hooks (DPMI: the client's exception handler,
+ * or the end of the program), so that a device that chains gets that.
+ * W32S.386 (Win32s 1.30c) hooks protected-mode faults at
+ * Sys_Critical_Init. UNVERIFIED: whether Windows 3.1 hands a device
+ * hooking at Sys_Critical_Init a previous handler (the DDK says its
+ * handlers are installed later); V86 and VMM faults' hooks are kept and
+ * handed back, but w16 does not call them yet (traced once) ---- */
+#define NFAULTS 0x50
+#define FAULT_DEV 0x7F16                /* w16's own: the default handlers' slots */
+static u32 pm_fault_hook[NFAULTS], v86_fault_hook[NFAULTS], vmm_fault_hook[NFAULTS];
+static u32 *fault_default;              /* FAULT_DEV's slots: the default per fault */
+static u32 fault_err;                   /* the error code of the fault going down the chain */
+
+static int fault_service(u32 svc, struct svcregs *s)
+{
+    u32 *t;
+    switch (svc) {
+    case 0x7F: t = v86_fault_hook; break;
+    case 0x80: t = pm_fault_hook; break;
+    case 0x81: t = vmm_fault_hook; break;
+    default: return 0;
+    }
+    if (s->eax == 2 || s->eax >= NFAULTS || !s->esi) { s->eflags |= EFL_CF; return 1; }
+    if (!fault_default) fault_default = make_slots(FAULT_DEV, NFAULTS);
+    if (info->trace == 1)
+        trace("VMM: %s fault %x hooked by %s: %x\n", svc == 0x7F ? "V86" : svc == 0x80 ? "PM" : "VMM",
+              s->eax, vxd_owner(s->esi), s->esi);
+    {
+        u32 prev = t[s->eax];
+        if (!prev && svc == 0x80) prev = fault_default[s->eax];
+        t[s->eax] = s->esi;
+        s->esi = prev;
+    }
+    s->eflags &= ~EFL_CF;
+    return 1;
+}
+
+/* a protected-mode client's fault that the VMM itself did not take: the
+ * devices' handlers, else (and at the chain's end) the DPMI host's */
+void vxd_pm_fault(struct cregs *r, int vec, u32 err)
+{
+    struct client_regs *c, outer;
+    struct svcregs s;
+    u32 saved_err = fault_err;
+    if (vec >= NFAULTS || !pm_fault_hook[vec]) { dpmi_exception(r, vec, err); return; }
+    c = cur_vm->client;
+    outer = *c;
+    client_fill(c, r);
+    memset(&s, 0, sizeof(s));
+    s.ebx = VMH(cur_vm);
+    s.ebp = (u32)c;
+    fault_err = err;
+    vmm_call_proc(pm_fault_hook[vec], &s);
+    fault_err = saved_err;
+    client_store(r, c);
+    *c = outer;
+}
+
+/* the default handler's entry, called by a device's handler that chains:
+ * the fault as w16 takes it without hooks, on the client registers at EBP */
+static void fault_default_call(u32 vec, struct svcregs *s)
+{
+    struct client_regs *c = (struct client_regs *)s->ebp;
+    struct cregs t;
+    memset(&t, 0, sizeof(t));
+    client_store(&t, c);
+    dpmi_exception(&t, vec, fault_err);
+    client_fill(c, &t);
+}
+
 /* ---- the profile services (SYSTEM.INI): Get_Profile_String (B3h),
  * Get_Next_Profile_String (B4h), Get_Profile_Decimal_Int (ABh),
  * Get_Profile_Hex_Int (AFh), Get_Profile_Boolean (B1h), from the DDK's
@@ -1752,7 +1925,10 @@ void __cdecl svc_dispatch(struct svcregs *s)
     if (dev == 1 && sim_service(svc, s)) return;
     if (dev == 1 && pmint_service(svc, s)) return;
     if (dev == 1 && page_service(svc, s)) return;
+    if ((dev == 1 || dev == 7) && pager_service(dev, svc, s)) return;
     if (dev == 1 && v86hook_service(svc, s)) return;
+    if (dev == 1 && fault_service(svc, s)) return;
+    if (dev == FAULT_DEV && svc < NFAULTS) { fault_default_call(svc, s); return; }
     if (dev == 5) { vtd_service(svc, s); return; }
     if (dev == 0x06) { v86mm_service(svc, s); return; }
     if (dev == 0x17) {

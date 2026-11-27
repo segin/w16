@@ -12,6 +12,7 @@
 # REFRUN_GET = paths under C:\ (e.g. WINDOWS/MAIN.GRP; D:/PATH: under D:\)
 # also copied there;
 # REFRUN_PRE = DOS commands (one per line) run before WIN, e.g. SET PATH=...
+# REFRUN_INI = SYSTEM.INI settings, SECTION:KEY=VALUE, one per line
 # REFRUN_DDRIVE = a host directory whose copy is mounted as D: as well
 # REFRUN_GDLOG=1: log every GDI call to C:\GD.LOG (see below).
 # REFRUN_X=1: run in DOSBox-X instead of DOSBox (its FPU keeps the status
@@ -72,6 +73,13 @@ if [ -n "${REFRUN_SHELL:-}" ]; then
     sed -i "s/^load=.*/load=C:\\\\$name\r/" "$work/c/WINDOWS/WIN.INI"
 else
     sed -i "s/^shell=.*/shell=C:\\\\$name\r/" "$work/c/WINDOWS/SYSTEM.INI"
+fi
+if [ -n "${REFRUN_INI:-}" ]; then
+    # REFRUN_INI: SYSTEM.INI settings, one SECTION:KEY=VALUE per line (as
+    # tests/dropin.sh -i: +KEY adds a line, -KEY= removes the key)
+    printf '%s\n' "$REFRUN_INI" | while IFS= read -r f; do
+        [ -n "$f" ] && python3 -I "$root/tests/scripts/iniset.py" "$work/c/WINDOWS/SYSTEM.INI" "$f"
+    done
 fi
 if [ -n "${REFRUN_DDRIVE:-}" ]; then
     cp -r "$REFRUN_DDRIVE" "$work/d"
