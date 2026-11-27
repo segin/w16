@@ -1,0 +1,10 @@
+# TK78.EXE (tests/apps/tk78.c, tk78l.c, tk78s.asm): a self-loading
+# program; tk78s.o comes first, so that its segment (with tk78l.c's code)
+# is segment 1, the loader segment. The Makefile sets flag 0800h.
+@tests/apps/app.lnk
+export TK78_EXP.1
+export TK78_LDREXP.2
+option packcode=0
+segment type code moveable preload
+segment type data moveable preload
+segment tk78_TEXT moveable discardable

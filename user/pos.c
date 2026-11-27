@@ -657,6 +657,16 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 if (pl && (w = valid_wnd(h)) != 0)
                     show_icon_title(pl, h);
             }
+            /* the active window minimised with SW_SHOWMINIMIZED stays
+               active, an icon without the focus (US30 iconopen on 3.1:
+               WM_KILLFOCUS, GetFocus() 0; the keys then go to the icon
+               as WM_SYSKEYDOWN). It kept the focus, so opening the icon
+               again sent no WM_SETFOCUS (below): Microsoft's WINOA386
+               gives a box going from full screen to a window the
+               keyboard (SHELL 5) at that WM_SETFOCUS */
+            if (cmd == SW_SHOWMINIMIZED && h == hwndActive && (w = valid_wnd(h)) != 0 &&
+                !(w->style & WS_CHILD) && hwndFocus && (hwndFocus == h || IsChild(h, hwndFocus)))
+                set_focus(0);
             /* a child minimised without activation gives the focus it
                holds to its top-level window (3.1: Program Manager makes
                its groups shown, then minimises the iconic ones with
@@ -835,7 +845,21 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             /* restored: activated and on top (3.1 SDK: SW_RESTORE and
                SW_SHOWNORMAL activate; a Program Manager group restored
                from its icon comes up in front, active; a child above) */
-            if ((w = valid_wnd(h)) != 0 && !restore_noact && !(w->style & WS_CHILD))
+            /* the active window's icon opened: no new activation, but
+               the focus and WM_ACTIVATE again, now not minimised (US30
+               iconopen on 3.1: WM_QUERYOPEN, WM_SETFOCUS, WM_ACTIVATE
+               WA_ACTIVE; no WM_NCACTIVATE or WM_ACTIVATEAPP). w16 sent
+               nothing, and Microsoft's WINOA386, whose full-screen box
+               is such an icon, never gave the windowed box the keyboard:
+               the VM kept the Alt of Alt+Enter down and typed letters
+               were lost (boot-test win386tree) */
+            if ((w = valid_wnd(h)) != 0 && !restore_noact && !(w->style & WS_CHILD) &&
+                wasicon && h == hwndActive) {
+                if (hwndFocus != h && !IsChild(h, hwndFocus))
+                    set_focus(h);
+                if (valid_wnd(h) && h == hwndActive)
+                    send_message(h, WM_ACTIVATE, WA_ACTIVE, MAKELONG(0, 0));
+            } else if (w && !restore_noact && !(w->style & WS_CHILD))
                 activate_window(h, FALSE);
             /* a child opened from its icon takes the focus, its window
                active (TK75 on 3.1: a plain child, WM_SETFOCUS after its
