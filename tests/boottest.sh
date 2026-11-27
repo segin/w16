@@ -250,6 +250,14 @@
 #              (tests/vmpollrun.sh), Microsoft's WIN386 alongside
 #   win386xms  w16's WIN386: VX15's XMS and EMS calls in a DOS box (3 PIFs)
 #              give the same log as under Microsoft's WIN386
+#   vmtasksoak the VM Task Manager left running (tests/vmtasksoak.sh, the
+#              tree, DOSBox-X): VMTASK.EXE at 0.5 s for 30 cycles of a
+#              program started and closed and, every other cycle, a busy
+#              DOS box ended through VMTASK.386; VMTASK still runs, and
+#              the free memory, GDI's and USER's resources and objects,
+#              the global blocks and VMTASK's own stay within a small
+#              margin (w16 lost four fonts per DOS box, a DC per run of
+#              Write and an icon per program run)
 #   win386memload  w16's WIN386: MEMLOAD's XMS and EMS workloads, XMS 3.0 calls
 #              and three boxes at once, as under Microsoft's WIN386
 #   win386mcb  the DOS memory arena in a DOS box (MCBCHK.EXE, tests/
@@ -1138,7 +1146,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2318,6 +2326,17 @@ runcase() {
         fi
         if [ "$r" = ok ]; then echo "ok   win386idle: Windows at $pct_w16p% beside 4 polling boxes (3.1: $pct_refp%), $pct_w16b% beside a busy one (3.1: $pct_refb%)"
         else echo "FAIL win386idle: $r"; fails=$((fails + 1)); fi ;;
+    vmtasksoak)
+        # the user's report (2026-11-27): VMTASK.EXE left running while
+        # other things happened ended in a fault; tests/vmtasksoak.sh's
+        # checks (its log's CHECK lines)
+        VMTASK_DOSBOX=x VMTASK_CYCLES=30 VMTASK_TIME=1200 sh "$root/tests/vmtasksoak.sh" "$out/vmtasksoak" tree \
+            > "$out/vmtasksoak.txt" 2>&1
+        rc=$?
+        if [ $rc = 0 ] && grep -q '^VMTSOAK done, 0 failed' "$out/vmtasksoak.txt"; then
+            echo "ok   vmtasksoak: $(grep -c '^VMTSOAK sample' "$out/vmtasksoak.txt") cycles, VMTASK up, resources steady"
+        else echo "FAIL vmtasksoak: $(grep -m1 -e '^CHECK FAIL' -e '^no VMTSOAK' "$out/vmtasksoak.txt" || echo 'no result') ($out/vmtasksoak.txt)"
+            fails=$((fails + 1)); fi ;;
     win386xms)
         # V86MMGR (ARCHITECTURE.md 12.13): VX15 (tests/dos/vx15.asm,
         # tests/v86mmrun.sh) in a DOS box calls the XMS driver and INT 67h
