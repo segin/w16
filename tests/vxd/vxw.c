@@ -1,6 +1,6 @@
 /* vxw.c - VXW.386, a probe VxD of w16's own (test only): the linear
  * address space's layout as the page directory shows it (ARCHITECTURE.md
- * 12.17). Loaded with "device=vxw.386" (init order: the last), it writes
+ * 12.18). Loaded with "device=vxw.386" (init order: the last), it writes
  * to COM1 (DOSBox-X serial1=file), every line starting "VXW ", at
  * Sys_Critical_Init, Device_Init, Init_Complete, Sys_VM_Init and
  * System_Exit:

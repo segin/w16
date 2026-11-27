@@ -1,6 +1,6 @@
 # Win32s on w16's WIN386: virtual memory and W32S.386 (handover)
 
-Branch `w16-vm`. Spec: ARCHITECTURE.md 12.16 (paging) and 12.17 (W32S.386).
+Branch `w16-vm`. Spec: ARCHITECTURE.md 12.17 (paging) and 12.18 (W32S.386).
 
 ## Done
 

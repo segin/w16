@@ -1,7 +1,7 @@
 #!/bin/sh
 # VX18 (tests/apps/vx18.c) as the shell in 386 Enhanced mode, under Windows
 # 3.1's WIN386 and under w16's (build/win386/WIN386.EXE over it), with
-# SYSTEM.INI's [386Enh] paging settings varied (ARCHITECTURE.md 12.16):
+# SYSTEM.INI's [386Enh] paging settings varied (ARCHITECTURE.md 12.17):
 #   default   no paging keys: the temporary WIN386.SWP in the Windows directory
 #   nopaging  Paging=no
 #   max       MaxPagingFileSize=2048

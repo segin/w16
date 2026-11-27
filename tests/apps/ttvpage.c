@@ -9,6 +9,9 @@
 
 ttfx_u8 TTFX_FAR *ttv_arena;
 unsigned ttv_arena_used, ttv_arena_peak;
+void TTFX_FAR *ttv_bcmem;
+ttfx_u32 ttv_bcbytes;
+static int ttv_bcem;                    /* the size prepared (0: none) */
 
 /* ttfx's memory: blocks from the arena, each after a word holding its
    size; freeing the last block gives its room back (ttfx frees mostly in
@@ -55,15 +58,38 @@ static ttfx_u16 glyph_of(const ttfx_font *f, int c)
     return ttfx_FindGlyphIndex(f, u);
 }
 
-/* one glyph with its origin at page pixel (px, py) (py: the baseline) */
+/* with the font's instructions (TTFX_HINT_BYTECODE): fpgm and prep run
+   for em, once a size, into ttv_bcmem (if that fails, f->bc is 0 and
+   the autohinter draws the size) */
+static void set_size(const ttfx_font *f, int em)
+{
+    if (!(f->hint & TTFX_HINT_BYTECODE) || !ttv_bcmem || em == ttv_bcem)
+        return;
+    ttv_bcem = em;
+    ttv_arena_used = 0;
+    ttfx_bcPrepare((ttfx_font *)f, ttv_bcmem, ttv_bcbytes, ttfx_ScaleForMappingEmToPixels(f, em),
+                   ttfx_ScaleForMappingEmToPixels(f, em), em, em);
+}
+
+/* one glyph with its origin at page pixel (px, py) (py: the baseline);
+   *adv: its advance in whole pixels if its instructions hinted it (the
+   phantom points'), else left as it is */
 static int draw_glyph(const ttfx_font *f, ttfx_u8 TTFX_FAR *bits, ttfx_u16 g, ttfx_scale sc,
-                      int px, int py, int *failed)
+                      int px, int py, int *failed, int *adv)
 {
     int ix0, iy0, ix1, iy1, top, h;
     ttfx_bitmap bm;
-    ttfx_GetGlyphBitmapBox(f, g, sc, sc, 0, 0, &ix0, &iy0, &ix1, &iy1);
+    ttfx_outline o;
+    int bc = 0;
+    ttv_arena_used = 0;
+    if (f->bc && ttfx_LoadOutline(f, g, sc, sc, &o)) {
+        bc = 1;
+        *adv = (int)((o.adv + 32) >> 6);
+        ttfx_OutlineBox(&o, &ix0, &iy0, &ix1, &iy1);
+    } else
+        ttfx_GetGlyphBitmapBox(f, g, sc, sc, 0, 0, &ix0, &iy0, &ix1, &iy1);
     if (ix1 <= ix0 || iy1 <= iy0)
-        return 0;
+        goto none;
     top = py + iy0;
     h = iy1 - iy0;
     if (top < 0) {                      /* cut to the page */
@@ -74,18 +100,25 @@ static int draw_glyph(const ttfx_font *f, ttfx_u8 TTFX_FAR *bits, ttfx_u16 g, tt
     if (top + h > TTV_H)
         h = TTV_H - top;
     if (h <= 0 || px + ix0 >= TTV_W || px + ix1 <= 0)
-        return 0;
+        goto none;
     bm.w = TTV_W;
     bm.h = h;
     bm.stride = TTV_STRIDE;
     bm.pixels = bits + (ttfx_u32)top * TTV_STRIDE;
-    ttv_arena_used = 0;
     /* the outline's (x, y) to the page's (px + x, py + y) */
-    if (!ttfx_RenderGlyph(f, &bm, g, sc, sc, 0, 0, -px, iy0)) {
+    if (bc ? !ttfx_RenderOutline(f, &bm, &o, -px, iy0) : !ttfx_RenderGlyph(f, &bm, g, sc, sc, 0, 0, -px, iy0)) {
         (*failed)++;
+        if (bc)
+            ttfx_FreeOutline(f, &o);
         return 0;
     }
+    if (bc)
+        ttfx_FreeOutline(f, &o);
     return 1;
+none:
+    if (bc)
+        ttfx_FreeOutline(f, &o);
+    return 0;
 }
 
 /* a string from pen position x on baseline y, em pixels to the em; each
@@ -95,12 +128,14 @@ static int draw_text(const ttfx_font *f, ttfx_u8 TTFX_FAR *bits, int x, int y, i
 {
     ttfx_scale sc = ttfx_ScaleForMappingEmToPixels(f, em);
     int n = 0;
+    set_size(f, em);
     for (; *s && x < TTV_W; s++) {
         ttfx_u16 g = glyph_of(f, (unsigned char)*s), adv;
-        int lsb;
+        int lsb, a;
         ttfx_GetGlyphHMetrics(f, g, &adv, &lsb);
-        n += draw_glyph(f, bits, g, sc, x, y, failed);
-        x += (int)ttfx_MulDivRound(adv, em, f->unitsPerEm);
+        a = (int)ttfx_MulDivRound(adv, em, f->unitsPerEm);
+        n += draw_glyph(f, bits, g, sc, x, y, failed, &a);
+        x += a;
     }
     return n;
 }
@@ -153,6 +188,7 @@ int ttv_page(const ttfx_font *f, ttfx_u8 TTFX_FAR *bits, int *failed)
     for (k = 0; k < (ttfx_u32)TTV_STRIDE * TTV_H; k++)
         bits[k] = 0;
     *failed = 0;
+    ttv_bcem = 0;
     ttfx_GetFontVMetrics(f, &asc, &dsc, &gap);
     ttv_name(f, name, sizeof name);
     for (i = 0; i < (int)(sizeof ems / sizeof ems[0]) + 1; i++) {
@@ -178,16 +214,17 @@ int ttv_page(const ttfx_font *f, ttfx_u8 TTFX_FAR *bits, int *failed)
     }
     /* the character grid: 32 x 7 cells of 20 x 22, 16 pixels to the em */
     y += 2;
+    set_size(f, 16);
     for (c = 0x20; c <= 0xFF; c++) {
         int col = (c - 0x20) % 32, row = (c - 0x20) / 32, cx = col * 20, cy = y + row * 22;
         ttfx_u16 g = glyph_of(f, c), adv;
-        int lsb, w;
+        int lsb, w, a;
         if (cy + 22 > TTV_H)
             break;
         ttfx_GetGlyphHMetrics(f, g, &adv, &lsb);
         w = (int)ttfx_MulDivRound(adv, 16, f->unitsPerEm);
         n += draw_glyph(f, bits, g, ttfx_ScaleForMappingEmToPixels(f, 16), cx + (20 - w) / 2,
-                        cy + 1 + (int)ttfx_MulDivRound(asc, 16, f->unitsPerEm), failed);
+                        cy + 1 + (int)ttfx_MulDivRound(asc, 16, f->unitsPerEm), failed, &a);
     }
     for (i = 0; i <= 7 && y + i * 22 < TTV_H; i++)
         hline(bits, 0, 32 * 20 - 1, y + i * 22 < TTV_H - 1 ? y + i * 22 : TTV_H - 1);
@@ -241,6 +278,7 @@ int ttv_sizes(const ttfx_font *f, ttfx_u8 TTFX_FAR *bits, int *failed)
     for (k = 0; k < (ttfx_u32)TTV_STRIDE * TTV_H; k++)
         bits[k] = 0;
     *failed = 0;
+    ttv_bcem = 0;
     for (i = 0; ttv_line(f, i, &em, &y, text, sizeof text); i++)
         if (y < TTV_H)
             n += draw_text(f, bits, 2, y, em, text, failed);

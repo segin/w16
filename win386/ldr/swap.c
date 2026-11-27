@@ -1,5 +1,5 @@
 /* swap.c - w16's WIN386.EXE, real-mode part: the paging (swap) file
- * (ARCHITECTURE.md 12.16), made before Windows starts and removed when it
+ * (ARCHITECTURE.md 12.17), made before Windows starts and removed when it
  * ends; the VMM (win386/vmm/pager.c) pages to it.
  *
  * SYSTEM.INI [386Enh], as Windows 3.1 takes them (VX18, tests/vmprobe.sh:

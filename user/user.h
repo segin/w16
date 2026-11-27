@@ -80,6 +80,7 @@ extern void  __far __pascal D_CHECKCURSOR(void);                     /* 104 */
 
 /* ---- uentry.asm ---- */
 extern LONG __far __cdecl call_wndproc(WNDPROC f, WORD ax, HWND, UINT, WPARAM, LPARAM);
+extern LONG __far __cdecl call_hookproc(HOOKPROC f, int code, WPARAM, LPARAM);
 extern void __far __cdecl keybd_event_entry(void);   /* KEYBOARD's event procedure */
 extern void __far __cdecl mouse_event_entry(void);   /* MOUSE's event procedure */
 WORD __far __cdecl lh_alloc(WORD sel, UINT flags, UINT size);    /* Local* in */

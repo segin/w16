@@ -1,6 +1,6 @@
 /*
  * vx18.c - VX18.EXE: virtual memory as a Windows program sees it in 386
- * Enhanced mode (ARCHITECTURE.md 12.16): what Windows 3.1's WIN386
+ * Enhanced mode (ARCHITECTURE.md 12.17): what Windows 3.1's WIN386
  * reports about its paging (swap) file, run as the shell (tests/vmprobe.sh,
  * tests/refrun.sh VX18.EXE /3) under Windows 3.1's WIN386 and under w16's,
  * with SYSTEM.INI's [386Enh] paging settings varied by the script. Logs to

@@ -49,6 +49,7 @@ static u32 ndevs;
 #define sys_cb (sysvm.cb)
 #define sys_client (sysvm.client)
 static u8 *sys_acb;                 /* the application control block (Begin_PM_App) */
+static int sys_vm_init_sent;        /* Set_PM_Int_Vector: the defaults' time is over */
 static u32 *vmm_slots;              /* the VMM's service table: stub addresses */
 static void svc_unknown(u32 dev, u32 svc, struct svcregs *s);
 
@@ -820,12 +821,27 @@ void vxd_init(void)
     broadcast(DEVICE_INIT, info->tail_lin, 0, 0, 0);
     broadcast(INIT_COMPLETE, info->tail_lin, 0, 0, 0);
     broadcast(SYS_VM_INIT, info->tail_lin, 0, 0, 0);
+    sys_vm_init_sent = 1;
     shell_init();
 }
 
-/* KRNL386 entered protected mode (dpmi_switch) / ended (terminate_client) */
+/* a VM's client entered protected mode (dpmi_switch) / ended
+ * (terminate_client): KRNL386 in the System VM, a DOS extender in a DOS
+ * VM (the DDK: EBX the VM, EDX bit 0 a 32-bit application, EDI its
+ * application control block) */
 void vxd_pm_app(int begin, struct cregs *r)
 {
+    struct vm *v = cur_vm;
+    u8 *acb = sys_acb;
+    if (v != &sysvm) {
+        if (!v->dp.acb) v->dp.acb = kmalloc(256);
+        acb = v->dp.acb;
+        if (!acb) return;
+        client_fill(v->client, r);
+        if (begin) vxd_send(BEGIN_PM_APP, v, v->client32 ? 1 : 0, 0, (u32)acb);
+        else vxd_send_rev(END_PM_APP, v, 0, 0, (u32)acb);
+        return;
+    }
     client_fill(sys_client, r);
     if (begin)
         broadcast(BEGIN_PM_APP, 0, sysvm.client32 ? 1 : 0, (u32)sys_acb, 0);
@@ -1086,17 +1102,17 @@ static int nest_service(u32 svc, struct svcregs *s)
     case 0x83:                          /* Begin_Nest_Exec: protected mode */
         /* when the VM runs a protected-mode program, whatever mode it was
          * interrupted in (the DDK) */
-        nest_pm = cur_vm == &sysvm && sysvm.pm;
+        nest_pm = cur_vm->pm;
         nest_level++;
         return 1;
     case 0x84: {                        /* Exec_Int: EAX the vector */
         /* a VM in protected mode: its DS and ES are selectors, which V86
          * code gets as the segments they map in conventional memory (else
          * the transfer buffer's), and keeps when the call leaves them */
-        int pm = !(c->eflags & EFL_VM) && cur_vm == &sysvm && sysvm.pm;
+        int pm = !(c->eflags & EFL_VM) && cur_vm->pm;
         int ds = pm ? sel_to_seg(c->ds) : (int)c->ds, es = pm ? sel_to_seg(c->es) : (int)c->es;
-        if (ds < 0) ds = info->xbuf_seg;
-        if (es < 0) es = info->xbuf_seg;
+        if (ds < 0) ds = xbuf_seg();
+        if (es < 0) es = xbuf_seg();
         memset(&v, 0, sizeof(v));
         v.eax = c->eax; v.ebx = c->ebx; v.ecx = c->ecx; v.edx = c->edx;
         v.esi = c->esi; v.edi = c->edi; v.ebp = c->ebp;
@@ -1134,14 +1150,14 @@ static int nest_service(u32 svc, struct svcregs *s)
          * the tick came during a DOS call, stopped QuickTime's movie with
          * sound at "play" for good (sbaudio.sh qtw16e, ARCHITECTURE.md
          * 12.14) */
-        if (nest_call && (nest_pm || !(c->eflags & EFL_VM)) && cur_vm == &sysvm && sysvm.pm) {
+        if (nest_call && (nest_pm || !(c->eflags & EFL_VM)) && cur_vm->pm) {
             struct cregs in, out;
             int v86 = (c->eflags & EFL_VM) != 0;
             memset(&in, 0, sizeof(in));
             in.eax = c->eax; in.ebx = c->ebx; in.ecx = c->ecx; in.edx = c->edx;
             in.esi = c->esi; in.edi = c->edi; in.ebp = c->ebp;
-            in.ds = v86 ? sysvm.last_ds : c->ds;
-            in.es = v86 ? sysvm.last_ds : c->es;
+            in.ds = v86 ? cur_vm->last_ds : c->ds;
+            in.es = v86 ? cur_vm->last_ds : c->es;
             hb_nest++;
             dpmi_pm_farcall_regs(&in, nest_sel, nest_off, nest_args, nest_nargs, &out);
             c->eax = out.eax; c->ebx = out.ebx; c->ecx = out.ecx; c->edx = out.edx;
@@ -1231,15 +1247,20 @@ static int pmint_service(u32 svc, struct svcregs *s)
          * 08h, 09h, 16h, 23h, 24h, 28h, 4Bh, 5Ch, 60h, 67h, 70h, 74h, FEh);
          * w16's host serves those in its default handlers (dpmi.c), so
          * they are reported as hooked the same */
-        s->ecx = sysvm.pmvec_sel[v] & 0xFFFF;
-        s->edx = sysvm.pmvec_off[v];
+        s->ecx = cur_vm->pmvec_sel[v] & 0xFFFF;
+        s->edx = cur_vm->pmvec_off[v];
         ZF_SET(s, dpmi_pmvec_default(v) && !vec_hooked31(v));
         return 1;
     case 0x45:                          /* Set_PM_Int_Vector: EAX, CX:EDX */
-        /* before Sys_VM_Init the DDK makes it every VM's default: the
-         * System VM's table is the only one */
-        sysvm.pmvec_sel[v] = s->ecx & 0xFFFF;
-        sysvm.pmvec_off[v] = s->edx;
+        /* before Sys_VM_Init the DDK makes it every VM's default (a DOS
+         * VM's client starts with that table: dpmi.c); later the current
+         * VM's alone */
+        cur_vm->pmvec_sel[v] = s->ecx & 0xFFFF;
+        cur_vm->pmvec_off[v] = s->edx;
+        if (!sys_vm_init_sent) {
+            pmdef_sel[v] = s->ecx & 0xFFFF;
+            pmdef_off[v] = s->edx;
+        }
         if (info->trace == 1) trace("VMM: PM vector %x -> %x:%x\n", v, s->ecx & 0xFFFF, s->edx);
         return 1;
     }
@@ -1283,8 +1304,8 @@ static int sim_service(u32 svc, struct svcregs *s)
             SPUSH(r.cs);
             SPUSH(r.eip);
             r.eflags &= ~EFL_TF;
-            r.cs = sysvm.pmvec_sel[a];
-            r.eip = sysvm.pmvec_off[a];
+            r.cs = cur_vm->pmvec_sel[a];
+            r.eip = cur_vm->pmvec_off[a];
         }
         break;
     case 0x47:                          /* Simulate_Iret */
@@ -1307,7 +1328,7 @@ static int sim_service(u32 svc, struct svcregs *s)
         r.eip = SPOP();
         r.cs = SPOP();
         a = svc == 0x4B ? s->eax : 0;
-        if (v86 || !(sysvm.client32 || seg_32(r.ss))) SETW(r.esp, r.esp + a);
+        if (v86 || !(cur_vm->client32 || seg_32(r.ss))) SETW(r.esp, r.esp + a);
         else r.esp += a;
         break;
     case 0x4D:                          /* Simulate_Push: EAX */
@@ -1824,7 +1845,7 @@ void __cdecl svc_dispatch(struct svcregs *s)
         u32 off = (s->eax & 0xFF) == 0xFF ? 0 : *(u32 *)(c + (s->eax & 0xFF));
         if (cur_vm->client->eflags & EFL_VM) s->eax = ((seg & 0xFFFF) << 4) + (off & 0xFFFF);
         else if (!sel_present(seg)) s->eax = 0xFFFFFFFFu;  /* the DDK: -1 for an invalid selector */
-        else s->eax = sel_base(seg) + (sysvm.client32 ? off : (off & 0xFFFF));
+        else s->eax = sel_base(seg) + (cur_vm->client32 ? off : (off & 0xFFFF));
         return;
     }
     case 0x0093: {                      /* System_Control: EAX the message, EBX the VM */

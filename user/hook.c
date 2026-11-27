@@ -157,7 +157,7 @@ static LRESULT call_one(WORD h, int code, WPARAM wp, LPARAM lp)
     HOOKPROC f = HK(h)->proc;
     LRESULT r;
     HK(h)->busy++;
-    r = ((LRESULT (__far __pascal *)(int, WPARAM, LPARAM))f)(code, wp, lp);
+    r = call_hookproc(f, code, wp, lp);        /* AX = DS = ES = SS (TK71) */
     if (!--HK(h)->busy && HK(h)->dead)
         free_hook(h);
     return r;

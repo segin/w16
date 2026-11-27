@@ -43,7 +43,7 @@ TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8 DX9
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63 TK68 TK68W TK73 TK74 TK69 TK69A TK70 TK71 TK75 TK78 TK77
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63 TK68 TK68W TK73 TK74 TK69 TK69A TK70 TK71 TK75 TK78 TK77 TK79
 # TK65's import DLLs (TK65IMP below)
 TK65I   := TK65I1.DLL TK65I2.DLL TK65I3.DLL TK65I4.DLL TK65I5.DLL TK65I6.DLL TK65I7.DLL TK65I8.DLL TK65I9.DLL
 # DLLs and files TK5 uses
@@ -408,6 +408,12 @@ $(DOS)/TK75.EXE: $(B)/tests/start.o $(B)/tests/tk75.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win import INITAPP USER.5 \
 	    option map=$(B)/tests/tk75.map file { $(B)/tests/start.o $(B)/tests/tk75.o }
+
+# TK79.EXE: faults with a stack the fault report must not trust
+$(DOS)/TK79.EXE: $(B)/tests/start.o $(B)/tests/tk79.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk79.map file { $(B)/tests/start.o $(B)/tests/tk79.o }
 
 # TK78.EXE: a self-loading program (NE flag 0800h) whose loader logs what
 # KERNEL gives it; tk78s.asm and tk78l.c make segment 1, the loader
@@ -1136,8 +1142,9 @@ $(DOS)/WC9.EXE: $(B)/tests/start.o $(B)/tests/wc9.o tests/apps/app.lnk
 
 # FN1.EXE: the font metrics probe; FN3.EXE: its companion for the rest of
 # the VGA set and the DOS-box fonts; FN2.EXE: a window showing every
-# character of each font (tests/fonts.sh; ARCHITECTURE.md 6.9)
-FNPROBES := $(DOS)/FN1.EXE $(DOS)/FN2.EXE $(DOS)/FN3.EXE
+# character of each font (tests/fonts.sh; ARCHITECTURE.md 6.9); FN4.EXE:
+# the TrueType probe (tests/ttfonts.sh; ARCHITECTURE.md 6.9.3)
+FNPROBES := $(DOS)/FN1.EXE $(DOS)/FN2.EXE $(DOS)/FN3.EXE $(DOS)/FN4.EXE
 fnprobes: $(FNPROBES)
 dos: $(FNPROBES)
 $(DOS)/FN%.EXE: $(B)/tests/start.o $(B)/tests/fn%.o tests/apps/app.lnk tests/apps/fn.lnk
@@ -1229,7 +1236,7 @@ $(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX16.EXE $(DOS)/VX17.EXE $(DOS)/VX18.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/MCBCHK.EXE $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXC.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/VXW.386 $(DOS)/VXB.386 $(DOS)/SBD.COM
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX16.EXE $(DOS)/VX17.EXE $(DOS)/VX18.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/MCBCHK.EXE $(DOS)/DPMIPRB.COM $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXC.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/VXW.386 $(DOS)/VXB.386 $(DOS)/SBD.COM
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -1376,6 +1383,11 @@ $(DOS)/MCBCHK.EXE: $(B)/tests/mcbchk.o
 	@mkdir -p $(@D)
 	$(WLINK) option quiet format dos name $@ option stack=4096 \
 	    libpath $(WATCOM)/lib286/dos libpath $(WATCOM)/lib286 file $(B)/tests/mcbchk.o
+# DPMIPRB.COM: a raw DPMI client, 16- and 32-bit, for DOS boxes
+# (tests/dos/dpmiprb.asm and dpmibody.inc; tests/dpmirun.sh)
+$(DOS)/DPMIPRB.COM: tests/dos/dpmiprb.asm tests/dos/dpmibody.inc
+	@mkdir -p $(@D)
+	$(NASM) -f bin -I tests/dos/ -o $@ $<
 # VXT.386: the scheduling probe VxD (tests/vxd/vxt.asm)
 $(DOS)/VXT.386: tests/vxd/vxt.asm tests/vxd/vxt.lnk
 	@mkdir -p $(@D) $(B)/tests
@@ -1395,6 +1407,8 @@ $(DOS)/VXC.386: tests/vxd/vxc.asm tests/vxd/vxc.lnk
 	@mkdir -p $(@D) $(B)/tests
 	$(NASM) -f obj -DUNKNOWN -o $(B)/tests/vxcu.o tests/vxd/vxc.asm
 	$(WLINK) @tests/vxd/vxc.lnk name $(DOS)/VXCU.386 file $(B)/tests/vxcu.o
+	$(NASM) -f obj -DDOSVM -o $(B)/tests/vxcd.o tests/vxd/vxc.asm
+	$(WLINK) @tests/vxd/vxc.lnk name $(DOS)/VXCD.386 file $(B)/tests/vxcd.o
 	$(NASM) -f obj -o $(B)/tests/vxc.o tests/vxd/vxc.asm
 	$(WLINK) @tests/vxd/vxc.lnk name $@ file $(B)/tests/vxc.o
 # SPK.COM: the Virtual Sound Device's DOS-side probe (tests/vsdprobe.sh)
@@ -1828,7 +1842,8 @@ $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
 # segments, marked 2.0 and, in the NE other-flags byte, 02h: a 2.x program
 # that runs in protected mode (SDK vol. 4, the NE header; without it 3.1
 # would not start it as the shell)
-TTV_O := $(B)/ttview/ttview.o $(B)/ttview/ttvpage.o $(B)/ttview/ttfx.o $(B)/ttview/ttfhint.o
+TTV_O := $(B)/ttview/ttview.o $(B)/ttview/ttvpage.o $(B)/ttview/ttfx.o $(B)/ttview/ttfhint.o \
+         $(B)/ttview/ttfbc.o
 dos: $(DOS)/TTVIEW.EXE
 $(B)/ttview/%.o: tests/apps/%.c tests/apps/ttvpage.h gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
@@ -1837,6 +1852,9 @@ $(B)/ttview/ttfx.o: gdi/ttf/ttfx.c gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
 $(B)/ttview/ttfhint.o: gdi/ttf/ttfhint.c gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/ttview/ttfbc.o: gdi/ttf/ttfbc.c gdi/ttf/ttfbc.h gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
 $(B)/ttview/ttview.res: tests/apps/ttview.rc
@@ -1852,20 +1870,37 @@ $(DOS)/TTVIEW.EXE: $(B)/shell/start.o $(B)/shell/write/i4.o $(TTV_O) $(B)/ttview
 	python3 tools/nemark.py $@ 2.0 0202 02
 # ... and the same page drawn on the host, to compare with (tests/ttview.sh)
 $(B)/host/ttvhost: tests/ttf/ttvhost.c tests/apps/ttvpage.c tests/apps/ttvpage.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h \
-                  gdi/ttf/ttfhint.c
+                  gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c gdi/ttf/ttfbc.h
 	@mkdir -p $(@D)
-	$(HOSTCC) -O2 -o $@ tests/ttf/ttvhost.c tests/apps/ttvpage.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttvhost.c tests/apps/ttvpage.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c
 
 # the fixed-point TrueType code (gdi/ttf/ttfx.c) against the floating-point
 # stb_truetype it was adapted from, on the host (tests/ttf/ttfxtest.c)
 $(B)/host/ttfxtest: tests/ttf/ttfxtest.c tests/ttf/ref.c tests/ttf/ref.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h \
-                    gdi/ttf/ttfhint.c gdi/ttf/stb_truetype.h
+                    gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c gdi/ttf/ttfbc.h gdi/ttf/stb_truetype.h
 	@mkdir -p $(@D)
-	$(HOSTCC) -O2 -o $@ tests/ttf/ttfxtest.c tests/ttf/ref.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c -lm
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttfxtest.c tests/ttf/ref.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c -lm
 
-test: dos fonts grpcheck $(B)/host/pwtest $(B)/hlpdump $(B)/host/ttfxtest
+# a glyph or a line printed as text, with the font's instructions, the
+# autohinter or neither (tests/ttf/ttbcshow.c; -DBC_TRACE traces them)
+$(B)/host/ttbcshow: tests/ttf/ttbcshow.c gdi/ttf/ttfx.c gdi/ttf/ttfx.h gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c \
+                    gdi/ttf/ttfbc.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttbcshow.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c
+
+# the bytecode interpreter (gdi/ttf/ttfbc.c), instruction by instruction
+$(B)/host/ttfbctest: tests/ttf/ttfbctest.c gdi/ttf/ttfx.c gdi/ttf/ttfx.h gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c \
+                     gdi/ttf/ttfbc.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttfbctest.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c
+
+test: dos fonts grpcheck $(B)/host/pwtest $(B)/hlpdump $(B)/host/ttfxtest $(B)/host/ttfbctest $(B)/host/ttvhost
 	python3 tests/scripts/ss/pwtest.py $(B)/host/pwtest
 	$(B)/host/ttfxtest tests/fixtures/fonts/LiberationSans-Regular.ttf
+	$(B)/host/ttfbctest
+	$(B)/host/ttvhost -2 tests/fixtures/fonts/LiberationSans-Regular.ttf $(B)/host/libspec.pg > /dev/null
+	python3 tests/ttf/ttvspec.py tests/fixtures/fonts/LiberationSans-Regular.ttf $(B)/host/libspec.pg \
+	    tests/fixtures/fonts/LiberationSans-win31.scr 85
 	WATCOM=$(WATCOM) tests/winhelp/hlpcheck.sh $(B)/hlpdump
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
@@ -2030,12 +2065,15 @@ GCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -wcd=201 -Igdi
 GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/heap.o $(B)/gdi/object.o \
            $(B)/gdi/driver.o $(B)/gdi/dc.o $(B)/gdi/rgn.o $(B)/gdi/bitmap.o \
            $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o $(B)/gdi/draw.o \
-           $(B)/gdi/meta.o $(B)/gdi/ttfont.o $(B)/gdi/ttfx.o $(B)/gdi/ttfhint.o
+           $(B)/gdi/meta.o $(B)/gdi/ttfont.o $(B)/gdi/ttfx.o $(B)/gdi/ttfhint.o $(B)/gdi/ttfbc.o
 gdi: $(DOS)/GDI.EXE
 $(B)/gdi/ttfx.o: gdi/ttf/ttfx.c gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(GCFLAGS) -fo=$@ $<
 $(B)/gdi/ttfhint.o: gdi/ttf/ttfhint.c gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(WCC) $(GCFLAGS) -fo=$@ $<
+$(B)/gdi/ttfbc.o: gdi/ttf/ttfbc.c gdi/ttf/ttfbc.h gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(GCFLAGS) -fo=$@ $<
 $(B)/gdi/ttfont.o: gdi/ttf/ttfx.h
@@ -2460,6 +2498,28 @@ $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD: $(W16SYS)/%: $(DOS)
 	@mkdir -p $(@D)
 	cp $< $@
 $(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
+	@mkdir -p $(@D)
+	cp $< $@
+# w16's TrueType fonts (fonts/tt; ARCHITECTURE.md 6.9.3): w16 Sans, Serif
+# and Mono, CC0, metric-compatible with Arial, Times New Roman and Courier
+# New, built by tools/ttgen.py from the designs and FN4's 3.1 metrics
+# (tests/fonts/fn4ref.txt), their .FOT files by tools/mkfot.py; installed
+# in SYSTEM with WIN.INI [fonts] entries (assets/WIN.INI), as Windows 3.1's
+# Setup installs its TrueType fonts
+TTF     := $(B)/ttfonts
+TTFACES := W16SANS W16SANBD W16SANIT W16SANBI W16SERIF W16SERBD W16SERIT W16SERBI \
+           W16MONO W16MONBD W16MONIT W16MONBI
+TTFILES := $(foreach f,$(TTFACES),$(TTF)/$(f).TTF $(TTF)/$(f).FOT)
+ttfonts: $(TTF)/.stamp
+$(TTF)/.stamp: fonts/tt/design.py fonts/tt/screen.txt tests/fonts/fn4ref.txt tools/ttgen.py \
+               tools/ttgeom.py tools/w16ttf.py tools/tthint.py tools/mkfot.py
+	@mkdir -p $(TTF)
+	python3 tools/ttgen.py --out $(TTF)
+	python3 tools/mkfot.py $(TTF)
+	touch $@
+$(TTFILES): $(TTF)/.stamp
+install-tree: $(TTFILES:$(TTF)/%=$(W16SYS)/%)
+$(TTFILES:$(TTF)/%=$(W16SYS)/%): $(W16SYS)/%: $(TTF)/%
 	@mkdir -p $(@D)
 	cp $< $@
 # the display grabber (drivers/grabber/)

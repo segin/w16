@@ -1051,11 +1051,19 @@ __C000H:        db 0
 ; handler (DPMI 0.9, 16-bit frame: return CS:IP to the host, error code,
 ; IP, CS, FLAGS, SP, SS) records the faulting state, points the frame at
 ; fault_exit on KERNEL's exit stack and returns to the host, which
-; resumes there; fault_exit calls fault_report (does not return).
+; resumes there; fault_exit calls fault_report on the report's own stack
+; (does not return), or fault_report_again for a fault inside the report.
 extern _fault_report            ; void __cdecl __far fault_report(void)
+extern _fault_report_again      ; void __cdecl __far fault_report_again(void)
 extern _gp_handler              ; u16 __cdecl __far gp_handler(void)
-global _fault_regs
+global _fault_regs, _rpt_active
 segment _BSS
+; the report's own stack: never the faulting one (a fault with SS:SP at
+; the end of a stack, or SS not a stack at all, is reported too), nor
+; the exit stack a task's end may be using
+report_stack    resb 3072
+report_stack_top:
+_rpt_active     resb 1          ; a report is running (fault.c)
 global _i21_ring, _i21_pos
 _i21_ring       resw 80         ; 16 x (ax bx dx ip cs)
 _i21_pos        resw 1
@@ -1136,6 +1144,10 @@ fault_exit:
         mov ds, ax
         mov es, ax
         cld                             ; (as task_exit_al)
+        ; a fault inside the report: fault.c notes it and reports again,
+        ; on a fresh report stack (the frames of the attempt are dropped)
+        cmp byte [_rpt_active wrt DGROUP], 0
+        jne .again
         ; a fault while one is being handled (fault_regs holds the second
         ; one now): no recovery, reported as it is
         cmp byte [in_fault wrt DGROUP], 0
@@ -1145,8 +1157,17 @@ fault_exit:
         test ax, ax
         jnz .gp
 .report:
+        mov byte [_rpt_active wrt DGROUP], 1
+        mov ax, DGROUP
+        mov ss, ax
+        mov sp, report_stack_top wrt DGROUP
         call far _fault_report
 .hang:  jmp .hang
+.again: mov ax, DGROUP
+        mov ss, ax
+        mov sp, report_stack_top wrt DGROUP
+        call far _fault_report_again
+        jmp .hang
 ; resume at the faulting CS:AX, the registers as they were (DS and ES
 ; made 0 by gp_handler when not valid), on the faulting stack with the
 ; error code and the faulting IP pushed (TK40, 3.1: [SP] = IP, [SP+2] =

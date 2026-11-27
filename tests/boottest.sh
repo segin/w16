@@ -34,9 +34,11 @@
 #              tree: AX, CX, ES and DS a window procedure is called with
 #              (AX the window's instance's data segment), and the messages
 #              CreateWindow sends a hidden child and popup (WM_SIZE and
-#              WM_MOVE right after WM_CREATE); the rest of TK71's log
-#              (other registers, shown windows, WM_MDICREATE) is not
-#              compared yet
+#              WM_MOVE right after WM_CREATE), and AX, ES and DS a hook
+#              procedure set without MakeProcInstance is called with
+#              (WH_CBT, WH_CALLWNDPROC, WH_GETMESSAGE, WH_MSGFILTER;
+#              Visual C++ 1.52's OLE2VIEW); the rest of TK71's log (other
+#              registers, shown windows, WM_MDICREATE) is not compared yet
 #   selfload   TK78 (tests/apps/tk78.c), a self-loading program, as the
 #              shell on 3.1 (KRNL386), w16's KRNL286 and KRNL386 and w16's
 #              tree: what its BootApp gets (registers, the loader table,
@@ -181,7 +183,7 @@
 #              it (tools/vsdcmp.py); then Reboot's "not responding" screen
 #              (vsdhung.txt): keys it has no use for each beep a bell of
 #              Windows 3.1's tone and length
-#   vmprobe    virtual memory (ARCHITECTURE.md 12.16): VX18 as the shell
+#   vmprobe    virtual memory (ARCHITECTURE.md 12.17): VX18 as the shell
 #              under Microsoft's WIN386 and w16's (tests/vmprobe.sh) with
 #              the default paging file, Paging=no and MaxPagingFileSize=2048:
 #              WF_PAGING, the paging file's place and size, the PageFile
@@ -208,6 +210,22 @@
 #              CodeView for Windows comes up as under Windows 3.1; with
 #              WXSRVR.EXE on VMB.386 Program Manager is painted and its
 #              menus open as under 3.1
+#   msvccl     Visual C++ 1.52's CL.EXE (Phar Lap's DOSXNT, a DPMI client)
+#              builds and runs hello world in a DOS box under w16's WIN386
+#              as under Microsoft's, with DOSXNT.386 and without
+#              (tests/msvcvxd.sh cl; skipped without $W16_MSVC_DIR)
+#   msvcapps   Visual C++ 1.52's Windows Process Status (WPS.EXE), OLE 2
+#              object viewer (OLE2VIEW.EXE, with the OLE 2.01 libraries
+#              from $W16_OLE2_DIR) and HeapWalk on w16's tree
+#              (tests/msvcvxd.sh wps ole2view heapwalk; skipped without
+#              $W16_MSVC_DIR): no fault, and their frames as under 3.1
+#   faultrep   KERNEL's fault report (kernel/fault.c) with TK79
+#              (tests/apps/tk79.c) on w16's tree: a fault with SS a
+#              32-byte segment (WIN /3 and WIN /S), at SP 0, with SS
+#              expand-down, and with [w16] faultreptest
+#              making the report's own steps fault: the whole report must
+#              come out (registers, what each selector is, the stack as far
+#              as it can be read, the INT 21h calls, "back to DOS")
 #   win386doscad  a DOS program's #GP (VX12 G: the stop box) and Ctrl+Alt+Del
 #              with the MS-DOS Prompt full screen (its screen; Return closes
 #              the box, vx12gc.txt; Escape goes back, dosbox386cad.txt)
@@ -235,6 +253,11 @@
 #              and DOSBox's own DOS, w16's WIN386 on 3.1 and the tree alone
 #              against Microsoft's WIN386 (w16 lost the 9FFFh MCB and
 #              DOSBox-X stopped with "Corrupt MCB chain")
+#   win386dpmi DPMI in DOS boxes (DPMIPRB, tests/dpmirun.sh; ARCHITECTURE.md
+#              12.16): a raw 16- and 32-bit client's every answer, a
+#              nested client, two boxes' clients at once and the end of a
+#              box on a fault no handler takes, under w16's WIN386 as under
+#              Microsoft's; the probe's lines on the tree alone as well
 #   win386pifwin  plain DOSBox, the tree alone, WIN /3: a PIF that starts
 #              its program windowed (made at run time with tools/mkpif.py),
 #              then VER typed: the window shows the text (not black), as
@@ -491,7 +514,7 @@
 #              part treems, w16's tree with Microsoft's WIN386 put in, the
 #              same (ExitWindowsExec in w16's USER and WIN.COM: exitexec);
 #              part tree, w16's install tree alone with its WIN386 and
-#              paging file (ARCHITECTURE.md 12.16), the same; every part
+#              paging file (ARCHITECTURE.md 12.17), the same; every part
 #              then starts Win32s's Freecell (its window must come up)
 #   dlgfocus   the focus after CreateDialog of a dialog not shown or shown
 #              without activation, Return on a focused push button,
@@ -1100,7 +1123,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad vmprobe win386vxc msvc bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386dpmi vsd vdmad vmprobe win386vxc msvc msvcapps faultrep msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1547,7 +1570,7 @@ runcase() {
         wait
         for k in ref tree; do
             tr -d '\r' < "$out/wpregs-$k/c/TK71.LOG" 2>/dev/null |
-                sed -n 's/^\(M [0-9A-F]*\) AX=\([^ ]*\) BX=[^ ]* CX=\([^ ]*\) .* ES=\([^ ]*\) DS=\([^ ]*\)$/\1 AX=\2 CX=\3 ES=\4 DS=\5/p; /hidden$/p; /^T done/p' > "$out/wpregs-$k.log"
+                sed -n 's/^\(M [0-9A-F]*\) AX=\([^ ]*\) BX=[^ ]* CX=\([^ ]*\) .* ES=\([^ ]*\) DS=\([^ ]*\)$/\1 AX=\2 CX=\3 ES=\4 DS=\5/p; s/^\(H [0-9A-F]*[a-zA-Z0-9 ]*\) AX=\([^ ]*\) .* ES=\([^ ]*\) DS=\([^ ]*\)$/\1 AX=\2 ES=\3 DS=\4/p; /hidden$/p; /^T done/p' > "$out/wpregs-$k.log"
         done
         r=ok
         grep -q '^T done' "$out/wpregs-ref.log" || r="ref did not finish ($out/wpregs-ref.log)"
@@ -2029,6 +2052,15 @@ runcase() {
         if grep -q '^ok' "$out/win386vxc.txt" && ! grep -q '^FAIL' "$out/win386vxc.txt"; then
             echo "ok   win386vxc: PM vectors and callbacks, Log_Proc_Call, pages, selector 40h as 3.1's; a missing service named"
         else echo "FAIL win386vxc: $(grep -m1 '^FAIL' "$out/win386vxc.txt" || echo 'no result') ($out/win386vxc.txt)"; fails=$((fails + 1)); fi ;;
+    msvccl)
+        # the user's report (2026-11-26): CL.EXE stopped with "Phar Lap err
+        # 35" in a w16 box (tests/msvcvxd.sh cl; skip without $W16_MSVC_DIR)
+        "$root/tests/msvcvxd.sh" -o "$out/msvccl" cl > "$out/msvccl.txt" 2>&1 || true
+        if grep -q '^FAIL' "$out/msvccl.txt"; then
+            echo "FAIL msvccl: $(grep -m1 '^FAIL' "$out/msvccl.txt") ($out/msvccl.txt)"; fails=$((fails + 1))
+        elif grep -q '^skip' "$out/msvccl.txt"; then echo "ok   msvccl: $(grep -m1 '^skip' "$out/msvccl.txt")"
+        elif grep -q '^ok' "$out/msvccl.txt"; then echo "ok   msvccl: $(grep -m1 '^ok' "$out/msvccl.txt" | sed 's/^ok *cl: //')"
+        else echo "FAIL msvccl: no result ($out/msvccl.txt)"; fails=$((fails + 1)); fi ;;
     msvc)
         # Visual C++ 1.52's devices (tests/msvcvxd.sh; skip without $W16_MSVC_DIR)
         "$root/tests/msvcvxd.sh" -o "$out/msvc" boot cvw wx > "$out/msvc.txt" 2>&1 || true
@@ -2045,6 +2077,66 @@ runcase() {
         else
             echo "FAIL vmprobe: $(grep -m1 FAIL "$out/vmprobe.txt" || echo 'no result') ($out/vmprobe.txt)"; fails=$((fails + 1))
         fi ;;
+    msvcapps)
+        # WPS and OLE2VIEW (tests/msvcvxd.sh; skip without $W16_MSVC_DIR)
+        "$root/tests/msvcvxd.sh" -o "$out/msvcapps" wps ole2view heapwalk > "$out/msvcapps.txt" 2>&1 || true
+        if grep -q '^FAIL' "$out/msvcapps.txt"; then
+            echo "FAIL msvcapps: $(grep -m1 '^FAIL' "$out/msvcapps.txt") ($out/msvcapps.txt)"; fails=$((fails + 1))
+        elif [ "$(grep -c '^ok' "$out/msvcapps.txt")" = 3 ]; then
+            echo "ok   msvcapps: Visual C++'s WPS, OLE2VIEW and HeapWalk come up on w16's tree as under 3.1"
+        elif grep -q '^skip' "$out/msvcapps.txt"; then
+            echo "ok   msvcapps: $(grep '^\(ok\|skip\)' "$out/msvcapps.txt" | tr '\n' ' ')"
+        else echo "FAIL msvcapps: no result ($out/msvcapps.txt)"; fails=$((fails + 1)); fi ;;
+    faultrep)
+        # TK79's faults on w16's tree: KERNEL's report must come out whole
+        for k in S S2 P X N2 N4; do
+            set -- -T "$root/build/w16" -3 -c 'WIN /3 /B'
+            a=${k%[0-9]}
+            case $k in
+            S2) set -- -T "$root/build/w16" -c 'WIN /S /B' ;;
+            N2) a=S; set -- "$@" -i w16:faultreptest=3 ;;       # WHERE, STACK
+            N4) a=S; set -- "$@" -i w16:faultreptest=99 ;;      # and QUIET, OEM
+            esac
+            printf '%s' "$a" > "$out/faultrep-$k.arg"
+            "$root/tests/dropin.sh" "$@" -t 90 -o "$out/faultrep-$k" -f "$out/faultrep-$k.arg=TK79.ARG" \
+                -f "$root/build/dos/TK79.EXE=TK79.EXE" -i 'WIN.INI:windows:run=C:\TK79.EXE' \
+                > "$out/faultrep-$k.txt" 2>&1 &
+        done
+        wait
+        r=ok
+        for k in S S2 P X N2 N4; do
+            f=$out/faultrep-$k.txt
+            # the report: KERNEL's output, from the first "w16:" line
+            sed -n '/^== KERNEL output/,/^== /p' "$f" > "$out/faultrep-$k.rep"
+            e=000D
+            case $k in P|X) e=0000 ;; esac
+            ring="^last INT 21h calls"
+            [ $k = N4 ] && ring="^w16: exception $e at .* SS=.* SP="    # (the raw line)
+            for want in "^w16: exception $e at " "^ AX=.* BP=.* FL=" "^ DS=.* SS=.* SP=" \
+                        "$ring" "^w16: back to DOS, code 00FF"; do
+                grep -q "$want" "$out/faultrep-$k.rep" || { r="$k: no line \"$want\" ($f)"; break; }
+            done
+            [ "$r" = ok ] || break
+            case $k in
+            S|S2) grep -q 'SS=[0-9A-F]* (base [0-9A-F]* limit 001F)' "$out/faultrep-$k.rep" &&
+                  grep -q '^stack: \([0-9A-F]\{4\} \)\{8\}[0-9A-F]\{4\}$' "$out/faultrep-$k.rep" &&
+                  grep -q 'err=FFFC' "$out/faultrep-$k.rep" &&
+                  ! grep -q '^ frame ' "$out/faultrep-$k.rep" ||
+                  r="$k: not SS's 9 words (0Eh-1Fh), or a frame outside SS ($f)" ;;
+            P) grep -q '^stack: \([0-9A-F]\{4\} \)\{15\}[0-9A-F]\{4\}$' "$out/faultrep-$k.rep" ||
+                  r="$k: not 16 words from SS:0 ($f)" ;;
+            X) grep -q '^stack: (not readable)' "$out/faultrep-$k.rep" ||
+                  r="$k: an expand-down SS read ($f)" ;;
+            N2) [ "$(grep -c '^w16: a fault in the fault report' "$out/faultrep-$k.rep")" = 2 ] &&
+                  ! grep -q '^stack:' "$out/faultrep-$k.rep" ||
+                  r="$k: not two faults in the report, or the stack after its fault ($f)" ;;
+            N4) grep -q '^w16: and in the report: exception 000D' "$out/faultrep-$k.rep" ||
+                  r="$k: no raw report after the report's fourth fault ($f)" ;;
+            esac
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   faultrep: the fault report whole with a bad SS, SP 0, an expand-down SS, and faults in the report"
+        else echo "FAIL faultrep: $r"; fails=$((fails + 1)); fi ;;
     vdmad)
         # the Virtual DMA Device: tests/vdmadprobe.sh (SBD.COM's DMA in a
         # box, VXM.386's service results), w16's WIN386 against Microsoft's
@@ -2267,6 +2359,25 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386mcb: the MCB chain, UMB link and strategies in a DOS box as under Microsoft's WIN386 (DOSBox-X, DOSBox, the tree)"
         else echo "FAIL win386mcb: $r"; fails=$((fails + 1)); fi ;;
+    win386dpmi)
+        # the user's report (2026-11-26): Visual C++ 1.52's CL.EXE stopped
+        # in a w16 box with "Phar Lap err 35": w16's boxes had no DPMI
+        # host. DPMIPRB's logs (tests/dos/dpmiprb.asm) under w16's WIN386,
+        # and on the tree alone, as under Microsoft's (tools/dpmicmp.sh)
+        for k in p g c; do
+            refrun win386dpmi-ref$k win386dpmi \
+                sh "$root/tests/dpmirun.sh" "$out/win386dpmi-ref$k" $k ms x "$root/build/dos/DPMIPRB.COM" "$root/tests/dpmirun.sh" &
+            sh "$root/tests/dpmirun.sh" "$out/win386dpmi-w16$k" $k w16 > "$out/win386dpmi-w16$k.txt" 2>&1 &
+        done
+        sh "$root/tests/dpmirun.sh" "$out/win386dpmi-treep" p tree > "$out/win386dpmi-treep.txt" 2>&1 &
+        wait
+        r=ok
+        for k in w16p:refp w16g:refg w16c:refc treep:refp; do
+            m=$(sh "$root/tools/dpmicmp.sh" "$(printf '%s' "${k%:*}" | sed 's/^.*\(.\)$/\1/')" \
+                "$out/win386dpmi-${k#*:}" "$out/win386dpmi-${k%:*}") || { r="${k%:*}: ${m#FAIL }"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386dpmi: DPMI clients in DOS boxes (16- and 32-bit, nested, two boxes, a fault) as under Microsoft's WIN386; the tree too"
+        else echo "FAIL win386dpmi: $r"; fails=$((fails + 1)); fi ;;
     cmdprompt)
         # Main's first item runs CMD.PIF (assets/CMD.PIF: COMMAND.COM,
         # windowed in 386 Enhanced mode; Standard mode's WINOLDAP reads its
@@ -4229,7 +4340,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             lo=$((m * 1024 - 16384)) hi=$((m * 1024))
             # (in 386 Enhanced mode the paging file adds to what a program
             # can have: 3.1's largest block was 258,964 KB with 128 MB,
-            # ARCHITECTURE.md 9.6, 12.16; at most PageOverCommit's 4 times)
+            # ARCHITECTURE.md 9.6, 12.17; at most PageOverCommit's 4 times)
             case $p in e*) vh=$((hi * 4)) ;; *) vh=$hi ;; esac
             bmcheck bigmem-$p dpmi_largest $lo $vh freespace $lo $vh total $lo $vh ;;
         s256ms)

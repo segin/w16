@@ -15,6 +15,11 @@
    memory; one glyph's blocks at a time) */
 extern ttfx_u8 TTFX_FAR *ttv_arena;
 extern unsigned ttv_arena_used, ttv_arena_peak;
+/* with TTFX_HINT_BYTECODE, the memory for a size's state (ttfx_bcBytes):
+   each size's fpgm and prep run in it before its glyphs (0: none, the
+   autohinter then) */
+extern void TTFX_FAR *ttv_bcmem;
+extern ttfx_u32 ttv_bcbytes;
 
 /* the font's name (name table: the full name, else the family) as ASCII */
 void ttv_name(const ttfx_font *f, char *out, int size);

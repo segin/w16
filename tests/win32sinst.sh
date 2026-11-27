@@ -25,13 +25,13 @@
 #          file): the same as treems. Until w16's WIN386 had a paging file
 #          Setup said "Win32s requires Virtual Memory" and "Microsoft Win32s
 #          System Setup has failed." here, as Windows 3.1 does with
-#          Paging=no (ARCHITECTURE.md 12.16); then Windows did not come back
+#          Paging=no (ARCHITECTURE.md 12.17); then Windows did not come back
 #          with SYSTEM.INI's device= line for W32S.386
 # Every part then starts Win32s's Freecell (a Win32 program) from File >
 # Run once Windows is back and reports whether its window came up (at
 # least 40,000 pixels of its green, 008000h, in the shot freecellrun):
 # "open" lines, not failures yet (w16's KERNEL did not start it, and the
-# tree part's restart stops at W32S.386: ARCHITECTURE.md 12.17).
+# tree part's restart stops at W32S.386: ARCHITECTURE.md 12.18).
 # WIN32SINST_ARGS: more tests/dropin.sh options for every part (blanks
 # split them), e.g. "-p 386 -i w16:vmmtrace=1" with DROPIN_CONF's
 # serial1=file for the VMM's trace; WIN32SINST_SCRIPT: another input
@@ -106,7 +106,7 @@ installed() {
 }
 
 # PART: Freecell's window in its shot, reported ("open": not yet a
-# failure; w16's KERNEL does not start it yet, ARCHITECTURE.md 12.17)
+# failure; w16's KERNEL does not start it yet, ARCHITECTURE.md 12.18)
 freecell() {
     m=$(magick "$out/$1/freecellrun.png" -fill black +opaque '#008000' -fill white -opaque '#008000' \
         -format '%[fx:int(mean*w*h+0.5)]' info: 2>/dev/null || echo 0)
@@ -134,7 +134,7 @@ for p in $parts; do
     tree)
         run tree -T "$root/build/w16" -3 "$@"
         r=$(installed tree W16)
-        case $r in "_MSSETUP.BAT left"*) echo "open tree: $r (W32S.386 under w16's WIN386, ARCHITECTURE.md 12.17)"; r=ok ;; esac
+        case $r in "_MSSETUP.BAT left"*) echo "open tree: $r (W32S.386 under w16's WIN386, ARCHITECTURE.md 12.18)"; r=ok ;; esac
         freecell tree
         if [ "$r" = ok ]; then echo "ok   tree: Win32s installed on w16's tree alone"
         else echo "FAIL tree: $r ($out/tree)"; fails=$((fails + 1)); fi ;;

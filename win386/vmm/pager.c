@@ -1,5 +1,5 @@
 /* pager.c - w16 VMM: demand paging to the paging (swap) file, the
- * PageFile and PageSwap devices' side of the VMM (ARCHITECTURE.md 12.16).
+ * PageFile and PageSwap devices' side of the VMM (ARCHITECTURE.md 12.17).
  *
  * The loader (win386/ldr/swap.c) makes the paging file before Windows
  * starts, as SYSTEM.INI's [386Enh] keys say, and leaves it open (a handle

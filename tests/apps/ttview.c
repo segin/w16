@@ -7,7 +7,7 @@
  * GlobalAlloc locked only while in use, and the font file read in 512-byte
  * pages through _llseek/_lread (a .TTF is over 64K).
  *
- *   TTVIEW [/T] [/R n] [/U] [/2] [/G] [FONT.TTF]
+ *   TTVIEW [/T] [/R n] [/B|/A|/U] [/2] [/G] [FONT.TTF]
  *
  * It draws a page (tests/apps/ttvpage.c: the font's name, a sample line
  * at eleven sizes, the characters 20h-FFh in a grid; with /2 the
@@ -18,16 +18,19 @@
  * else asks for a file (File > Open...: a plain dialog, there is no
  * COMMDLG on 2.x). The View menu switches what /U, /2 and /G set.
  *
- * /U: unhinted (ttfx_SetHinting 0); by default w16's autohinter
- * (gdi/ttf/ttfhint.c) grid-fits the glyphs. /G (Windows 3.1 and later):
+ * Hinting: /B (the default) runs the font's own instructions (fpgm, prep
+ * and each glyph's program: gdi/ttf/ttfbc.c, as Windows 3.1 does; a font
+ * without them, or a glyph whose program fails, gets the autohinter); /A
+ * w16's autohinter (gdi/ttf/ttfhint.c) for every glyph; /U unhinted
+ * (ttfx_SetHinting 0). /G (Windows 3.1 and later):
  * show the specimen as Windows draws it, with its own TrueType rasteriser
  * (CreateScalableFontResource, found with GetProcAddress so that TTVIEW
  * still loads on 2.x, writes the font's .FOT; AddFontResource; TextOut of
  * ttv_line's lines in CreateFont's of the font's family at -em), to
  * compare with w16's at the same sizes.
  *
- * /T (tests/ttview.sh): render the page both hinted and unhinted, writing
- * C:\TTVIEW.PG (hinted) and C:\TTVIEWU.PG (the page buffers), show the
+ * /T (tests/ttview.sh): render the page both hinted (/B or /A) and
+ * unhinted, writing C:\TTVIEW.PG (hinted) and C:\TTVIEWU.PG (the page buffers), show the
  * one asked for and once the window is shown, write C:\TTVIEW.SCR (the
  * client area read back from the screen with BitBlt into a monochrome
  * bitmap and GetBitmapBits: a word each of width, height and bytes a
@@ -44,6 +47,8 @@
 #define IDM_HINT 102
 #define IDM_PAGE2 103
 #define IDM_GDI 104
+#define IDM_BC 105
+#define IDM_AUTO 106
 #define IDC_FILE 200
 
 static HINSTANCE g_inst;
@@ -56,13 +61,17 @@ static HFILE g_file = HFILE_ERROR;
 static char g_path[128], g_name[64], g_family[64];
 static int g_test, g_reps = 1, g_glyphs, g_failed;
 static int g_unhinted, g_page2, g_gdi, g_fot;   /* /U, /2, /G; FOT added */
+static int g_auto;                              /* /A: the autohinter */
+static HGLOBAL g_bcmem;                         /* a size's bytecode state */
 static DWORD g_ms, g_msu;                       /* hinted, unhinted */
 static HMENU g_view;
 static char g_fotpath[160];                     /* /G: the .FOT added */
 
 static void check_menu(void)
 {
-    CheckMenuItem(g_view, IDM_HINT, g_unhinted ? MF_UNCHECKED : MF_CHECKED);
+    CheckMenuItem(g_view, IDM_BC, !g_unhinted && !g_auto ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(g_view, IDM_AUTO, !g_unhinted && g_auto ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(g_view, IDM_HINT, g_unhinted ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(g_view, IDM_PAGE2, g_page2 ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(g_view, IDM_GDI, g_gdi ? MF_CHECKED : MF_UNCHECKED);
 }
@@ -109,6 +118,9 @@ static void close_font(void)
     if (g_fot)
         RemoveFontResource(g_fotpath);
     g_fot = 0;
+    if (g_bcmem)
+        GlobalFree(g_bcmem);
+    g_bcmem = 0;
 }
 
 /* /G: the font added to Windows (3.1 and later), through a .FOT made for
@@ -202,7 +214,7 @@ static DWORD render(ttfx_u8 FAR *bits, int hinted)
 {
     DWORD t = GetTickCount();
     int i;
-    ttfx_SetHinting(&g_font, hinted ? TTFX_HINT_DEFAULT : 0);
+    ttfx_SetHinting(&g_font, hinted ? (g_auto ? TTFX_HINT_DEFAULT : TTFX_HINT_ALL) : 0);
     for (i = 0; i < g_reps; i++)
         g_glyphs = g_page2 ? ttv_sizes(&g_font, bits, &g_failed) : ttv_page(&g_font, bits, &g_failed);
     return GetTickCount() - t;
@@ -238,6 +250,11 @@ static int load(HWND w, const char *path)
         close_font();
         return 0;
     }
+    /* the bytecode's state for a size (each size's fpgm and prep run in
+       it): locked while drawing, as the page and the arena are */
+    ttv_bcbytes = ttfx_bcBytes(&g_font);
+    g_bcmem = ttv_bcbytes ? GlobalAlloc(GMEM_MOVEABLE, ttv_bcbytes) : 0;
+    ttv_bcmem = g_bcmem ? GlobalLock(g_bcmem) : 0;
     bits = (ttfx_u8 FAR *)GlobalLock(g_page);
     ttv_arena = (ttfx_u8 FAR *)GlobalLock(g_arena);
     if (!bits || !ttv_arena) {
@@ -265,6 +282,10 @@ static int load(HWND w, const char *path)
     GlobalUnlock(g_arena);
     GlobalUnlock(g_page);
     ttv_arena = 0;
+    if (g_bcmem)
+        GlobalUnlock(g_bcmem);
+    ttv_bcmem = 0;
+    g_font.bc = 0;
     ttv_name(&g_font, g_name, sizeof g_name);
     ttv_nameid(&g_font, 1, g_family, sizeof g_family);
     if (g_gdi)
@@ -360,7 +381,7 @@ static void write_log(void)
     lgnum(g_msu);
     lg(" ms\r\nshown ");
     lg(g_gdi ? g_fotwhy
-             : g_unhinted ? "unhinted" : "hinted");
+             : g_unhinted ? "unhinted" : g_auto ? "hinted (autohinter)" : "hinted (instructions)");
     lg("\r\n");
     h = _lcreat("C:\\TTVIEW.LOG", 0);
     if (h != HFILE_ERROR) {
@@ -412,6 +433,7 @@ LRESULT CALLBACK __export TTViewWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             int italic = ttfx_U16(&g_font, g_font.head + 44) & 2, i, em, y;
             char text[80];
             SetTextAlign(dc, TA_BASELINE | TA_LEFT);
+            SetBkMode(dc, TRANSPARENT);         /* (opaque, a line's cell would cut the descenders of the line above) */
             for (i = 0; ttv_line(&g_font, i, &em, &y, text, sizeof text); i++) {
                 HFONT hf = CreateFont(-em, 0, 0, 0, (int)bold, (BYTE)italic, 0, 0, ANSI_CHARSET,
                                       OUT_TT_ONLY_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
@@ -443,8 +465,14 @@ LRESULT CALLBACK __export TTViewWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             open_dialog(w);
         else if (wp == IDM_EXIT)
             DestroyWindow(w);
-        else if (wp == IDM_HINT || wp == IDM_PAGE2 || wp == IDM_GDI) {
-            int *flag = wp == IDM_HINT ? &g_unhinted : wp == IDM_PAGE2 ? &g_page2 : &g_gdi;
+        else if (wp == IDM_BC || wp == IDM_AUTO || wp == IDM_HINT) {
+            g_unhinted = wp == IDM_HINT;
+            g_auto = wp == IDM_AUTO;
+            check_menu();
+            if (g_path[0])
+                load(w, g_path);
+        } else if (wp == IDM_PAGE2 || wp == IDM_GDI) {
+            int *flag = wp == IDM_PAGE2 ? &g_page2 : &g_gdi;
             *flag = !*flag;
             if (wp == IDM_GDI && g_gdi)
                 g_page2 = 1;            /* (Windows draws the specimen only) */
@@ -481,6 +509,13 @@ static void parse(const char FAR *t)
             t += 2;
         } else if (t[0] == '/' && (t[1] == 'U' || t[1] == 'u')) {
             g_unhinted = 1;
+            t += 2;
+        } else if (t[0] == '/' && (t[1] == 'A' || t[1] == 'a')) {
+            g_auto = 1;
+            g_unhinted = 0;
+            t += 2;
+        } else if (t[0] == '/' && (t[1] == 'B' || t[1] == 'b')) {
+            g_auto = g_unhinted = 0;
             t += 2;
         } else if (t[0] == '/' && t[1] == '2') {
             g_page2 = 1;
@@ -553,7 +588,10 @@ int PASCAL WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
         ChangeMenu(file, 0, "E&xit", IDM_EXIT, MF_APPEND);
         ChangeMenu(menu, 0, "&File", (UINT)file, MF_APPEND | MF_POPUP);
         g_view = CreateMenu();
-        ChangeMenu(g_view, 0, "&Hinted", IDM_HINT, MF_APPEND);
+        ChangeMenu(g_view, 0, "&Font's instructions", IDM_BC, MF_APPEND);
+        ChangeMenu(g_view, 0, "&Autohinter", IDM_AUTO, MF_APPEND);
+        ChangeMenu(g_view, 0, "&Unhinted", IDM_HINT, MF_APPEND);
+        ChangeMenu(g_view, 0, NULL, 0, MF_APPEND | MF_SEPARATOR);
         ChangeMenu(g_view, 0, "&Specimen, 8-24 pixels", IDM_PAGE2, MF_APPEND);
         ChangeMenu(g_view, 0, "&Windows' rasteriser (specimen)", IDM_GDI, MF_APPEND);
         ChangeMenu(menu, 0, "&View", (UINT)g_view, MF_APPEND | MF_POPUP);

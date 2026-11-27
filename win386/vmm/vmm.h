@@ -25,7 +25,8 @@ typedef signed int     s32;
 #define SEL_LDT     0x30
 #define SEL_PMBP    0x3B    /* ring 3 code: PM breakpoints (HLT bytes) */
 #define SEL_BIOSDATA 0x40   /* ring 3 data: the BIOS data area (40:0), as Windows 3.1's */
-#define GDT_ENTRIES 16          /* up to SHELL's flat selector 7Bh (index 15) */
+#define SEL_HSTK32  0x83    /* ring 3 data, big: a DOS VM's 32-bit client's host stack (dpmi.c) */
+#define GDT_ENTRIES 17          /* up to SEL_HSTK32 (index 16) */
 
 #define EFL_CF  0x0001
 #define EFL_ZF  0x0040
@@ -90,8 +91,35 @@ struct vm_cb {
 #define VM_CB_SIZE      8192
 #define VM_CB_RESERVED  0x100
 
-/* The virtual machines: the System VM (sysvm), which alone runs a DPMI
- * client (KRNL386), and the DOS VMs (vm.c). */
+/* A VM's DPMI host (dpmi.c, ARCHITECTURE.md 12.16): the System VM's
+ * client is KRNL386; a DOS VM's are its DOS extenders, nested ones too
+ * (a client that EXECs another) */
+#define DPMI_NRMCB 1024         /* real-mode callbacks per VM (0303h; Windows 3.1 in a box: 1024 at least) */
+struct dpmi_outer;
+struct dpmi_rmcb { u32 sel, off, ssel, soff, level; };   /* the procedure, the structure, the client (0: free) */
+struct segsel;
+struct dosblk;
+struct dpmi_vm {
+    u8 *ldt;                    /* a DOS VM's LDT (NULL: the VMM's own, the System VM's) */
+    u32 ldt_first;              /* the first index 0000h hands out */
+    u32 x_ldt_top, x_ldt_alias;
+    struct segsel *x_segsels;     /* 0002h's selectors */
+    struct dosblk *x_dosblks;     /* INT 21h 48h's blocks */
+    struct dpmi_outer *outer;   /* the state of the clients a nested one runs inside */
+    u32 level;                  /* clients running (1: one, 2: one nested in it...) */
+    u32 x_hstk_sel, x_hstk_lin, x_hstk_depth, x_hstk_low, x_pmw_ss, x_pmw_sp;
+    int hstk_own;               /* a DOS VM's host stack: pages of its own */
+    int x_exc_last;
+    u16 x_env_seg, psp_sel;
+    u32 dta_sel, dta_off;       /* the client's DTA (INT 21h 1Ah: dosx.c) */
+    int dta_set;
+    struct dpmi_rmcb *rmcb;     /* 0303h's callbacks (DPMI_NRMCB, made at the first) */
+    u32 wp_used;                /* 0B00h's watchpoints in use (bits) */
+    u8 *acb;                    /* the application control block (Begin_PM_App) */
+};
+
+/* The virtual machines: the System VM (sysvm), whose DPMI client is
+ * KRNL386, and the DOS VMs (vm.c). */
 /* a VM's channel 0 of the 8254 (VTD, vxd.c); all 0: the BIOS's (65536
  * counts, mode 3, both bytes) */
 struct vtimer {
@@ -155,6 +183,7 @@ struct vm {
     int ended;              /* its program has ended */
     struct vm *free_next;   /* destroyed, kept for the next VM */
     struct vtimer vt;       /* its timer (VTD) */
+    struct dpmi_vm dp;      /* its DPMI host (dpmi.c) */
 };
 
 extern struct w386_info *info;
@@ -224,7 +253,8 @@ int exec_depth(void);         /* that breakpoint: back to exec_v86's caller */
 void v86_int(struct cregs *v, int vec);    /* INT vec in V86 mode, synchronously */
 void v86_int_sim(struct cregs *v, int vec);    /* the same, the devices' V86 hooks first */
 void v86_farcall(struct cregs *v, int iret);
-u32 xbuf_lin(void);                        /* the transfer buffer */
+u32 xbuf_lin(void);                        /* the transfer buffer (the current VM's) */
+u32 xbuf_seg(void);
 u32 xbuf_size(void);
 
 /* dosx.c: INT 21h from protected mode */
@@ -366,7 +396,7 @@ void vdd_tick(void);
 int shell_display_changed(struct vm *v, int cursor);
 #define SEL_FLAT7B  0x7B            /* SHELL's flat selector (its function 9; GDT index 15) */
 
-/* pager.c: demand paging to the paging file (ARCHITECTURE.md 12.16) */
+/* pager.c: demand paging to the paging file (ARCHITECTURE.md 12.17) */
 void pager_init(void);
 int pager_on(void);
 u32 pager_file_pages(void);
@@ -389,6 +419,11 @@ extern u32 io_traps;
 
 /* dpmi.c */
 void dpmi_init(void);
+void dpmi_vm_in(struct vm *v);                      /* vmm_switch: v's LDT */
+void dpmi_vm_destroy(struct vm *v);                 /* vm.c: a client's memory left */
+void dpmi_close(struct cregs *r);                   /* vm.c: a closing DOS VM's client ends */
+void dpmi_rm_entry(struct cregs *r);                /* W386_BP_DPMIRM: callbacks, raw switch, state save */
+extern u32 pmdef_sel[256], pmdef_off[256];          /* the PM vectors a new client starts with */
 void dpmi_switch(struct cregs *r);                 /* the V86 entry breakpoint */
 void dpmi_int(struct cregs *r, int vec, int hw);   /* INT n / IRQ in protected mode */
 void dpmi_pmbp(struct cregs *r, u32 index);        /* a PM breakpoint (HLT) */
@@ -421,6 +456,8 @@ void dpmi_note_pm(struct cregs *r);                /* every trap from PM */     
 #define PMBP_EXCDEF     319     /* the default exception handler 0202h hands out */
 #define PMBP_CB         320     /* 320..447: callbacks (Allocate_PM_Call_Back), 2 bytes apart */
 #define PMBP_CB_END     448
-#define PMBP_COUNT      448
+#define PMBP_RAW        448     /* 0306h: the protected-to-real entry */
+#define PMBP_SAVE       449     /* 0305h: save/restore state (nothing to save) */
+#define PMBP_COUNT      456
 
 #endif
