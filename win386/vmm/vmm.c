@@ -695,15 +695,28 @@ void exec_return(struct cregs *r)
  * is the loader's 16 KB; a DOS VM's is its own (another VM may run while
  * DOS has the buffer), the 2 KB of its VM stub's block that are free once
  * its program runs: after the start-up message, below the reflection
- * stack */
+ * stack. Only while DOS still has that block as the stub's (its MCB's
+ * owner the stub's PSP): DOS can free it (the user's report, 2026-11-26:
+ * after Ctrl+Break in a box, CL.EXE's environment and program were in
+ * the stub's old block, and DOSBox-X stopped with "Corrupt MCB chain" at
+ * CL's MCB, zeroed, inside this buffer); then the loader's buffer */
+static int dosvm_xbuf_ok(void)
+{
+    static int told;
+    u8 *mcb = (u8 *)(((u32)cur_vm->refstk_seg - 1) << 4);
+    if (*(u16 *)(mcb + 1) == cur_vm->refstk_seg) return 1;
+    if (!told++) trace("VMM: VM %d: DOS freed the VM stub's block (owner %x): the loader's transfer buffer\n",
+                       cur_vm->id, *(u16 *)(mcb + 1));
+    return 0;
+}
 u32 xbuf_seg(void)
 {
-    return cur_vm == &sysvm ? info->xbuf_seg : cur_vm->refstk_seg + (DOSVM_MSG >> 4);
+    return cur_vm == &sysvm || !dosvm_xbuf_ok() ? info->xbuf_seg : cur_vm->refstk_seg + (DOSVM_MSG >> 4);
 }
 u32 xbuf_lin(void) { return xbuf_seg() << 4; }
 u32 xbuf_size(void)
 {
-    return cur_vm == &sysvm ? info->xbuf_size : DOSVM_REFSTK_TOP - DOSVM_REFSTK_SIZE - DOSVM_MSG;
+    return cur_vm == &sysvm || !dosvm_xbuf_ok() ? info->xbuf_size : DOSVM_REFSTK_TOP - DOSVM_REFSTK_SIZE - DOSVM_MSG;
 }
 
 /* ---- INT 2Fh in V86 mode: the Windows functions (DDK INT 2Fh 16xxh) ---- */

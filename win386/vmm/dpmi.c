@@ -1633,6 +1633,17 @@ static void client_end(struct cregs *r)
     if ((AX(r) >> 8) == 0x00)
         SETW(r->eax, 0x4C00);
     trace("DPMI: VM %d: client ends (INT 21h AX=%x, level %d)\n", cur_vm->id, AX(r), DP.level);
+    /* the client's own PSP current first, as for the System VM's
+     * (terminate_client): a DOS extender makes its programs' PSPs current
+     * (Visual C++'s DOSXNT, INT 21h 50h, for each compiler pass), and DOS
+     * would end that one and go on at its parent and terminate address */
+    if (cur_vm->psp_seg && info->sda_lin && *(u16 *)(info->sda_lin + 0x10) != cur_vm->psp_seg) {
+        struct cregs p;
+        memset(&p, 0, sizeof(p));
+        p.eax = 0x5000;
+        p.ebx = cur_vm->psp_seg;
+        v86_int(&p, 0x21);
+    }
     client_cleanup(r, 1);
     n.eax = r->eax;
     n.ebx = r->ebx;
