@@ -203,11 +203,11 @@
 #              CodeView for Windows comes up as under Windows 3.1; with
 #              WXSRVR.EXE on VMB.386 Program Manager is painted and its
 #              menus open as under 3.1
-#   msvcapps   Visual C++ 1.52's Windows Process Status (WPS.EXE) and OLE 2
+#   msvcapps   Visual C++ 1.52's Windows Process Status (WPS.EXE), OLE 2
 #              object viewer (OLE2VIEW.EXE, with the OLE 2.01 libraries
-#              from $W16_OLE2_DIR) on w16's tree (tests/msvcvxd.sh wps
-#              ole2view; skipped without $W16_MSVC_DIR): no fault, and
-#              their frames as under Windows 3.1
+#              from $W16_OLE2_DIR) and HeapWalk on w16's tree
+#              (tests/msvcvxd.sh wps ole2view heapwalk; skipped without
+#              $W16_MSVC_DIR): no fault, and their frames as under 3.1
 #   faultrep   KERNEL's fault report (kernel/fault.c) with TK79
 #              (tests/apps/tk79.c) on w16's tree: a fault with SS a
 #              32-byte segment (WIN /3 and WIN /S), at SP 0, with SS
@@ -2047,11 +2047,11 @@ runcase() {
         else echo "FAIL msvc: no result ($out/msvc.txt)"; fails=$((fails + 1)); fi ;;
     msvcapps)
         # WPS and OLE2VIEW (tests/msvcvxd.sh; skip without $W16_MSVC_DIR)
-        "$root/tests/msvcvxd.sh" -o "$out/msvcapps" wps ole2view > "$out/msvcapps.txt" 2>&1 || true
+        "$root/tests/msvcvxd.sh" -o "$out/msvcapps" wps ole2view heapwalk > "$out/msvcapps.txt" 2>&1 || true
         if grep -q '^FAIL' "$out/msvcapps.txt"; then
             echo "FAIL msvcapps: $(grep -m1 '^FAIL' "$out/msvcapps.txt") ($out/msvcapps.txt)"; fails=$((fails + 1))
-        elif [ "$(grep -c '^ok' "$out/msvcapps.txt")" = 2 ]; then
-            echo "ok   msvcapps: Visual C++'s WPS and OLE2VIEW come up on w16's tree as under 3.1"
+        elif [ "$(grep -c '^ok' "$out/msvcapps.txt")" = 3 ]; then
+            echo "ok   msvcapps: Visual C++'s WPS, OLE2VIEW and HeapWalk come up on w16's tree as under 3.1"
         elif grep -q '^skip' "$out/msvcapps.txt"; then
             echo "ok   msvcapps: $(grep '^\(ok\|skip\)' "$out/msvcapps.txt" | tr '\n' ' ')"
         else echo "FAIL msvcapps: no result ($out/msvcapps.txt)"; fails=$((fails + 1)); fi ;;

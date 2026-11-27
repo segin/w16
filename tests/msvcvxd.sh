@@ -48,6 +48,9 @@
 #          called MFC's WH_CBT hook with its own DS, 3.1 with AX = DS =
 #          ES = SS), and its window must be there as under 3.1 (its
 #          caption, menu and tool bar, as for wps).
+#   heapwalk  HeapWalk (BIN\HEAPWALK.EXE, TOOLHELP's global heap walk) the
+#          same way: no fault, its window (caption, menu bar) there as
+#          under 3.1.
 # Visual C++ is not w16's: nothing of it is committed. boot and cvw take
 # the installed C:\MSVC directory from $W16_MSVC_DIR (default
 # ~/Downloads/msvc152/MSVC; boot needs BIN's four .386 files, cvw BIN's
@@ -193,9 +196,10 @@ serial1=file file:$out/wx-w16.com1" timeout 600 "$root/tests/inputrun.sh" -s -b 
         r="$(grep -m1 'not in w16\|panic\|fatal' "$out/cvw-w16.log")"
     if [ "$r" = ok ]; then echo "ok   cvw: CodeView for Windows comes up as under Windows 3.1"
     else echo "FAIL cvw: $r"; fails=$((fails + 1)); fi ;;
-wps|ole2view)
+wps|ole2view|heapwalk)
     prog=WPS.EXE
     [ "$part" = ole2view ] && prog=OLE2VIEW.EXE
+    [ "$part" = heapwalk ] && prog=HEAPWALK.EXE
     [ -n "$(mfile BIN $prog)" ] || { echo "skip $part: no $prog in $msvc/BIN (W16_MSVC_DIR)"; continue; }
     ole=${W16_OLE2_DIR:-$(dirname "$msvc")/OLE2}
     # BIN's programs and libraries (the program's directory)
@@ -239,7 +243,11 @@ wps|ole2view)
         r="$(grep -m1 '^w16: exception' "$out/$part-w16.txt") ($out/$part-w16.txt)"
     # the program's frame: WPS at the bottom (its caption and menu bar),
     # OLE2VIEW maximised (caption, menu and tool bar)
-    if [ $part = wps ]; then crop=640x36+0+304; else crop=640x70+0+0; fi
+    case $part in
+    wps) crop=640x36+0+304 ;;
+    heapwalk) crop=640x36+0+0 ;;
+    *) crop=640x70+0+0 ;;
+    esac
     for s in ref w16; do
         magick "$out/$part-$s.png" -crop $crop +repage "$out/$part-$s-frame.png" 2>/dev/null
     done
