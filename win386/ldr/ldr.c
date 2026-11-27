@@ -1074,7 +1074,7 @@ int main(int argc, char **argv)
          * the VDD's API) */
         char __far *q;
         for (q = ini; q && *q; q++)
-            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=", 9) && (q[9] == '1' || q[9] == '2'))
+            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=", 9) && q[9] >= '1' && q[9] <= '3')
                 info.trace = q[9] - '0';
     }
     read_sched(&info);

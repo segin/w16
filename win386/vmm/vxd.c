@@ -741,10 +741,14 @@ static u32 link_alloc_run(u32 n, u32 align, u32 max_phys, u32 *phys)
     return phys_to_lin(p);
 }
 
+static u32 watch_on;                    /* [w16] vmmtrace=3: map_phys's watch (below) */
+
 void vxd_init(void)
 {
     u32 n = 1 + NBUILTIN + info->vxd_count, i, j;
     u32 *list = (u32 *)(W386_VMM_LIN + info->vxd_list);
+
+    if (info->trace == 3) { watch_on = 1; info->trace = 1; }
 
     devs = kmalloc(n * sizeof(*devs));
     sys_acb = kmalloc(256);
@@ -1363,10 +1367,51 @@ static u32 physmap_next;
 static struct { u32 phys, n, lin; } physmaps[16];
 static u32 nphysmaps;
 
+/* [w16] vmmtrace=3: a device's _MapPhysToLinear of a page in the VMM's
+ * own memory gets an alias of it whose page is not present; each read or
+ * write of it there faults, is traced (the offset and the device's EIP)
+ * and is let through for one instruction (the trap flag). A debugging aid
+ * for the VMM's memory a device looks at (black box: what it reads, not
+ * its code) */
+static u32 watch_lin, watch_phys, watch_armed;
+
+int vxd_watch_fault(u32 vec, u32 *eflags, u32 eip)
+{
+    u32 *pt;
+    if (!watch_lin) return 0;
+    pt = (u32 *)phys_to_lin(vmm_pdir_entry_get(watch_lin >> 22) & ~0xFFFu) + ((watch_lin >> 12) & 0x3FF);
+    if (vec == 14 && (get_cr2() & ~0xFFFu) == watch_lin && !watch_armed) {
+        trace("VMM: watch: %s reads offset %x at %x\n", vxd_owner(eip), get_cr2() & 0xFFF, eip);
+        *pt = watch_phys | 3;
+        *eflags |= EFL_TF;
+        watch_armed = 1;
+        return 1;
+    }
+    if (vec == 1 && watch_armed) {
+        *pt = watch_phys | 2;           /* not present again */
+        vmm_flush_tlb();
+        *eflags &= ~EFL_TF;
+        watch_armed = 0;
+        return 1;
+    }
+    return 0;
+}
+
 static u32 map_phys(u32 phys, u32 bytes)
 {
     u32 first = phys & ~0xFFFu, n = ((phys & 0xFFF) + bytes + 0xFFF) >> 12, i, lin;
     if (!bytes) n = 1;
+    if (watch_on && n == 1 && !watch_lin && first >= info->xms_phys
+        && phys + bytes <= info->xms_phys + info->xms_size) {
+        if (!physmap_next) physmap_next = W386_VMM_LIN + ((info->xms_size + 0x3FFFFFu) & ~0x3FFFFFu);
+        watch_lin = physmap_next;
+        physmap_next += 4096;
+        watch_phys = first;
+        map_page(watch_lin, first, 3);
+        map_page(watch_lin, first, 2);  /* (the entry, not present) */
+        vmm_flush_tlb();
+        return watch_lin + (phys & 0xFFF);
+    }
     if (first >= info->xms_phys && phys + bytes <= info->xms_phys + info->xms_size)
         return phys_to_lin(phys);
     for (i = 0; i < nphysmaps; i++)
@@ -1577,6 +1622,85 @@ static int v86hook_service(u32 svc, struct svcregs *s)
     return 1;
 }
 
+/* ---- Hook_PM_Fault (80h), Hook_V86_Fault (7Fh), Hook_VMM_Fault (81h),
+ * the DDK's: EAX the fault (not 2, at most 4Fh, else carry), ESI the
+ * handler; ESI back the previous one. A handler is called with interrupts
+ * off, EBX the current VM, EBP its client registers; it handles the fault
+ * and returns, or chains to the previous one with every register kept.
+ * The DDK has the VMM's own handlers come first; w16's (the CLI/STI and
+ * breakpoint traps, I/O trapping, the pager) are done before any hook, and
+ * what none of them takes goes down the chain. The first handler hooked
+ * for a fault is handed, as its "previous" one, an entry of the VMM's that
+ * does what w16 does without hooks (DPMI: the client's exception handler,
+ * or the end of the program), so that a device that chains gets that.
+ * W32S.386 (Win32s 1.30c) hooks protected-mode faults at
+ * Sys_Critical_Init. UNVERIFIED: whether Windows 3.1 hands a device
+ * hooking at Sys_Critical_Init a previous handler (the DDK says its
+ * handlers are installed later); V86 and VMM faults' hooks are kept and
+ * handed back, but w16 does not call them yet (traced once) ---- */
+#define NFAULTS 0x50
+#define FAULT_DEV 0x7F16                /* w16's own: the default handlers' slots */
+static u32 pm_fault_hook[NFAULTS], v86_fault_hook[NFAULTS], vmm_fault_hook[NFAULTS];
+static u32 *fault_default;              /* FAULT_DEV's slots: the default per fault */
+static u32 fault_err;                   /* the error code of the fault going down the chain */
+
+static int fault_service(u32 svc, struct svcregs *s)
+{
+    u32 *t;
+    switch (svc) {
+    case 0x7F: t = v86_fault_hook; break;
+    case 0x80: t = pm_fault_hook; break;
+    case 0x81: t = vmm_fault_hook; break;
+    default: return 0;
+    }
+    if (s->eax == 2 || s->eax >= NFAULTS || !s->esi) { s->eflags |= EFL_CF; return 1; }
+    if (!fault_default) fault_default = make_slots(FAULT_DEV, NFAULTS);
+    if (info->trace == 1)
+        trace("VMM: %s fault %x hooked by %s: %x\n", svc == 0x7F ? "V86" : svc == 0x80 ? "PM" : "VMM",
+              s->eax, vxd_owner(s->esi), s->esi);
+    {
+        u32 prev = t[s->eax];
+        if (!prev && svc == 0x80) prev = fault_default[s->eax];
+        t[s->eax] = s->esi;
+        s->esi = prev;
+    }
+    s->eflags &= ~EFL_CF;
+    return 1;
+}
+
+/* a protected-mode client's fault that the VMM itself did not take: the
+ * devices' handlers, else (and at the chain's end) the DPMI host's */
+void vxd_pm_fault(struct cregs *r, int vec, u32 err)
+{
+    struct client_regs *c, outer;
+    struct svcregs s;
+    u32 saved_err = fault_err;
+    if (vec >= NFAULTS || !pm_fault_hook[vec]) { dpmi_exception(r, vec, err); return; }
+    c = cur_vm->client;
+    outer = *c;
+    client_fill(c, r);
+    memset(&s, 0, sizeof(s));
+    s.ebx = VMH(cur_vm);
+    s.ebp = (u32)c;
+    fault_err = err;
+    vmm_call_proc(pm_fault_hook[vec], &s);
+    fault_err = saved_err;
+    client_store(r, c);
+    *c = outer;
+}
+
+/* the default handler's entry, called by a device's handler that chains:
+ * the fault as w16 takes it without hooks, on the client registers at EBP */
+static void fault_default_call(u32 vec, struct svcregs *s)
+{
+    struct client_regs *c = (struct client_regs *)s->ebp;
+    struct cregs t;
+    memset(&t, 0, sizeof(t));
+    client_store(&t, c);
+    dpmi_exception(&t, vec, fault_err);
+    client_fill(c, &t);
+}
+
 /* ---- the profile services (SYSTEM.INI): Get_Profile_String (B3h),
  * Get_Next_Profile_String (B4h), Get_Profile_Decimal_Int (ABh),
  * Get_Profile_Hex_Int (AFh), Get_Profile_Boolean (B1h), from the DDK's
@@ -1740,6 +1864,8 @@ void __cdecl svc_dispatch(struct svcregs *s)
     if (dev == 1 && page_service(svc, s)) return;
     if ((dev == 1 || dev == 7) && pager_service(dev, svc, s)) return;
     if (dev == 1 && v86hook_service(svc, s)) return;
+    if (dev == 1 && fault_service(svc, s)) return;
+    if (dev == FAULT_DEV && svc < NFAULTS) { fault_default_call(svc, s); return; }
     if (dev == 5) { vtd_service(svc, s); return; }
     if (dev == 0x06) { v86mm_service(svc, s); return; }
     if (dev == 0x17) {

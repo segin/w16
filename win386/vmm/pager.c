@@ -385,8 +385,8 @@ void pager_stats(u32 *ins, u32 *outs, u32 *used)
  *   VMM _GetFreePageCount (5Ah): EAX the free pages, EDX the pages that
  *     could be allocated locked
  *   VMM _GetDemandPageInfo (6Fh): a DemandInfoStruc
- *   PageSwap (0007h) PageSwap_Get_Version: EAX the version (the DDB's,
- *     2.10), ECX the file's largest size in pages, BL the pager type (1
+ *   PageSwap (0007h) PageSwap_Get_Version: EAX the version (0200h as
+ *     3.1 gave it, VXW), ECX the file's largest size in pages, EBX the type (1
  *     none, 2 MS-DOS), carry clear; PageSwap_Test_Create: carry if ECX
  *     pages could not be allocated; PageSwap_Test_IO_Valid: carry if
  *     paging must be avoided (no file)
@@ -417,9 +417,9 @@ int pager_service(u32 dev, u32 svc, struct svcregs *s)
     }
     switch (svc) {
     case 0:                             /* PageSwap_Get_Version */
-        s->eax = 0x020A;
+        s->eax = 0x0200;                /* Windows 3.1's (VXW), not the DDB's 2.10 */
         s->ecx = nslots;
-        s->ebx = (s->ebx & ~0xFFu) | (nslots ? info->swap_type : 1);
+        s->ebx = nslots ? info->swap_type : 1;  /* (all of EBX: 2 under 3.1, VXW) */
         s->eflags &= ~EFL_CF;
         break;
     case 1:                             /* PageSwap_Test_Create(ECX pages, EAX flags) */
