@@ -17,7 +17,8 @@ extern WORD __cdecl w_regs[10];
 extern void __cdecl __far w_call(FARPROC fn, int nargs, WORD a0, WORD a1,
                                   WORD a2, WORD a3, WORD a4, WORD a5);
 
-static WORD sel, lim, size_lo, size_hi;
+static WORD sel, lim, size_lo, size_hi, gmh;
+extern DWORD FAR PASCAL GlobalMasterHandle(void);
 
 static void reg(const char *what, const char *r, WORD v)
 {
@@ -35,6 +36,10 @@ static void reg(const char *what, const char *r, WORD v)
         obs(n, 0xA004);
     else if (v == SELECTOROF((void FAR *)&sel))
         obs(n, 0xA005);                 /* our DS */
+    else if (v == gmh)
+        obs(n, 0xA006);                 /* GlobalMasterHandle's AX */
+    else if (v == (gmh | 1))
+        obs(n, 0xA007);                 /* its selector */
     else
         obs(n, v);
 }
@@ -69,6 +74,9 @@ static void block(const char *kind, WORD flags)
     call("  GlobalSize", 20, 1, (WORD)h, 0, 0, 0);
     call("  GlobalFlags", 22, 1, (WORD)h, 0, 0, 0);
     call("  GlobalHandle", 21, 1, sel, 0, 0, 0);
+    /* FarSetOwner (KERNEL.403): Win32s's WIN32S16.DLL passes its DX
+       and ES on to W32S.386 */
+    call("  FarSetOwner", 403, 2, sel, (WORD)GetCurrentPDB(), 0, 0);
     call("  GlobalReAlloc", 16, 4, (WORD)h, 0, 2000, GMEM_MOVEABLE);
     s = GlobalSize(h);
     lim = (WORD)GetSelectorLimit(sel);
@@ -79,6 +87,7 @@ static void block(const char *kind, WORD flags)
 int __cdecl tmain(void)
 {
     out("TK43 start\r\n");
+    gmh = LOWORD(GlobalMasterHandle());
     block("moveable", GMEM_MOVEABLE);
     block("fixed", GMEM_FIXED);
     block("discardable", GMEM_MOVEABLE | GMEM_DISCARDABLE);

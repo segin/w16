@@ -1269,7 +1269,7 @@ wd_fire:
 ; ES = 0; GlobalFlags CX = the flags (= AX), DX = the selector, ES = 0;
 ; GlobalFree CX = DX = 0, ES = 0; GlobalReAlloc CX = the handle (= AX),
 ; ES = 0; GlobalSize ES = 0. (BX after GlobalSize, GlobalFlags,
-; GlobalReAlloc and GlobalFree, CX after GlobalSize and DX after
+; GlobalReAlloc and GlobalFree, CX after GlobalSize, DX after KRNL286's
 ; GlobalUnlock and GlobalReAlloc hold other values on 3.1, not copied.)
 ; The C functions do the work, called with KERNEL's DS. The caller's DS
 ; comes back 0 when it was the block freed (Pietrek, GlobalFree: the DS
@@ -1335,6 +1335,14 @@ global %1
 %endmacro
 %macro AFTER_UNLOCK 0
         xor cx, cx
+%ifdef KRNL386
+        ; KRNL386 returns the block's handle in DX (TK43 on 3.1, both
+        ; modes: the selector - 1 for a moveable, a fixed and a
+        ; discardable block). Win32s's WIN32S16.DLL hands that DX to
+        ; W32S.386 as the selector of the buffer it just unlocked.
+        mov dx, [bp + 6]
+        and dx, 0FFFEh
+%endif
 %endmacro
 %macro AFTER_FLAGS 0
         mov cx, ax
@@ -1386,6 +1394,35 @@ GHEAPAPI GLOBALFLAGSX,   GLOBALFLAGS,   1, AFTER_FLAGS
 GHEAPAPI GLOBALFREEX,    GLOBALFREE,    1, AFTER_FREE
 GHEAPAPI GLOBALSIZEX,    GLOBALSIZE,    1, AFTER_NONE
 GHEAPAPI GLOBALREALLOCX, GLOBALREALLOC, 4, AFTER_REALLOC
+
+; FarSetOwner (KERNEL.403) keeps every register: AX, BX, CX, DX and ES
+; come back as they went in (TK43 on 3.1's KRNL386). Win32s's
+; WIN32S16.DLL relies on it: it hands the DX and ES it had before the
+; call (GlobalDOSAlloc's segment) on to W32S.386.
+extern FARSETOWNER
+global FARSETOWNERX
+FARSETOWNERX:
+        push bp
+        mov bp, sp
+        push ax
+        push bx
+        push cx
+        push dx
+        push es
+        push ds
+        mov ax, DGROUP
+        mov ds, ax
+        push word [bp + 8]              ; the selector
+        push word [bp + 6]              ; the owner
+        call far FARSETOWNER
+        pop ds
+        pop es
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        pop bp
+        retf 4
 
 ; ---------------------------------------------------------------------------
 ; The default signal handler (task.c, SetSigHandler): a RETF
