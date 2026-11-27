@@ -4,8 +4,9 @@
 # scratch copy of the reference install changed as w16's tree is: the
 # Liberation fonts installed (build/w16/SYSTEM's LIB*.TTF and .FOT, made
 # by make install-tree; WIN.INI [fonts] lines as w16's assets/WIN.INI
-# has them) and w16's [FontSubstitutes] lines (Arial=Liberation Sans ...)
-# added to WIN.INI. Writes the probe's log (GD16 start .. done) to OUT.
+# has them) and [FontSubstitutes] lines mapping Arial etc. to them
+# (Arial=Liberation Sans ...) added to WIN.INI. Writes the probe's log
+# (GD16 start .. done) to OUT.
 #   usage: tests/gd16.sh [-r] [-m] [-g GDI.EXE] [-i KEY=VALUE] OUT
 #     -r   Microsoft's GDI (the reference)
 #     -m   keep Microsoft's Arial, Times New Roman and Courier New
@@ -47,7 +48,12 @@ fi
 # w16's [fonts] and [FontSubstitutes] lines for them (assets/WIN.INI)
 sed -n '/^\[fonts\]/,/^\[/p' "$root/assets/WIN.INI" | grep '^Liberation' > "$work/fonts.txt"
 while IFS= read -r l; do set -- "$@" "fonts:$l"; done < "$work/fonts.txt"
-sed -n '/^\[FontSubstitutes\]/,/^\[/p' "$root/assets/WIN.INI" | grep '=' > "$work/subst.txt"
+# the substitutes the probe's logs were recorded with: the Liberation
+# faces for Arial, Times New Roman and Courier New (w16's own WIN.INI now
+# maps them to w16 Sans, Serif and Mono; this probe tests GDI's
+# substitution rules, which do not depend on which faces are named)
+printf '%s\n' 'Helv=MS Sans Serif' 'Tms Rmn=MS Serif' 'Times=Liberation Serif' 'Helvetica=Liberation Sans' \
+    'Arial=Liberation Sans' 'Times New Roman=Liberation Serif' 'Courier New=Liberation Mono' > "$work/subst.txt"
 while IFS= read -r l; do set -- "$@" "FontSubstitutes:$l"; done < "$work/subst.txt"
 python3 "$root/tests/scripts/iniset.py" "$ini" "$@"
 # shellcheck disable=SC2086

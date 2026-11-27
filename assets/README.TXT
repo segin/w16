@@ -238,14 +238,14 @@ Notepad uses your NOTEPAD.HLP (Windows directory) for Help; w16 ships no
 help text. Printing needs your printer's driver (installed with Control
 Panel, as on Windows 3.1).
 
-Arial, Times New Roman and Courier New are Liberation Sans, Serif and
-Mono here: WIN.INI's [FontSubstitutes] names them so, as Windows 3.1's
-names Helv for MS Sans Serif, and the Liberation fonts have the same
-metrics, so programs that ask for Arial (Write's new documents) lay out
-text as with it. The Liberation fonts are copyright Red Hat, Inc. and
-Google, unmodified, under the SIL Open Font License 1.1, whose text is
-SYSTEM\OFL.TXT; the Reserved Font
-Name "Liberation" means a changed copy must not be called that.
+Arial, Times New Roman and Courier New are w16 Sans, Serif and Mono
+here: WIN.INI's [FontSubstitutes] names them so, as Windows 3.1's names
+Helv for MS Sans Serif, and w16's fonts have the same metrics, so
+programs that ask for Arial (Write's new documents) lay out text as with
+it. The Liberation fonts, also installed, are copyright Red Hat, Inc.
+and Google, unmodified, under the SIL Open Font License 1.1, whose text
+is SYSTEM\OFL.TXT; the Reserved Font Name "Liberation" means a changed
+copy must not be called that.
 
 Write's help is your WRITE.HLP (Windows directory).
 
