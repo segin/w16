@@ -897,6 +897,13 @@ BOOL WINAPI IsDialogMessage(HWND dlg, MSG __far *m)
                     n = GetWindow(n, GW_HWNDNEXT);
                 if (n)
                     set_dlg_focus(dlg, n);
+            } else if (dc & (DLGC_DEFPUSHBUTTON | DLGC_UNDEFPUSHBUTTON)) {
+                /* a push button is clicked where the focus is: it stays
+                   (US39 dlg.mb on 3.1: Alt+B with the focus in an edit,
+                   the edit had it in the button's WM_COMMAND and after;
+                   Program Manager's Run box after Browse... came back
+                   with its caret in the command line) */
+                button_click(c);
             } else if (dc & DLGC_BUTTON) {
                 set_dlg_focus(dlg, c);
                 button_click(c);

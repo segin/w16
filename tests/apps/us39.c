@@ -22,6 +22,14 @@
  *   dchild   SetFocus(C) with C disabled, A active or B
  *   min      SetFocus(A) and SetFocus(C) with A minimised and B active
  *   en       SetFocus(A) and SetFocus(C) with B active (all enabled)
+ *   dlg      a modeless dialog (an edit, 6, and a push button, 7; the
+ *            dialog 8) with the focus on the button (dlg.bt) or the edit
+ *            (dlg.e) and a MessageBox owned by it, ended from a timer: the
+ *            state before, inside (.in, .box: the box active) and after;
+ *            then Alt+B (the button, "&B") and Alt+C (a check box 12,
+ *            "&C") given to IsDialogMessage with the focus in the edit:
+ *            the control's WM_COMMAND (.cmd), the focus then (.cmdfoc)
+ *            and after
  *   mb       the program run again ("US39 B"): task B finds A, makes a
  *            hidden window and calls MessageBox(A, ...); from that
  *            window's timer, in the box's modal loop, it asks A (SendMessage) to log the state, to
@@ -51,6 +59,10 @@ static BOOL bdone;
 static HWND bA, bBox, bOwn;
 static int bstep;
 static void btimer(HWND h, UINT id);
+/* the dlg section: a modeless dialog, its edit and push button */
+static HWND dDlg, dE, dBt;
+static const char *dpfx;
+static HWND find_box(HWND owner);
 
 static void pump(DWORD ms)
 {
@@ -76,6 +88,12 @@ static WORD wn(HWND h)
         return 3;
     if (h == hD)
         return 4;
+    if (h && h == dE)
+        return 6;
+    if (h && h == dBt)
+        return 7;
+    if (h && h == dDlg)
+        return 8;
     if (GetWindowTask(h) != GetCurrentTask())
         return 5;
     return 9;
@@ -130,6 +148,18 @@ LRESULT FAR PASCAL __export __loadds main_proc(HWND h, UINT m, WPARAM w, LPARAM 
         bdone = TRUE;
         return 0;
     }
+    if (h == hA && m == WM_TIMER && w == 5) {
+        /* the dlg section: the state inside the box, then the box ends */
+        HWND box = find_box(dDlg);
+        char q[24];
+        KillTimer(hA, 5);
+        wsprintf(q, "%s.in", (LPCSTR)dpfx);
+        state(q);
+        o(q, "box", box != 0 && GetActiveWindow() == box);
+        if (box)
+            EndDialog(box, IDOK);
+        return 0;
+    }
     if (m == WM_TIMER && hA && GetWindowTask(h) != GetWindowTask(hA)) {
         btimer(h, w);
         return 0;
@@ -140,16 +170,16 @@ LRESULT FAR PASCAL __export __loadds main_proc(HWND h, UINT m, WPARAM w, LPARAM 
 
 /* ---- task B: the MessageBox owned by A ---- */
 
-/* the box: a top-level dialog owned by A (no enumeration callback: a
+/* the box: a top-level dialog owned by OWNER (no enumeration callback: a
    second instance's __loadds callback would run on whatever DS the
    shared code segment's fixup names) */
-static HWND find_box(void)
+static HWND find_box(HWND owner)
 {
     char c[16];
     HWND h;
     for (h = GetWindow(GetDesktopWindow(), GW_CHILD); h; h = GetWindow(h, GW_HWNDNEXT)) {
         GetClassName(h, c, sizeof c);
-        if (GetWindow(h, GW_OWNER) == hA && lstrcmp(c, "#32770") == 0)
+        if (GetWindow(h, GW_OWNER) == owner && lstrcmp(c, "#32770") == 0)
             return h;
     }
     return 0;
@@ -169,7 +199,7 @@ static void btimer(HWND h, UINT id)
         break;
     case 3:
         KillTimer(h, id);
-        bBox = find_box();
+        bBox = find_box(hA);
         SendMessage(hA, UM_STATE, bBox ? 7 : 8, 0);
         if (bBox)
             EndDialog(bBox, IDOK);
@@ -190,6 +220,130 @@ static int task_b(void)
     DestroyWindow(bOwn);
     PostMessage(bA, UM_DONE, 0, 0);
     return 0;
+}
+
+/* ---- the dlg section ---- */
+static HWND cmd_focus;                  /* GetFocus in the last WM_COMMAND */
+static WORD cmd_id;
+
+BOOL FAR PASCAL __export __loadds dlg_proc(HWND h, UINT m, WPARAM w, LPARAM l)
+{
+    (void)h, (void)l;
+    if (m == WM_COMMAND && (w == 11 || w == 12)) {
+        cmd_id = w;
+        cmd_focus = GetFocus();
+        return TRUE;
+    }
+    return m == WM_INITDIALOG;
+}
+
+/* a dialog template (Windows 3.x layout): an edit (10), a push button
+   (11, "&B") and a check box (12, "&C"), all tab stops */
+static BYTE tmpl[128];
+
+static BYTE *put_w(BYTE *p, WORD v)
+{
+    *p++ = (BYTE)v;
+    *p++ = (BYTE)(v >> 8);
+    return p;
+}
+
+static BYTE *put_s(BYTE *p, const char *s)
+{
+    do
+        *p++ = *s;
+    while (*s++);
+    return p;
+}
+
+static BYTE *put_item(BYTE *p, int x, int y, int cx, int cy, WORD id, DWORD style, BYTE cls, const char *text)
+{
+    p = put_w(p, x); p = put_w(p, y); p = put_w(p, cx); p = put_w(p, cy);
+    p = put_w(p, id);
+    p = put_w(p, LOWORD(style)); p = put_w(p, HIWORD(style));
+    *p++ = cls;
+    p = put_s(p, text);
+    *p++ = 0;                           /* no creation data */
+    return p;
+}
+
+static void make_tmpl(void)
+{
+    BYTE *p = tmpl;
+    DWORD st = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME;
+    p = put_w(p, LOWORD(st)); p = put_w(p, HIWORD(st));
+    *p++ = 3;
+    p = put_w(p, 10); p = put_w(p, 60); p = put_w(p, 120); p = put_w(p, 50);
+    p = put_s(p, "");                   /* no menu */
+    p = put_s(p, "");                   /* the dialog class */
+    p = put_s(p, "US39 D");
+    p = put_item(p, 5, 5, 60, 12, 10, WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | ES_LEFT, 0x81, "");
+    p = put_item(p, 70, 5, 40, 14, 11, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 0x80, "&B");
+    put_item(p, 5, 25, 40, 12, 12, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 0x80, "&C");
+}
+
+/* a MessageBox owned by the dialog with the focus on FOC, ended from A's
+   timer; the state before, inside and after */
+static void dlg_box(const char *pfx, HWND foc)
+{
+    char q[24];
+    dpfx = pfx;
+    SetActiveWindow(dDlg);
+    SetFocus(foc);
+    pump(100);
+    wsprintf(q, "%s.before", (LPCSTR)pfx);
+    state(q);
+    SetTimer(hA, 5, 300, NULL);
+    MessageBox(dDlg, "US39 dlg", "US39", MB_OK);
+    pump(200);
+    wsprintf(q, "%s.after", (LPCSTR)pfx);
+    state(q);
+}
+
+static void mn_key(const char *pfx, char ch)
+{
+    MSG m;
+    char q[24];
+    SetActiveWindow(dDlg);
+    SetFocus(dE);
+    pump(100);
+    cmd_id = 0;
+    cmd_focus = 0;
+    m.hwnd = dE;
+    m.message = WM_SYSCHAR;
+    m.wParam = ch;
+    m.lParam = 0x20300001L;             /* Alt down */
+    m.time = GetTickCount();
+    m.pt.x = m.pt.y = 0;
+    o(pfx, "idm", IsDialogMessage(dDlg, &m));
+    pump(100);
+    o(pfx, "cmd", cmd_id);
+    wsprintf(q, "%s.cmdfoc", (LPCSTR)pfx);
+    obs(q, wn(cmd_focus));
+    state(pfx);
+}
+
+static void sec_dlg(void)
+{
+    make_tmpl();
+    dDlg = CreateDialogIndirect(hi, (LPCSTR)tmpl, hA, (DLGPROC)dlg_proc);
+    if (!dDlg) {
+        o("dlg", "made", 0);
+        return;
+    }
+    dE = GetDlgItem(dDlg, 10);
+    dBt = GetDlgItem(dDlg, 11);
+    ShowWindow(dDlg, SW_SHOW);
+    pump(100);
+    dlg_box("dlg.bt", dBt);
+    dlg_box("dlg.e", dE);
+    /* a mnemonic (Alt+B, Alt+C) through IsDialogMessage with the focus
+       in the edit: where the focus is in the control's WM_COMMAND and
+       after */
+    mn_key("dlg.mb", 'b');
+    mn_key("dlg.mc", 'c');
+    DestroyWindow(dDlg);
+    dDlg = dE = dBt = 0;
 }
 
 static HWND mk(const char *title, DWORD style, int x, int y, int cx, int cy, HWND parent)
@@ -264,6 +418,10 @@ int __cdecl tmain(void)
     sf("en.bA", hA);
     SetActiveWindow(hB);
     sf("en.bC", hC);
+    reset();
+
+    out("dlg\r\n");
+    sec_dlg();
     reset();
 
     out("mb\r\n");
