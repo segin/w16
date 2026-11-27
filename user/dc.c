@@ -319,26 +319,73 @@ void invalidate_dce_cache(void)
         DC_(dh)->flags |= DCE_DIRTY;
 }
 
+/* An own DC given back (its window's or its class's): it joins the cache
+   while the cache has fewer than its first five DCs free, else it is
+   deleted. Every CS_OWNDC window's DC used to join the cache for good:
+   Write's (one each run) grew it by a DC and the DC's regions in GDI's
+   heap each time (tests/vmtasksoak.sh: five more GDI objects a run),
+   where Windows 3.1 frees a window's own DC with the window. */
+#define DCE_KEEP 5
+static void own_dce_gone(WORD dh)
+{
+    PDCE d = DC_(dh);
+    WORD k, free_ = 0, __far *link;
+    if (d->vis) {
+        delete_private(d->vis);
+        d->vis = 0;
+    }
+    if (d->clip) {
+        DeleteObject(d->clip);
+        d->clip = 0;
+    }
+    for (k = dces; k; k = DC_(k)->next)
+        if (k != dh && !(DC_(k)->flags & (DCE_OWN | DCE_INUSE)))
+            free_++;
+    if (free_ < DCE_KEEP) {
+        G_SETDCSTATE(d->hdc, hdcState);
+        d->hwnd = 0;
+        d->flags = 0;
+        return;
+    }
+    for (link = &dces; *link; link = &DC_(*link)->next)
+        if (*link == dh) {
+            *link = d->next;
+            break;
+        }
+    G_MAKEOBJECTPRIVATE(d->hdc, FALSE);
+    DeleteDC(d->hdc);
+    uh_free(&uhObj, dh);
+}
+
 /* a window going away gives back its own DC */
 void free_window_dcs(HWND h)
 {
     PDCE d;
-    WORD dh;
-    for (dh = dces; dh; dh = d->next) {
+    WORD dh, next;
+    for (dh = dces; dh; dh = next) {
         d = DC_(dh);
+        next = d->next;
         d->flags |= DCE_DIRTY;
         if (d->hwnd == h) {
+            /* a class's DC stays the class's, with its state */
+            if (d->flags & DCE_CLASS) {
+                if (d->vis) {
+                    delete_private(d->vis);
+                    d->vis = 0;
+                }
+                d->hwnd = 0;
+                continue;
+            }
+            if (d->flags & DCE_OWN) {
+                own_dce_gone(dh);
+                continue;
+            }
+            /* a cache DC out for it (GetDC not released): back to the
+               cache, reset (release_dc's work) */
             if (d->vis) {
                 delete_private(d->vis);
                 d->vis = 0;
             }
-            /* a class's DC stays the class's, with its state */
-            if (d->flags & DCE_CLASS) {
-                d->hwnd = 0;
-                continue;
-            }
-            /* a CS_OWNDC window's DC joins the cache; one out of the
-               cache comes back as release_dc gives it back: reset */
             if (d->clip) {
                 DeleteObject(d->clip);
                 d->clip = 0;
@@ -350,22 +397,13 @@ void free_window_dcs(HWND h)
     }
 }
 
-/* a CS_CLASSDC class goes: its DC joins the cache */
+/* a CS_CLASSDC class goes: its DC with it (own_dce_gone) */
 void free_class_dc(PCLS c)
 {
-    PDCE d = DC_(c->hdce);
-    if (d->vis) {
-        delete_private(d->vis);
-        d->vis = 0;
-    }
-    if (d->clip) {
-        DeleteObject(d->clip);
-        d->clip = 0;
-    }
-    G_SETDCSTATE(d->hdc, hdcState);
-    d->hwnd = 0;
-    d->flags = 0;
+    WORD dh = c->hdce;
     c->hdce = 0;
+    if (dh)
+        own_dce_gone(dh);
 }
 
 /* windows moved: DCs out for them see the new place */
