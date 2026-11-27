@@ -46,6 +46,7 @@ static u8 *slotmap;                     /* a bit per page of the file: in use */
 static u32 nslots, slots_used, slot_hint;
 static u32 committed;                   /* pageable pages the clients have */
 static u32 resident;                    /* those of them in physical memory */
+static u32 eager_min;                   /* free pages above which new ones are mapped at once */
 static u32 hand = CLIENT_LO;            /* the clock hand (a linear address) */
 static u32 page_ins, page_outs;
 
@@ -75,6 +76,7 @@ void pager_init(void)
      * physical memory and a constant part. UNVERIFIED: what that
      * multiple is of; here of the free pages when the VMM starts */
     lin_total = (info->overcommit ? info->overcommit : 4) * f;
+    eager_min = f / 2 > 4 * RESERVE ? f / 2 : 4 * RESERVE;   /* (half the memory: the rest for pages touched later) */
     if (!info->swap_pages || info->swap_handle == 0xFFFF) return;
     nslots = info->swap_pages;
     /* (the file's size: never more than the linear address space; under
@@ -311,7 +313,7 @@ int pager_map(u32 lin, u32 n)
         /* while memory is plentiful the page is there at once, as before
          * the paging file (a fault for every first touch slowed the boot
          * and the timing tests); else it comes when first touched */
-        if (pages_free() > 4 * RESERVE) {
+        if (pages_free() > eager_min) {
             u32 p = page_alloc();
             if (p) { *pte = p | PTE_PAGEABLE | 7; resident++; }
         }
