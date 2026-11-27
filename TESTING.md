@@ -394,6 +394,18 @@ for Standard mode), and prints its logs; `tools/dpmicmp.sh KIND REF DIR`
 compares two runs, leaving out the INFO and MEM lines (the case
 `win386dpmi`, ARCHITECTURE.md 12.16).
 
+What Windows leaves DOS with: `tests/dosstrun.sh OUTDIR MODE [x|dosbox]`
+(MODE `ms`, `w16` or `tree`) runs DOSST.EXE (`tests/dos/dosst.c`: the
+interrupt vectors and whose memory they point into, the MCB chain with the
+UMBs, the PIC masks, the BIOS data area, the INT 33h user handler, XMS)
+before `WIN /3` and again after Exit Windows, moves the mouse after the
+exit and types a DOS command, then prints what changed, whether the prompt
+answered and how many INT 6 lines DOSBox-X logged. `DOSSTRUN_SHELL=FILE`
+makes FILE the shell instead (TK55X: Windows ended through ExitKernel,
+the drivers never disabled); `DOSSTRUN_TREE` and `DROPIN_COVER` boot a
+tree with applications installed (kept outside the repository). The case
+`win386exit` compares the changes with Microsoft's WIN386's.
+
 ## 5. Running on a remote host
 
 `tools/remote-test.sh` runs the same suites on another Linux machine you

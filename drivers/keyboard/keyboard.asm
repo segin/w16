@@ -138,6 +138,7 @@ key_state       dd 0                    ; Enable's lpKeyState
 enabled         db 0
 old9            dd 0                    ; INT 9 before Enable
 have_old9       db 0
+kb101           db 0                    ; 40:96h bit 4 as Enable found it
 ssw_enable      dw 1                    ; ScreenSwitchEnable's flag
 sysreq          dw 0                    ; EnableKBSysReq: bit 0 INT 2,
                                         ; bit 1 CVWBreak (DDK: off at
@@ -298,10 +299,15 @@ ENABLE:
         ; the BIOS's "enhanced keyboard" flag (40:96h bit 4) cleared, as
         ; Windows 3.1's Enable does (KB2: set by DOSBox's BIOS, still set
         ; at SetSpeed, clear from Enable on; KB1: Enable leaves bit 1).
-        ; UNVERIFIED: the other bits (DOSBox sets no other)
+        ; UNVERIFIED: the other bits (DOSBox sets no other). Disable sets
+        ; it again (DOSST, tests/dosstrun.sh: 40:96h after Windows 3.1
+        ; ends is as before it started)
         push es
         mov ax, __0040H
         mov es, ax
+        mov al, [es:KB_FLAG3]
+        and al, F3_101
+        or [kb101 wrt DGROUP], al
         and byte [es:KB_FLAG3], ~F3_101
         pop es
         cli
@@ -348,6 +354,12 @@ DISABLE:
         mov ax, 2509h
         int 21h
         pop ds
+        push es                         ; the BIOS's enhanced keyboard flag
+        mov ax, __0040H                 ; back, as Enable found it
+        mov es, ax
+        mov al, [kb101 wrt DGROUP]
+        or [es:KB_FLAG3], al
+        pop es
 .r:     pop ds
         retf
 
