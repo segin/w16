@@ -46,7 +46,7 @@ in two DOS boxes included, are the same under both WIN386s.
 | _AddFreePhysPage | DIFFERENT | Not in w16; now returns 0 (none added): w16 manages the XMS block the loader gave it, its window maps that only. 3.1 refused page 50h (below 110h) too. |
 | _PageResetHandlePAddr | DIFFERENT | Not in w16; still not (V86MMGR's in 3.1). |
 | _Allocate_Device_CB_Area | OK | 3.1: dword-aligned, 1 MB fails; w16 the same. |
-| _Allocate_Global_V86_Data_Area | FIXED | Not in w16. Now from the start of DOS's free arena before the DOS VMs' memory is fixed (the arena's MCB becomes a system block, owner 8 "SC"); the first V86 page moves when needed (3.1's moved for a page-aligned block); GVDAInquire, GVDAInstance, GVDAZeroInit; fails while a temporary area is out (3.1 too). DIFFERENT: where a small block goes (3.1 put one in high memory, a region its V86MMGR added). |
+| _Allocate_Global_V86_Data_Area | FIXED | Not in w16. Now from the start of DOS's free arena before the DOS VMs' memory is fixed (the arena's MCB becomes a system block, owner 8 "SC"); the first V86 page moves when needed (3.1's moved for a page-aligned block); GVDAInquire, GVDAInstance, GVDAZeroInit; fails while a temporary area is out (3.1 too). DIFFERENT: where a small block goes (3.1 put a 30h-byte one at CC260h, above the last V86 page; w16 below the first V86 page). |
 | _Allocate_Temp_V86_Data_Area / _Free_Temp_V86_Data_Area | FIXED | Not in w16. 3.1: one at a time, paragraph-aligned, zeroed, below 1 MB; freeing twice fails. Now the same. |
 | _Add_Global_V86_Data_Area | DIFFERENT | Still not in w16 (V86MMGR's and DOSMGR's in 3.1: w16's own devices do not need it). |
 
