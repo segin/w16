@@ -2129,7 +2129,16 @@ void dpmi_ps2cb(struct cregs *r)
     r->eip = ip;
     r->cs = cs;
     SETW(r->esp, (u16)r->esp + 4);
-    if (!cur_vm->pm || !ps2_sel) return;
+    /* the handler is the System VM's (MOUSE.DRV's; C207h is taken from
+     * the System VM only, and the BIOS's pointer to the breakpoint is
+     * the same in every VM): an IRQ 12 while a DOS VM runs is not
+     * handed to it. A DOS VM with a DPMI client of its own (CodeView for
+     * MS-DOS, full screen) ran ps2_sel:ps2_off in its own LDT, where
+     * that selector is something else: under DOSBox-X the move of the
+     * mouse over CodeView ended the emulator ("IRET: Illegal descriptor
+     * type 12": MOUSE.DRV's code selector named a type 0Ch descriptor
+     * in the DOS VM's LDT) */
+    if (cur_vm != &sysvm || !cur_vm->pm || !ps2_sel) return;
     memset(&p, 0, sizeof(p));
     hstk_make();
     if (!nest_stack(r, &p.ss, &p.esp)) {
