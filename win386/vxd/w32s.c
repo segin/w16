@@ -131,7 +131,11 @@ static vu32 pte_prot(vu32 e)
 
 /* ---- reservations ---- */
 #define NREG 256
-struct region { vu32 base, size, prot, sys; };
+struct region {
+    vu32 base, size, prot, sys;
+    vu32 view;                          /* a view of a file mapping (its struct fobj):
+                                           its pages are the mapping's, kept when it goes */
+};
 static struct region reg[NREG];
 static vu32 nreg;
 
@@ -158,21 +162,30 @@ static int range_free(vu32 lin, vu32 n)
     return 1;
 }
 
-/* a reservation of n bytes (64 KB granularity) at lin, or anywhere from
- * the arena (system ones from its upper part); 0 if none */
+/* a reservation of n bytes (64 KB granularity) at lin, or anywhere in
+ * the arena; 0 if none. As on Windows 3.1 (W32M's "fixed": a reservation
+ * at Win32 20000000h failed with ERROR_NOT_ENOUGH_MEMORY) an address
+ * asked for must lie in the arena, from its base (88000000h there with
+ * 16 MB) up to the VMs' high linear windows (C0000000h). The memory of
+ * the system (80000000h in the type) comes from below the arena (3.1
+ * gives it pages of the VMM's own arena, below 88000000h), so that the
+ * arena holds Win32 reservations only, as 3.1's does */
+#define ARENA_TOP   0xC0000000u
+#define SYS_SPAN    0x2000000u          /* the memory of the system: 32 MB below the arena */
 static vu32 reserve(vu32 lin, vu32 n, vu32 prot, vu32 sys)
 {
-    vu32 a, i, e;
+    vu32 a, i, e, lo, hi;
     n = (n + 0xFFFFu) & ~0xFFFFu;
     if (!n || nreg == NREG) return 0;
+    lo = sys ? (arena_pde << 22) - SYS_SPAN : arena_pde << 22;
+    hi = sys ? arena_pde << 22 : ARENA_TOP;
     if (lin) {
         lin &= ~0xFFFFu;
-        if (!range_free(lin, n)) return 0;
+        if (lin < arena_pde << 22 || lin + n > ARENA_TOP || lin + n < lin || !range_free(lin, n)) return 0;
         a = lin;
     } else {
-        a = (arena_pde << 22) + (sys ? 0x4000000u : 0);
-        for (; ; a += 0x10000u) {
-            if (a < (arena_pde << 22) || a >= 0xF0000000u) return 0;
+        for (a = lo; ; a += 0x10000u) {
+            if (a + n > hi || a + n < a) return 0;
             if (range_free(a, n)) break;
         }
     }
@@ -186,6 +199,7 @@ static vu32 reserve(vu32 lin, vu32 n, vu32 prot, vu32 sys)
     reg[e].size = n;
     reg[e].prot = prot;
     reg[e].sys = sys;
+    reg[e].view = 0;
     return a;
 }
 
@@ -215,9 +229,10 @@ static void decommit(vu32 lin, vu32 n)
 {
     vu32 a, end = (lin + n + PAGE - 1) & ~(PAGE - 1);
     for (a = lin & ~(PAGE - 1); a < end; a += PAGE) {
-        vu32 *p = region_of(a) ? pte_of(a, 0) : NULL;
+        struct region *g = region_of(a);
+        vu32 *p = g ? pte_of(a, 0) : NULL;
         if (!p) continue;
-        if (*p & W_COM) L->page_free(*p & ~0xFFFu);
+        if ((*p & W_COM) && !g->view) L->page_free(*p & ~0xFFFu);
         *p = W_RES;
     }
     L->flush();
@@ -266,7 +281,13 @@ static vu32 virtual_alloc(vu32 lin, vu32 n, vu32 type, vu32 prot)
 
 /* ---- module images (function 04h) and their sections (02h) ---- */
 #define NIMG 32
-struct image { vu32 base, size; char path[128]; };
+struct image {
+    vu32 base, size;                    /* linear */
+    vu32 delta;                         /* where it is (Win32) - its preferred base */
+    vu32 roff, rsize;                   /* its base relocations in the file */
+    vu8 *rel;                           /* them, read at the first section (heap) */
+    char path[128];
+};
 static struct image img[NIMG];
 
 static struct image *image_of(vu32 lin)
@@ -275,6 +296,47 @@ static struct image *image_of(vu32 lin)
     for (i = 0; i < NIMG; i++)
         if (img[i].size && lin >= img[i].base && lin - img[i].base < img[i].size) return &img[i];
     return NULL;
+}
+
+/* An image's base relocations applied to the section just read at
+ * [sva, sva + n) (RVAs): Win32s's 32-bit kernel places an image where the
+ * device gives it room and puts the difference from its preferred base in
+ * the image's record (04h's [7]) but writes no fixup itself; on Windows
+ * 3.1 the device's pages come in relocated (W32M and Freecell run at
+ * 88xxxxxxh there). The relocations are read from the file once (the
+ * .reloc section need not be loaded) and kept until the image goes. */
+static int file_read(const char *path, vu32 off, vu32 n, vu32 to);
+static void relocate(struct image *m, vu32 sva, vu32 n)
+{
+    vu32 o, k;
+    if (!m->delta || !m->rsize) return;
+    if (!m->rel) {
+        m->rel = (vu8 *)vmm_heap_alloc(m->rsize, 0);
+        if (!m->rel) return;
+        vclear(m->rel, m->rsize);
+        if (!file_read(m->path, m->roff, m->rsize, (vu32)m->rel)) {
+            vmm_heap_free((vu32)m->rel, 0);
+            m->rel = NULL;
+            return;
+        }
+    }
+    for (o = 0; o + 8 <= m->rsize; ) {
+        const vu32 *blk = (const vu32 *)(m->rel + o);
+        vu32 page = blk[0], len = blk[1];
+        if (len < 8 || o + len > m->rsize) break;
+        if (page + 0x1000u > sva && page < sva + n)
+            for (k = 8; k + 2 <= len; k += 2) {
+                vu32 e = *(const vu16 *)(m->rel + o + k), rva = page + (e & 0xFFF);
+                vu8 *at = (vu8 *)(m->base + rva);
+                if (rva < sva || rva >= sva + n) continue;
+                switch (e >> 12) {
+                case 3: *(vu32 *)at += m->delta; break;                     /* HIGHLOW */
+                case 2: *(vu16 *)at += (vu16)m->delta; break;               /* LOW */
+                case 1: *(vu16 *)at += (vu16)(m->delta >> 16); break;       /* HIGH */
+                }
+            }
+        o += len;
+    }
 }
 
 /* ---- selectors: a selector's base from the GDT or the current LDT ---- */
@@ -390,21 +452,37 @@ static int file_read(const char *path, vu32 off, vu32 n, vu32 to)
 }
 
 /* ---- file mappings (functions 0Dh, 11h, 13h, 12h, 0Fh) ----
- * Windows 3.1's W32S.386 keeps a DOS handle of its own for a mapped file
- * (a duplicate, held in WIN32S16's DOS block as PSP) and reads a view's
- * pages from it when they are touched. w16's keeps the duplicate in the
- * PSP DOS has when the mapping is made (the program's), keyed by the
- * client's handle (ESI), and reads a view's bytes at once. */
+ * As Windows 3.1's W32S.386 answers them (VXY: W32M's mapping of the
+ * paging file and Win32s's NLS files): 0Dh makes a mapping and gives it a
+ * number, 11h maps a view of it, 13h and 12h unmap a view, 0Fh closes it.
+ * Every view of a mapping shows the same memory (W32M: a write through one
+ * view is read through the other). w16's keeps a mapping's contents in
+ * pages of its own (a reservation in the memory of the system), filled
+ * from the file when the mapping is made (3.1 reads each page from the
+ * file when it is first touched, through a duplicate of the program's DOS
+ * handle kept until 0Fh: Win32s copies an NLS file's view between 11h and
+ * 13h), and a view's page table entries name those pages. Written pages
+ * are not written back to the file (UNVERIFIED what 3.1 does with a
+ * writable view of a file). A mapping goes when it is closed and has no
+ * view left: Win32s closes a mapping it does not want without unmapping
+ * its view, and 3.1 then gives the next mapping the next number. */
 #define NFILE 32
-struct fobj { vu32 key, dos, size, view, vsize; };
+struct fobj {
+    vu32 used, dos, size;               /* dos: the duplicate handle, 0 for the paging file */
+    vu32 store;                         /* its contents (linear) */
+    vu32 nviews, closed, back;          /* back: 0Dh's [2], given back by 0Fh */
+};
 static struct fobj fobj[NFILE];
-static struct fobj *last_fobj;
 
-static struct fobj *fobj_of(vu32 key)
+static void fobj_free(struct fobj *f)
 {
-    vu32 i;
-    for (i = 0; i < NFILE; i++) if (fobj[i].key == key && fobj[i].dos) return &fobj[i];
-    return NULL;
+    if (f->store) release(f->store);
+    f->used = 0;
+    f->store = 0;
+}
+static struct fobj *fobj_of(vu32 id)
+{
+    return id && id <= NFILE && fobj[id - 1].used ? &fobj[id - 1] : NULL;
 }
 
 /* ---- the client's state ---- */
@@ -495,9 +573,16 @@ void __cdecl w32s_api(struct vregs *r)
         break;
     case 0x06:                          /* VirtualAlloc: [1] address [2] size [3] type
                                            [4] protection, [5] the result */
+        /* EAX an NT status (3.1, W32M: STATUS_INVALID_PARAMETER for size 0,
+         * STATUS_CONFLICTING_ADDRESSES for an address it would not give;
+         * [5] left as it was), which Win32s turns into the error code */
         b = BLK(c);
-        b[5] = virtual_alloc(b[1], b[2], b[3], b[4]);
-        c->eax = 0;
+        if (!b[2]) { c->eax = 0xC000000Du; break; }
+        {
+            vu32 a = virtual_alloc(b[1], b[2], b[3], b[4]);
+            if (a) { b[5] = a; c->eax = 0; }
+            else c->eax = b[1] ? 0xC0000018u : 0xC0000017u;     /* (UNVERIFIED: STATUS_NO_MEMORY) */
+        }
         break;
     case 0x08: {                        /* VirtualProtect: [1] address [2] size [3] protection
                                            [4] where the old one goes (linear), [5] the result */
@@ -560,7 +645,8 @@ void __cdecl w32s_api(struct vregs *r)
             mbi[3] = run - a;
             mbi[4] = st;
             mbi[5] = pr;
-            mbi[6] = image_of(a) ? 0x1000000u : 0x20000u;  /* MEM_IMAGE, MEM_PRIVATE */
+            mbi[6] = image_of(a) ? 0x1000000u : g->view ? 0x40000u : 0x20000u;  /* MEM_IMAGE,
+                                                                     MEM_MAPPED, MEM_PRIVATE */
         }
         *(vu32 *)b[0] = 0x1C;
         c->eax = 0;
@@ -574,102 +660,159 @@ void __cdecl w32s_api(struct vregs *r)
         if (b[3] & 0x8000) ok = release(b[1]);
         else if ((b[3] & 0x4000) && region_of(b[1])) { decommit(b[1], b[2]); ok = 1; }
         *(vu32 *)b[0] = ok;
-        c->eax = 0;
+        c->eax = ok ? 0 : 0xC00000A0u;  /* STATUS_MEMORY_NOT_ALLOCATED (3.1, W32M's "freebad") */
         break;
     }
     case 0x05: {                        /* an image gone: EDX its linear base, EDI its number */
         struct image *m = image_of(c->edx);
-        if (m) m->size = 0;
+        if (m) {
+            m->size = 0;
+            if (m->rel) vmm_heap_free((vu32)m->rel, 0);
+            m->rel = NULL;
+        }
         c->eax = 1;
         break;
     }
-    case 0x0D: {                        /* a file to map: ESI the client's key for it,
-                                           [6] the DOS handle, [7] the PSP (selector) it is
-                                           the program's in; [0] -> 1 (made) */
-        vu32 i, size = 0, dup = 0, ax, psp, h;
+    case 0x0D: {                        /* CreateFileMapping: [0] -> the mapping's number,
+                                           [2] kept for 0Fh, [3] a structure (linear: its
+                                           size, high size) or 0, [4] the protection, [5]
+                                           SEC_ flags, [6] the program's DOS handle or
+                                           FFFFFFFFh (the paging file), [7] its PSP's
+                                           selector */
+        vu32 i, size = 0, dup = 0, ax, psp, h, n;
+        struct fobj *f = NULL;
         b = BLK(c);
         h = b[6];
-        for (i = 0; i < NFILE && fobj[i].dos; i++) ;
-        psp = task_psp_in();
-        if (i < NFILE && dos(0x4202, h, 0, 0, &ax)) {
-            size = cur_dx << 16 | ax;
-            dos(0x4200, h, 0, 0, NULL);
-            if (dos(0x4500, h, 0, 0, &dup)) {
-                fobj[i].key = c->esi;
-                fobj[i].dos = dup;
-                fobj[i].size = size;
-                fobj[i].view = 0;
-                last_fobj = &fobj[i];
+        for (i = 0; i < NFILE && fobj[i].used; i++) ;
+        if (i < NFILE) f = &fobj[i];
+        if (f && h == 0xFFFFFFFFu) {
+            size = b[3] ? *(const vu32 *)b[3] : 0;
+        } else if (f) {
+            psp = task_psp_in();
+            if (dos(0x4202, h, 0, 0, &ax)) {
+                size = cur_dx << 16 | ax;
+                dos(0x4200, h, 0, 0, NULL);
+                if (!dos(0x4500, h, 0, 0, &dup)) dup = 0;
             }
+            if (dup && b[3] && *(const vu32 *)b[3] > size) size = *(const vu32 *)b[3];
+            task_psp_out(psp);
+            if (!dup) size = 0;
         }
-        task_psp_out(psp);
+        n = (size + PAGE - 1) & ~(PAGE - 1);
+        if (f && n && (f->store = virtual_alloc(0, n, 0x80003000u, 0x04)) != 0) {
+            f->used = 1;
+            f->dos = dup;
+            f->size = size;
+            f->nviews = f->closed = 0;
+            f->back = b[2];
+            if (dup) {
+                psp = task_psp_in();
+                handle_read(dup, 0, size, f->store);
+                task_psp_out(psp);
+            }
+            *(vu32 *)b[0] = i + 1;
+            c->eax = 0;
+        } else {
+            if (dup) {
+                psp = task_psp_in();
+                dos(0x3E00, dup, 0, 0, NULL);
+                task_psp_out(psp);
+            }
+            *(vu32 *)b[0] = 0;
+            c->eax = 0xC000009Au;       /* (UNVERIFIED: STATUS_INSUFFICIENT_RESOURCES) */
+            f = NULL;
+        }
         if (trace_on) {
-            tput("W32S: file to map, DOS handle ");
-            thex(b[1]);
-            { vu32 k; tput(" S"); for (k = 0; k < 8; k++) { tput(" "); thex(((vu32 *)b[0])[k]); } }
-            { vu32 k; tput(" B"); for (k = 2; k < 12; k++) { tput(" "); thex(b[k]); } }
+            tput("W32S: mapping ");
+            thex(f ? i + 1 : 0);
+            tput(" handle ");
+            thex(h);
             tput(" size ");
             thex(size);
-            tput(" handle ");
-            thex(dup);
             tend();
         }
-        *(vu32 *)b[0] = dup != 0;
-        c->eax = 0;
         break;
     }
-    case 0x11: {                        /* a view of the file just made: [2] -> its address,
-                                           [5] -> [2] its size, [3] its address (linear) */
-        struct fobj *f = last_fobj;
-        vu32 n, a = 0;
+    case 0x11: {                        /* MapViewOfFile: [0] the mapping's number, [2] ->
+                                           the view (linear), [5] -> offset, high offset,
+                                           size (0: to the end; the size mapped comes
+                                           back), the view (linear); EDI the protection */
+        struct fobj *f;
+        vu32 *v, off, n, a = 0, i, bits, top;
+        int ok;
         b = BLK(c);
-        if (f) {
-            n = (f->size + PAGE - 1) & ~(PAGE - 1);
-            if (!n) n = PAGE;
-            a = virtual_alloc(0, n, 0x3000, 0x04);
-            f->view = a;
-            f->vsize = n;
+        f = fobj_of(b[0]);
+        v = (vu32 *)b[5];
+        bits = prot_bits(c->edi, &ok);
+        if (f && v && ok && !v[1] && v[0] < f->size) {
+            top = (f->size + PAGE - 1) & ~(PAGE - 1);
+            off = v[0] & ~(PAGE - 1);
+            n = v[2] ? v[2] + (v[0] - off) : f->size - off;
+            n = (n + PAGE - 1) & ~(PAGE - 1);
+            if (n > top - off) n = top - off;
+            a = reserve(0, n, c->edi, 0);
+            if (a) {
+                region_of(a)->view = (vu32)f;
+                for (i = 0; i < n; i += PAGE) {
+                    vu32 *src = pte_of(f->store + off + i, 0), *dst = pte_of(a + i, 0);
+                    *dst = (*src & ~0xFFFu) | W_RES | W_COM | bits;
+                }
+                L->flush();
+                f->nviews++;
+                v[2] = n;
+                v[3] = a;
+            }
         }
         *(vu32 *)b[2] = a;
-        if (b[5]) { ((vu32 *)b[5])[2] = f ? f->vsize : 0; ((vu32 *)b[5])[3] = a; }
-        c->eax = 0;
-        break;
-    }
-    case 0x13: {                        /* the view's bytes from the file: ESI the client's
-                                           handle, [14] the view (linear); [13] -> its size */
-        struct fobj *f = fobj_of(c->esi);
-        b = BLK(c);
-        if (!f) f = last_fobj;
-        if (f && f->view) {
-            vu32 psp = task_psp_in();
-            handle_read(f->dos, 0, f->size, f->view);
-            task_psp_out(psp);
-            b[13] = f->vsize;
+        c->eax = a ? 0 : 0xC000009Au;   /* (UNVERIFIED: the status of a failed view) */
+        if (trace_on) {
+            tput("W32S: view ");
+            thex(a);
+            tput(" of ");
+            thex(b[0]);
+            tend();
         }
-        c->eax = 0;
         break;
     }
-    case 0x12: {                        /* a view gone: [2] its address (linear) */
-        vu32 i;
+    case 0x13: {                        /* a view to be unmapped (UnmapViewOfFile, before
+                                           12h): [1] the view (linear); [2] -> its size */
+        struct region *g;
         b = BLK(c);
-        release(b[2]);
-        for (i = 0; i < NFILE; i++) if (fobj[i].view == b[2]) fobj[i].view = 0;
+        g = region_of(b[1]);
+        if (g && g->view && g->base == b[1]) *(vu32 *)b[2] = g->size;
         c->eax = 0;
         break;
     }
-    case 0x0F: {                        /* a file mapping closed: [1] -> its client's handle
-                                           (0 afterwards) */
+    case 0x12: {                        /* a view gone: [1] its address (linear) */
+        struct region *g;
         struct fobj *f;
         b = BLK(c);
-        f = fobj_of(*(vu32 *)b[1]);
-        if (f) {
-            vu32 psp = task_psp_in();
-            dos(0x3E00, f->dos, 0, 0, NULL);
-            task_psp_out(psp);
-            f->dos = 0;
-            if (last_fobj == f) last_fobj = NULL;
+        g = region_of(b[1]);
+        if (g && g->view && g->base == b[1]) {
+            f = (struct fobj *)g->view;
+            release(b[1]);
+            if (f->nviews) f->nviews--;
+            if (f->closed && !f->nviews) fobj_free(f);
         }
-        *(vu32 *)b[1] = 0;
+        c->eax = 0;
+        break;
+    }
+    case 0x0F: {                        /* a mapping closed: [0] its number; [1] -> 0Dh's
+                                           [2] given back */
+        struct fobj *f;
+        b = BLK(c);
+        f = fobj_of(b[0]);
+        if (f) {
+            if (f->dos) {
+                vu32 psp = task_psp_in();
+                dos(0x3E00, f->dos, 0, 0, NULL);
+                task_psp_out(psp);
+                f->dos = 0;
+            }
+            if (b[1]) *(vu32 *)b[1] = f->back;
+            f->closed = 1;
+            if (!f->nviews) fobj_free(f);
+        }
         c->eax = 0;
         break;
     }
@@ -685,13 +828,31 @@ void __cdecl w32s_api(struct vregs *r)
                                            header, [3] the path, [5] the base, all Win32),
                                            EDI the PE header, ECX its number; EDX the
                                            process's record */
-        vu32 i, j;
+        vu32 i, j, rva, nsec;
         const char *path;
         const vu32 *rec = (const vu32 *)W32LIN(c->esi);
+        const vu8 *pe = (const vu8 *)W32LIN(c->edi), *sec;
         for (i = 0; i < NIMG && img[i].size; i++) ;
         if (i == NIMG) i = 0;
+        if (img[i].rel) vmm_heap_free((vu32)img[i].rel, 0);
+        img[i].rel = NULL;
         img[i].base = W32LIN(rec[5]);
-        img[i].size = *(const vu32 *)(W32LIN(c->edi) + 0x50);     /* SizeOfImage */
+        img[i].size = *(const vu32 *)(pe + 0x50);                   /* SizeOfImage */
+        img[i].delta = rec[5] - *(const vu32 *)(pe + 0x34);         /* - ImageBase */
+        /* the base relocations' directory (entry 5) and its place in the file */
+        img[i].roff = img[i].rsize = 0;
+        rva = *(const vu32 *)(pe + 0x74) > 5 ? *(const vu32 *)(pe + 0xA0) : 0;
+        nsec = *(const vu16 *)(pe + 6);
+        sec = pe + 0x18 + *(const vu16 *)(pe + 0x14);
+        for (j = 0; rva && j < nsec; j++, sec += 40) {
+            vu32 va = *(const vu32 *)(sec + 12), raw = *(const vu32 *)(sec + 16);
+            if (rva >= va && rva - va < raw) {
+                img[i].roff = *(const vu32 *)(sec + 20) + (rva - va);
+                img[i].rsize = *(const vu32 *)(pe + 0xA4);
+                if (img[i].rsize > raw - (rva - va)) img[i].rsize = raw - (rva - va);
+                break;
+            }
+        }
         path = (const char *)W32LIN(rec[3]);
         for (j = 0; j < sizeof img[i].path - 1 && path[j]; j++) img[i].path[j] = path[j];
         img[i].path[j] = 0;
@@ -700,6 +861,10 @@ void __cdecl w32s_api(struct vregs *r)
             thex(img[i].base);
             tput(" size ");
             thex(img[i].size);
+            tput(" delta ");
+            thex(img[i].delta);
+            tput(" relocs ");
+            thex(img[i].rsize);
             tput(" ");
             tput(img[i].path);
             tend();
@@ -724,6 +889,7 @@ void __cdecl w32s_api(struct vregs *r)
             CF_SET(c);
             break;
         }
+        relocate(m, c->edx - m->base, c->ecx > raw ? c->ecx : raw);
         c->eax = 0;
         break;
     }
@@ -793,7 +959,12 @@ void __cdecl w32s_service(struct vregs *r)
 void __cdecl w32s_control(struct vregs *r)
 {
     if (r->eax == DEVICE_INIT) {
+        /* 16 entries past the VMM's window, at least 220h: Windows 3.1's
+         * W32S.386 put it at 88000000h with 16 MB (16 entries past the
+         * first free one after the system arena's); the same address
+         * keeps W32M's log comparable */
         arena_pde = L->window_end_pde + 16;
+        if (arena_pde < 0x220) arena_pde = 0x220;
         trace_on = L->trace != 0;
         tput("W32S: w16's device, arena at ");
         thex(arena_pde << 22);
