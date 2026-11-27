@@ -8,10 +8,11 @@
 %include "vxdrt.inc"
 
 segment _TEXT public align=16 class=CODE use32 flat
-global VXY_DDB, _vxy_hook, _vxy_stepping, _vxy_bp, _vmm_profile_hex, _vxy_thunk, _vxy_next
+global VXY_DDB, _VXY_DDB, _vxy_hook, _vxy_stepping, _vxy_bp, _vmm_profile_hex, _vxy_thunk, _vxy_next
 global _vxy_pf_on, _vxy_pf_armed
-extern _vxy_step, _vxy_break, _vxy_called, _vxy_returned, _vxy_pf, _vxy_pf_step
+extern _vxy_int1, _vxy_called, _vxy_returned, _vxy_pf
 VXY_DDB:
+_VXY_DDB:
         dd 0
         dw 030Ah
         dw 0                    ; Undefined_Device_ID
@@ -37,7 +38,6 @@ _vxy_pf_on:     dd 0
 _vxy_pf_armed:  dd 0
 old_int14:      dd 0
                 dw 0
-pf_err:         dd 0
 
 ; vxy_hook(): the debug exception's and the page fault's IDT gates to
 ; vxy_int1 and vxy_int14, the old ones kept
@@ -73,58 +73,59 @@ _vxy_hook:
         mov [ebx+2], ax
         ret
 
+; the page fault and the debug exception: from V86 mode or ring 3 (DS
+; may be null there) straight on to the VMM's handlers; from ring 0 the C
+; side with DS and ES set from SS (the VMM's flat data)
 vxy_int14:
-        cmp dword [_vxy_pf_on], 0
+        test dword [esp+12], 20000h     ; (error code, EIP, CS, EFLAGS)
+        jnz .chain
+        test byte [esp+8], 3
+        jnz .chain
+        cmp dword [cs:_vxy_pf_on], 0
         je .chain
-        pop dword [pf_err]
         pushad
+        push ds
+        push es
+        mov ax, ss
+        mov ds, ax
+        mov es, ax
         cld
-        push dword [pf_err]
-        lea eax, [esp+4]
+        lea eax, [esp+8]
         push eax
-        call _vxy_pf
-        add esp, 8
+        call _vxy_pf                    ; (struct pfframe *): 1 ours
+        add esp, 4
+        pop es
+        pop ds
         test eax, eax
         popad
-        jz .no
+        jz .chain
+        add esp, 4                      ; (the error code)
         iretd
-.no:    push dword [pf_err]
-.chain: jmp far [old_int14]
+.chain: jmp far [cs:old_int14]
 
 vxy_int1:
-        cmp dword [_vxy_pf_armed], 0
-        je .st
+        test dword [esp+8], 20000h      ; (EIP, CS, EFLAGS)
+        jnz .chain
+        test byte [esp+4], 3
+        jnz .chain
         pushad
+        push ds
+        push es
+        mov ax, ss
+        mov ds, ax
+        mov es, ax
         cld
-        push esp
-        call _vxy_pf_step
-        add esp, 4
-        popad
-        iretd
-.st:    cmp dword [_vxy_stepping], 0
-        je .bp
-        pushad
-        cld
-        push esp
-        call _vxy_step
-        add esp, 4
-        popad
-        iretd
-.bp:    cmp dword [_vxy_bp], 0
-        je .chain
+        lea eax, [esp+8]
         push eax
-        mov eax, dr6
-        test al, 1                      ; DR0's
-        pop eax
-        jz .chain
-        pushad
-        cld
-        push esp
-        call _vxy_break
+        call _vxy_int1                  ; (struct sframe *): 1 handled
         add esp, 4
+        pop es
+        pop ds
+        test eax, eax
         popad
+        jz .chain
         iretd
-.chain: jmp far [old_int1]
+.chain: jmp far [cs:old_int1]
 
 ; a procedure pointer's new target (VXYHook): vxy_called(struct vregs *)
 ; with the registers and flags as they came, then on to vxy_next
@@ -156,6 +157,76 @@ vxy_after:
         mov [esp+36], eax
         popad
         popfd
+        ret
+
+; the hooked services (VXYSvc): stub i pushes i and comes to svc_common
+; with the caller's return address above it; vxy_svc_called(struct
+; svcregs *) logs the call and may point the return at svc_after; then on
+; to the previous procedure, the registers and flags as they came
+global _vxy_svc_prev, _vxy_svc_stub, _vxy_svc_after_addr, _vmm_hook_service
+extern _vxy_svc_called, _vxy_svc_returned
+_vxy_svc_prev:  times 16 dd 0
+_vxy_svc_stub:
+%assign i 0
+%rep 16
+        dd svc_stub_ %+ i
+%assign i i+1
+%endrep
+_vxy_svc_after_addr: dd svc_after
+%assign i 0
+%rep 16
+svc_stub_ %+ i:
+        push dword i
+        jmp svc_common
+%assign i i+1
+%endrep
+svc_common:
+        pushfd
+        pushad
+        cld
+        push esp
+        call _vxy_svc_called
+        add esp, 4
+        popad
+        popfd
+        xchg eax, [esp]                 ; (the index; flags kept)
+        mov eax, [_vxy_svc_prev + eax * 4]
+        xchg eax, [esp]
+        ret
+svc_after:
+        push eax                        ; (the return address)
+        pushfd
+        pushad
+        cld
+        lea eax, [esp + 36]             ; where the return address was
+        push eax
+        lea eax, [esp + 4]
+        push eax
+        call _vxy_svc_returned
+        add esp, 8
+        mov [esp+36], eax
+        popad
+        popfd
+        ret
+
+; vu32 vmm_hook_service(vu32 id, vu32 proc): Hook_Device_Service; the
+; previous procedure, 0 when it failed
+_vmm_hook_service:
+        push ebx
+        push esi
+        push edi
+        push ebp
+        mov eax, [esp+20]
+        mov esi, [esp+24]
+        int 20h
+        dd 00010090h
+        mov eax, esi
+        jnc .ok
+        xor eax, eax
+.ok:    pop ebp
+        pop edi
+        pop esi
+        pop ebx
         ret
 
 ; vu32 vmm_profile_hex(vu32 deflt, const char *key): Get_Profile_Hex_Int
