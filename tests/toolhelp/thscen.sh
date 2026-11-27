@@ -9,7 +9,7 @@
 #                                   [-g "GROUPS"] [-j JOBS] [-c "A:B ..."] [-r RUNS]
 # SYSTEMS: thrun.sh's (default "ref286 ref386 ref3 tree286 tree386");
 # LIBS: ms w16 (default both); GROUPS: section letters per boot (default
-# "e g l mtc s i r n x k"); -c pairs of runs to compare, LIB-SYSTEM:
+# "e g h l mtc s i r n x k d"); -c pairs of runs to compare, LIB-SYSTEM:
 # LIB-SYSTEM (default: each system's ms against its w16, and w16-tree286
 # against ms-ref286, w16-tree386 against ms-ref386). -r "LIB-SYSTEM ...":
 # these runs only, instead of every SYSTEM with every LIB.
@@ -18,7 +18,7 @@ unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/../.." && pwd)
 out=$root/build/thscen-$(date +%Y%m%d-%H%M%S)
 systems="ref286 ref386 ref3 tree286 tree386" libs="ms w16" runs=
-groups="e g l mtc s i r n x k d" jobs=${THSCEN_JOBS:-12} pairs=
+groups="e g h l mtc s i r n x k d" jobs=${THSCEN_JOBS:-12} pairs=
 while getopts o:s:l:g:j:c:r: opt; do
     case $opt in
     o) out=$OPTARG ;; s) systems=$OPTARG ;; l) libs=$OPTARG ;;

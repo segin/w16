@@ -17,7 +17,8 @@
  * w16's on one KERNEL). Lines starting with "#" are notes, never compared.
  *
  * Sections (C:\THP.ARG, letters; default all): e entry checks (dwSize,
- * NULL pointers, GlobalHandleToSel), g global heap, l local heaps, m
+ * NULL pointers, GlobalHandleToSel), g global heap, h the global heap grown
+ * (2400 blocks: KRNL386 moves its arenas), l local heaps, m
  * modules, t tasks, s stack traces, c classes, i information
  * (SystemHeapInfo, MemManInfo, TimerCount), r MemoryRead/Write, n
  * notifications, x interrupts and faults, k task control (TaskGetCSIP,
@@ -38,7 +39,7 @@ static HINSTANCE th;                    /* TOOLHELP */
 static HMODULE hk, hu, hg, hme;
 static HTASK me;
 static WORD dsel;                       /* our DGROUP */
-static char arg[40] = "egmltscirnxkd";
+static char arg[40] = "eghmltscirnxkd";
 
 /* ---- logging (no C runtime: -zl) ---- */
 /* the log is written in pieces of up to 4 KB (lflush before anything
@@ -897,6 +898,59 @@ static void lwalk(const char *what, WORD heap, HLOCAL FAR *known, int nk, int al
     for (i = 0; i < 40; i++)
         if (types[i])
             lg("%%walk %s: type %u: %u", (LPSTR)what, i == 39 ? 0xFF : i, types[i]);
+}
+
+/* Section h: walks of the global heap before and after it has grown by
+   2400 blocks (more than KRNL386's first room for arenas: w16's KERNEL
+   then moves the Burgermaster, its selector staying) and after they are
+   freed. w16's TOOLHELP had kept the Burgermaster's linear address from
+   the first walk and read freed pages afterwards: the VM Task Manager's
+   page fault (the user's report, 2026-11-27). */
+#define HGROW 2400
+static WORD own_blocks(WORD *n)
+{
+    GLOBALENTRY ge;
+    WORD own = 0;
+    BOOL more;
+    *n = 0;
+    pat(&ge, sizeof ge);
+    ge.dwSize = sizeof ge;
+    bulk = 1;
+    for (more = pGlobalFirst(&ge, GLOBAL_ALL); more && *n < 8000; more = pGlobalNext(&ge, GLOBAL_ALL)) {
+        (*n)++;
+        if ((WORD)ge.hOwner == (WORD)me && ge.wType != GT_FREE)
+            own++;
+    }
+    bulk = 0;
+    return own;
+}
+
+static void t_grow(void)
+{
+    static HGLOBAL h[HGROW];
+    WORD i, got = 0, n0, n1, n2, own0, own1, own2, found = 0;
+    GLOBALENTRY ge;
+    lg("== h the heap grown");
+    own0 = own_blocks(&n0);
+    for (i = 0; i < HGROW; i++)
+        if ((h[i] = GlobalAlloc(GMEM_MOVEABLE, 32)) != 0)
+            got++;
+    lg("allocated: %d", got == HGROW);
+    own1 = own_blocks(&n1);
+    lg("walk after: ours %d", own1 == own0 + got);
+    for (i = 0; i < HGROW; i++) {
+        pat(&ge, sizeof ge);
+        ge.dwSize = sizeof ge;
+        if (h[i] && pGlobalEntryHandle(&ge, (WORD)h[i]) && ge.hBlock == h[i] && ge.dwBlockSize >= 32)
+            found++;
+    }
+    lg("GlobalEntryHandle: each found %d", found == got);
+    for (i = 0; i < HGROW; i++)
+        if (h[i])
+            GlobalFree(h[i]);
+    own2 = own_blocks(&n2);
+    lg("walk after freeing: ours as before %d", own2 == own0);
+    lg("# h: blocks %u, %u, %u; ours %u, %u, %u", n0, n1, n2, own0, own1, own2);
 }
 
 static WORD gdi_types(WORD heap, WORD FAR *t)
@@ -2279,6 +2333,7 @@ int __cdecl __far tmain(void)
         switch (*a) {
         case 'e': t_entry(); break;
         case 'g': t_global(); break;
+        case 'h': t_grow(); break;
         case 'l': t_local(); break;
         case 'm': t_modules(); break;
         case 't': t_tasks(); break;
