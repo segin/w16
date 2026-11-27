@@ -1013,6 +1013,17 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_SHOWWINDOW:
         return 0;
+    case WM_SETREDRAW:
+        /* WS_VISIBLE taken away or given back, nothing drawn or
+           invalidated either way (US33 rd on 3.1: off, IsWindowVisible
+           is FALSE, InvalidateRect and SetScrollPos leave the pixels and
+           no update region; on, the window visible again with its old
+           pixels) */
+        if (wp)
+            w->style |= WS_VISIBLE;
+        else
+            w->style &= ~WS_VISIBLE;
+        return 0;
     case WM_CTLCOLOR:
         return def_ctlcolor((HDC)wp, HIWORD(lp));
     case WM_GETMINMAXINFO:

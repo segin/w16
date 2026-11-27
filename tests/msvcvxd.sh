@@ -57,7 +57,8 @@
 #          caption, menu and tool bar, as for wps).
 #   heapwalk  HeapWalk (BIN\HEAPWALK.EXE, TOOLHELP's global heap walk) the
 #          same way: no fault, its window (caption, menu bar) there as
-#          under 3.1.
+#          under 3.1, and its list painted within twice 3.1's time and
+#          4 s more (a screenshot every second).
 # Visual C++ is not w16's: nothing of it is committed. boot and cvw take
 # the installed C:\MSVC directory from $W16_MSVC_DIR (default
 # ~/Downloads/msvc152/MSVC; boot needs BIN's four .386 files, cvw BIN's
@@ -286,10 +287,13 @@ wps|ole2view|heapwalk)
     # (the paths have no blanks: the MSVC directory's files are listed
     # word by word above too)
     # shellcheck disable=SC2046
-    DROPIN_FIXED=1 run $part-ref -r -3 -c "WIN /3" -t 60 -s "$out/$part-ref.png" \
+    # HeapWalk: a screenshot every second, to time its list's first paint
+    shots=
+    [ $part = heapwalk ] && shots=$(seq -s ' ' 2 58)
+    DROPIN_SHOTS=$shots DROPIN_FIXED=1 run $part-ref -r -3 -c "WIN /3" -t 60 -s "$out/$part-ref.png" \
         -i "WIN.INI:windows:run=C:\\MSVC\\BIN\\$prog" "$@" $(sysf WINDOWS) &
     # shellcheck disable=SC2046
-    DROPIN_FIXED=1 run $part-w16 -T "$root/build/w16" -3 -c "WIN /3 /B" -t 60 -s "$out/$part-w16.png" \
+    DROPIN_SHOTS=$shots DROPIN_FIXED=1 run $part-w16 -T "$root/build/w16" -3 -c "WIN /3 /B" -t 60 -s "$out/$part-w16.png" \
         -i "WIN.INI:windows:run=C:\\MSVC\\BIN\\$prog" "$@" $(sysf W16) &
     wait
     r=ok
@@ -318,6 +322,27 @@ wps|ole2view|heapwalk)
         r="no $prog window under Windows 3.1 ($out/$part-ref.png)"
     elif [ "$r" = ok ] && { [ $(( (nw - nr) * 20 )) -gt "$nr" ] || [ $(( (nr - nw) * 20 )) -gt "$nr" ]; }; then
         r="$prog's window is not there as under Windows 3.1: $nw caption pixels, 3.1 $nr ($out/$part-w16.png)"
+    fi
+    # HeapWalk's list painted (its column headings and first line, two
+    # rows of #0000AA under the menu bar): the first second it shows,
+    # under 3.1 and on w16. It took 35 s on a user's tree with Visual
+    # C++'s groups (w16's list box drew its scroll bar for each item
+    # added with redraw off); 3.1 took about 2.
+    if [ "$r" = ok ] && [ $part = heapwalk ]; then
+        for s in ref w16; do
+            t=none
+            for i in $shots; do
+                magick "$out/$part-$s-$i.png" -crop 640x26+0+42 +repage "$out/$part-$s-list.png" 2>/dev/null || continue
+                [ "$(blue "$out/$part-$s-list.png")" -ge 12000 ] && { t=$i; break; }
+            done
+            eval "t_$s=\$t"
+        done
+        echo "     heapwalk: list painted after $t_ref s under 3.1, $t_w16 s on w16"
+        if [ "$t_ref" = none ]; then
+            r="HeapWalk's list never painted under Windows 3.1 ($out/$part-ref-*.png)"
+        elif [ "$t_w16" = none ] || [ "$t_w16" -gt $((t_ref * 2 + 4)) ]; then
+            r="HeapWalk's list painted after $t_w16 s on w16, $t_ref s under 3.1 ($out/$part-w16-*.png)"
+        fi
     fi
     if [ "$r" = ok ]; then echo "ok   $part: $prog comes up on w16's tree as on Windows 3.1"
     else echo "FAIL $part: $r"; fails=$((fails + 1)); fi ;;
