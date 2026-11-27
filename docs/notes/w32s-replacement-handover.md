@@ -45,20 +45,27 @@ Done:
 - The interop page / oracle (e0d9eb8) reverted. Master's memory-services
   audit merged (it took 12.19; W32S is 12.20).
 
-Where Freecell gets on w16's tree (build/w32t, `fct.sh`): WIN32S16 and
-W32SKRNL start, FREECELL.EXE, CARDS.DLL and Win32s's system DLLs load
-(sections read by 02h), relocations and imports run (08h), then the
-file-mapping path (0Dh..) and a page fault in CARDS.DLL's code writing to
-77E8xxxxh (an unresolved import: NT's bound address) ends Windows via
-KERNEL's fault report. Last seen: 0Dh's lseek on the DOS handle it is
-given returns 0 (wrong handle or PSP); being traced (t13: the handle and
-the task's DOS opens with int21log).
+Where it stands (12.20 "Where it stands"): on w16's tree with Win32s,
+WIN32S16 and W32SKRNL start on w16's device, images and DLLs load, the
+NLS files are mapped, then the program's own code faults because its
+relocations were not applied (W32M reads 0x403090 = its preferred base
+0x400000 + 3090h while loaded at 85040000h Win32; Freecell's CARDS.DLL
+writes 77E8xxxxh). 0Dh's DOS handle is block [6] ([1] only happened to
+equal it on 3.1).
+
+Hand runs: `build/fct.sh NAME -p 386 -i w16:vmmtrace=1` (Freecell from
+WIN.INI run=; DOSBox-X drops letters typed into File > Run), W32M:
+`... -f build/W32M.EXE=W32M.EXE -i "WIN.INI:windows:run=C:\W32M.EXE"`;
+`build/mktree.sh` makes build/w32t (this build's tree + Win32s's files
+from the w16-w32s2 run's fc.t); copy a new WIN386.EXE/KRNL386.EXE into
+build/w32t/SYSTEM after a sync. 3.1 reference of W32M: run `vx6.sh` with
+VXY=none (log in the handover's run dir, build/m31r/c/W32M.LOG).
 
 Open (next steps, in order):
-1. The file-mapping contract: 0Dh's block [1] is the DOS handle (5 on
-   3.1, FREECELL's), the size came from lseek 4202h in the task's PSP;
-   on 3.1 the mapped bytes are read when the view is touched (13h only
-   marks pages). Check the handle under w16, then the view's contents.
+1. Relocations: find what W32SKRNL decides from 06h at an image's
+   preferred base (linear 3F0000h: refused, below 4 MB) and whether 3.1
+   gave it; VXY's 06h calls with VXYApiDeref on W32M under 3.1 show what
+   came back. Then check the mapped NLS views' contents.
 2. Freecell on 3.1 with w16's KRNL386 (Microsoft's WIN386) still ends:
    a 16-bit function reached through a Win32s thunk runs on a 16-bit
    alias of the Win32 stack (SS base 881B8000h) and its SP wraps past 0

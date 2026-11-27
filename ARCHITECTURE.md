@@ -1771,8 +1771,11 @@ The user's roadmap: (1) Microsoft's W32S.386 on w16's VMM, stopped (12.18); (2) 
 | 04h | 32-bit | block: [11] the image's path (Win32), [13] its base (Win32), [9] its PE header; EDI the PE header; ECX the image's number | EAX a record of W32S.386's (its heap) | registers an image (later read on demand from its file) |
 | 02h | 32-bit | EDX a section's linear address, ECX its virtual size, EDI its raw size, ESI its header (Win32) | EAX 0 | a section to be read from the image's file; 3.1 marks the pages to be read when touched (PTE type 2, not present, supervisor) |
 | 05h | 32-bit | EDX the image's linear base, ESI its Win32 one, EDI its number | EAX 1 | unloads an image |
-| 0Dh, 0Fh | 32-bit | block (a DOS handle, offsets) | | DOS file I/O for Win32 code, by nested execution (Exec_Int INT 21h 42h/3Fh/3Eh with the DOS block as PSP) |
-| 11h, 12h, 13h | 32-bit | block (a file mapping) | | file mappings: 11h maps a view (pages from the VMM, a page table of its own), 13h reads the file into it, 12h unmaps |
+| 0Dh | 32-bit | ESI the client's key (the code page of an .NLS file: 4E4h, 1B5h), block [6] the program's DOS handle, [7] its PSP's selector, [0] a structure | [0]'s first dword 1 | a file to map (Win32s's NLS tables at a process's start): DOS 4201h/4202h/4200h on the handle (its size), then a duplicate (4500h) kept by W32S.386 in WIN32S16's DOS block as PSP |
+| 11h | 32-bit | block [2], [5] structures | [2]'s first dword the view's linear address; [5]'s third and fourth its size and address | a view of the file: pages of the VMM's, in W32S.386's page tables (not present: read on first touch) |
+| 13h | 32-bit | ESI the key, block [14] the view | [13] the bytes mapped | the view's pages marked to be read from the file (3.1 reads them when touched) |
+| 12h | 32-bit | block [2] the view | | the view gone (pages freed) |
+| 0Fh | 32-bit | block [1] a structure whose first dword is the key | that dword 0 | the mapping closed: DOS 3Eh on W32S.386's handle (in its DOS block's PSP) |
 | 1Fh | 32-bit | | EAX 0 | once at a process's start (DOS calls): UNVERIFIED |
 | 14h, 15h | 32-bit, after an exception | EBX a thread record, ESI a CONTEXT (Win32), EDX its linear address, ECX 0/1/3; 15h EDX 0/1 | the CONTEXT's debug registers and the faulting state; 15h the FPU state saved/restored | the context of an exception (UNVERIFIED in detail) |
 | 0Bh | 32-bit and WIN32S16 | | | at a process's end |
@@ -1783,7 +1786,10 @@ The user's roadmap: (1) Microsoft's W32S.386 on w16's VMM, stopped (12.18); (2) 
 - Reservations of 64 KB granularity, in page directory entries of its own from 16 entries past the VMM's window (85000000h with 16 MB) or at the address asked; memory of the system (80000000h) from 64 MB further on.
 - Page table entries: the 386's bits and two of the system's (200h reserved, 400h committed, its frame a physical page of the VMM's, also when PAGE_NOACCESS makes it not present); committed pages get a zeroed physical page at once (not paged yet).
 - An image's section (02h) is read from the image's file (04h's path) through DOS by nested execution in the System VM, at once.
-- Functions done: 00h, 01h, 02h, 04h, 06h, 08h, 0Ah, 16h, 1Ah, 1Dh; the rest are traced (`[w16] vmmtrace=1`) and fail with carry.
+- File mappings (0Dh, 11h, 13h, 12h, 0Fh): the duplicate handle is kept in the program's own PSP (DOS's current one is set to it around the device's DOS calls: w16's KERNEL switches DOS's PSP only at a task's next INT 21h), a view's bytes are read at once.
+- Page faults (Hook_PM_Fault 0Eh): a reserved page of a reservation made with access, or the page below a stack's committed top, is committed when touched and the client goes on (3.1's W32S.386 commits such pages from its pager); others go on to the next handler.
+- Functions done: 00h, 01h, 02h, 04h, 05h, 06h, 07h, 08h, 09h, 0Ah, 0Dh, 0Fh, 11h, 12h, 13h, 16h, 1Ah, 1Dh; 0Bh, 14h, 15h and 1Fh are answered without effect; the rest are traced (`[w16] vmmtrace=1`) and fail with carry.
+- Where it stands (2026-11-27): on w16's tree with Win32s 1.30c's files (its Setup's result), WIN32S16 and W32SKRNL start on w16's device, the program's image, its DLLs and Win32s's own load (02h), relocations and imports run (08h), the NLS files are mapped (0Dh..0Fh). Then the program's own code faults: W32M.EXE reads 0x403090, an address of its preferred base (0x400000) although it was loaded at 85040000h (Win32): its relocations were not applied; Freecell's CARDS.DLL writes to 77E8xxxxh (an NT address bound in its imports). On 3.1 both run relocated (W32M at 887xxxxxh, Freecell at 88040000h). Open: why W32SKRNL skips them on w16's device (a reservation at the preferred base, linear 3F0000h, is refused: below 4 MB is the VM's; what W32SKRNL concludes from that). W32M.EXE's log under 3.1 is the reference for the next case (`tests/win32s/w32m.c`; its exception section, run with "x", hangs on 3.1 itself).
 
 ### 12.19 The memory, paging and page-hooking services
 
