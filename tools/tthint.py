@@ -488,6 +488,9 @@ class Hinter:
                     continue
                 segs.append((base + i, base + j, x0, y0, x1, y1, dx / ln, dy / ln, ln))
             base += n
+        allp = [p for c in contours for p in c]
+        xmid = (min(p[0] for p in allp) + max(p[0] for p in allp)) / 2
+        ymid = (min(p[1] for p in allp) + max(p[1] for p in allp)) / 2
         code = b''
         used = set()
         for a in segs:
@@ -517,17 +520,40 @@ class Hinter:
             if best is None:
                 continue
             w, b = best
-            pa, pb = a[0], (b[0], b[1])
-            if pa in touched or pb[0] in touched or pb[1] in touched:
-                continue
             used |= {id(a), id(b)}
+            # the outer edge (farther from the glyph's middle) stays and
+            # is rounded at its end farther from the middle in y, the
+            # inner one moves: the glyph keeps its width and the stroke
+            # sits on whole pixels (moving the outer edge widened v and
+            # ran it into the next letter)
+            if abs((b[2] + b[4]) / 2 - xmid) > abs((a[2] + a[4]) / 2 - xmid):
+                a, b = b, a
+            pa = a[0] if abs(a[3] - ymid) >= abs(a[5] - ymid) else a[1]
+            pb = (b[0], b[1])
+            # (an end both strokes share, v's crotch, moves with the first)
+            pb = [q for q in pb if q not in touched]
+            if pa in touched or not pb:
+                continue
+            # ends cut level (v's top: the two corners on one line): the
+            # inner corner at the rounded width across x from the outer
+            # one, a pixel at least, as exact as a stroke can be
+            ys = {a[0]: a[3], a[1]: a[5], b[0]: b[3], b[1]: b[5]}
+            level = [(p, q) for p in (a[0], a[1]) for q in pb if abs(ys[p] - ys[q]) <= 1]
+            if level and all(p not in touched for p, q in level):
+                for p, q in level:
+                    code += push([p]) + bytes([MDAP_R]) + push([q]) + bytes([MDRP_LINK])
+                    touched |= {p, q}
+                continue
             cos = abs(a[7])
             c = self._diag_cvt(w, cos)
-            code += push([pa]) + bytes([0x2E])                         # MDAP[0]: touch
+            code += push([pa]) + bytes([MDAP_R])                       # round its end
             code += push([a[0], a[1]]) + bytes([0x07, 0x05])           # SPVTL[1], SFVTCA[x]
-            code += push([pa]) + bytes([SRP0]) + push([pb[1], c, pb[0], c]) + bytes([0xE0, 0xE0])
+            seq = []
+            for q in pb:
+                seq = [q, c] + seq
+            code += push([pa]) + bytes([SRP0]) + push(seq) + bytes([0xE0] * len(pb))
             code += bytes([SVTCA_X])
-            touched |= {pa, pb[0], pb[1]}
+            touched |= {pa} | set(pb)
         return code
 
     def _xaxis(self, contours, advance=None):

@@ -709,7 +709,10 @@ def s_curve(s, L, R, y0, y1, wv, wh, caps=True, cut=0):
            (R - wv / 2 - w * 0.0, y0 + h * 0.265),
            (cx - w * 0.02, y0 + wh / 2),
            (L + wv * 0.45, y0 + h * 0.24)]
-    tans = [(-0.55, 1), (-1, 0), (0, -1), (1, -0.45 * h / w), (0, -1), (-1, 0), (-0.55, 1)]
+    # the spine crosses the middle nearly level (under 1:8), so that its
+    # edges are hinted as a bar: crossing at a slope, it fell across two
+    # rows and made s and S the darkest letters at 9-10 pt
+    tans = [(-0.55, 1), (-1, 0), (0, -1), (1, -0.08 * h / w), (0, -1), (-1, 0), (-0.55, 1)]
     if s.sans:
         c0, c1 = cut, cut
     else:
