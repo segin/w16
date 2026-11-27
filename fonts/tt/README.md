@@ -16,18 +16,23 @@ faces. The outlines are w16's own. Design and method: ARCHITECTURE.md 6.9.3.
 
 Repertoire: ISO 8859-15 (Latin-9), plus `.notdef`, `.null` and CR; one
 (3,1) format 4 cmap, which also maps U+2219 to the middle dot (Windows 3.1
-looks up ANSI 0xB7 as U+2219). Hinted by w16's own autohinter
-(`tools/ttautohint.py`, engine `tools/tthint.py`, TrueType 1.0
-instructions only): blue zones, standard stem widths, stems linked with a
-minimum distance, dropout control, gasp. `hdmx` and `VDMX` hold 3.1's
-device widths and per-size ascent/descent, so layout matches at screen
-sizes too. `python3 tools/ttmono.py OUT.png X.TTF...` renders black-and-
-white specimens with FreeType's TrueType interpreter.
+looks up ANSI 0xB7 as U+2219). Every face carries its own TrueType
+instructions (fpgm, prep, cvt, a program per glyph), generated from the
+outlines by `tools/tthint.py` (TrueType 1.0 instructions only): blue
+zones, stems of one kind alike, diagonal strokes a stem wide across each
+row, the ink kept inside its advance, dropout control. At 8-48 pixels per
+em the prep program sets the x-height, cap height, ascender, descender
+and stem widths the matching Microsoft face shows at that size
+(`screen.txt`), and the advance widths are hinted to 3.1's device widths
+(hdmx), which 3.1's TextOut sets text by (head flags bit 4). `hdmx` and
+`VDMX` hold 3.1's device widths and per-size ascent/descent, so layout
+matches at screen sizes too.
 
 Files here:
 
 - `design.py`: the glyph designs, as geometry (stems, bars, superelliptic
   bowls and arcs, stroked splines, serifs) in parameters of each face.
+- `screen.txt`: the screen heights and stem widths per size (above).
 - built by `tools/ttgen.py` (with `tools/ttgeom.py`, the outline engine,
   and `tools/w16ttf.py`, the TrueType writer and checker); the .FOT files
   by `tools/mkfot.py`.
