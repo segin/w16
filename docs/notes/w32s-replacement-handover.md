@@ -76,3 +76,13 @@ Open (next steps, in order):
    exception section hangs on 3.1 itself.
 4. Tests: a boot-test case for the device (W32M's log under both, the
    API's deterministic answers), the win32s case's open lines.
+
+## Test state (2026-11-27, at "Tests: win32s's summary line ...")
+
+installation-05, `tools/remote-test.sh -n w16-w32srepl-t`: make test passes;
+full boot test 196 ok, 1 failure: lzexpand quirks (fails on master the
+same). Targeted run before it (win32s pestart vmprobe ver bigmem holdbtn
+vdmad toolhelp win386 win386dos win386two win386tree msvc msvccl
+win386dpmi kernel k386): all ok but holdbtn (timing; ok on rerun).
+win32s: k386, treems and tree ok (tree: Setup installs and Windows
+restarts with w16's W32S); Freecell's lines still open in all three.
