@@ -44,7 +44,7 @@ extern void __far *xms_entry;
 
 static struct w386_info info;
 static char refstk[W386_REFSTK_SIZE + 16]; /* V86 stack for interrupts reflected from PM */
-static unsigned char pmbp[448];      /* PMBP_COUNT (win386/vmm/vmm.h) */
+static unsigned char pmbp[456];      /* PMBP_COUNT (win386/vmm/vmm.h) */
 static char xbuf[16384 + 16];       /* DOS calls from PM copy through this */     /* PM breakpoints: HLT (F4h), privileged at ring 3 */
 static char ownpath[128], sysdir[128], inipath[128], krnlpath[128];
 static unsigned xms_handle;
@@ -1045,6 +1045,23 @@ int main(int argc, char **argv)
     /* its size (MS-DOS 4.00: CX the part swapped while in DOS, DX the
      * part always swapped; a DOS VM gets a copy of its own) */
     info.sda_size = r.x.cflag ? 0 : (r.x.cx > r.x.dx ? r.x.cx : r.x.dx);
+    {   /* the current directory structure: LASTDRIVE entries of 58h bytes
+         * (MS-DOS 4.00 and later; 3.x: 51h) at the list of lists' +16h */
+        unsigned char far *lol;
+        unsigned major;
+        r.h.ah = 0x30;
+        intdos(&r, &r);
+        major = r.h.al;
+        r.h.ah = 0x52;
+        sr.es = 0;
+        intdosx(&r, &r, &sr);
+        lol = (unsigned char far *)MK_FP(sr.es, r.x.bx);
+        if (sr.es && *(unsigned long far *)(lol + 0x16)) {
+            unsigned long p = *(unsigned long far *)(lol + 0x16);
+            info.cds_lin = ((p >> 16) << 4) + (p & 0xFFFF);
+            info.cds_size = (unsigned long)lol[0x21] * (major >= 4 ? 0x58 : 0x51);
+        }
+    }
     /* a DOS VM's memory starts after this program's block (its MCB is the
      * paragraph before the PSP; the size at MCB+3), up to the BIOS's
      * memory size (40:13h, KB) */

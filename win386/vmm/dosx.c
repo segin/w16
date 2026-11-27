@@ -16,11 +16,12 @@
 
 extern int dpmi_verbose;
 
-static u32 dta_sel, dta_off;            /* the program's DTA (1Ah) */
-static int dta_set;
+#define dta_sel (cur_vm->dp.dta_sel)    /* the program's DTA (1Ah) */
+#define dta_off (cur_vm->dp.dta_off)
+#define dta_set (cur_vm->dp.dta_set)
 
 #define XB      (xbuf_lin())
-#define XSEG    (info->xbuf_seg)
+#define XSEG    (xbuf_seg())
 
 /* Can V86 DOS address sel:off as it is? (conventional memory) */
 static int direct(u32 sel)
@@ -73,7 +74,7 @@ static int copy_in_str(u32 sel, u32 off, u32 at)
     for (;;) {
         u8 c;
         if (n > 0) {
-            if (!sysvm.client32 && ((off + n) & 0xFFFF) == 0) {
+            if (!cur_vm->client32 && ((off + n) & 0xFFFF) == 0) {
                 s = cl_ptr(sel, 0, 1, 0);
                 if (!s) return -1;
                 lin = (u32)s;
@@ -88,6 +89,7 @@ static int copy_in_str(u32 sel, u32 off, u32 at)
         n++;
     }
     *(u8 *)(XB + at + n) = 0;
+    if (dpmi_verbose) trace("{'%s'}", (char *)(XB + at));
     return (int)n;
 }
 
@@ -96,7 +98,7 @@ static int copy_in_str(u32 sel, u32 off, u32 at)
 static u8 *cptr(struct cregs *r, u32 sel, u32 off, u32 n, int write)
 {
     (void)r;
-    if (!sysvm.client32 && (off & 0xFFFF) + n > 0x10000) return NULL;
+    if (!cur_vm->client32 && (off & 0xFFFF) + n > 0x10000) return NULL;
     return cl_ptr(sel, off, n, write);
 }
 
@@ -130,23 +132,34 @@ void dos_pm(struct cregs *r)
 
     switch (ah) {
     case 0x25:                          /* set the protected-mode vector */
-        sysvm.pmvec_sel[al] = r->ds;
-        sysvm.pmvec_off[al] = sysvm.client32 ? r->edx : DX(r);
+        cur_vm->pmvec_sel[al] = r->ds;
+        cur_vm->pmvec_off[al] = cur_vm->client32 ? r->edx : DX(r);
         return;
     case 0x35:                          /* get it */
-        r->es = sysvm.pmvec_sel[al];
-        if (sysvm.client32) r->ebx = sysvm.pmvec_off[al];
-        else SETW(r->ebx, sysvm.pmvec_off[al]);
+        r->es = cur_vm->pmvec_sel[al];
+        if (cur_vm->client32) r->ebx = cur_vm->pmvec_off[al];
+        else SETW(r->ebx, cur_vm->pmvec_off[al]);
         return;
     case 0x1A:                          /* set DTA: the program's, kept here */
         dta_sel = r->ds;
-        dta_off = sysvm.client32 ? r->edx : DX(r);
+        dta_off = cur_vm->client32 ? r->edx : DX(r);
         dta_set = 1;
         return;
     case 0x2F:
-        if (!dta_set) break;            /* DOS's own (the PSP's) until set */
+        if (!dta_set) {                 /* DOS's own (the PSP's) until set */
+            /* in a DOS box as a selector (Windows 3.1, DPMIPRB: the PSP's,
+             * 9Fh, though the caller's ES mapped the same segment) */
+            u32 seg, off, sel;
+            if (cur_vm == &sysvm) break;
+            dos_dta(&seg, &off);
+            sel = seg_to_sel(seg, 0xF2);
+            if (!sel) break;
+            r->es = sel;
+            if (cur_vm->client32) r->ebx = off; else SETW(r->ebx, off);
+            return;
+        }
         r->es = dta_sel;
-        if (sysvm.client32) r->ebx = dta_off;
+        if (cur_vm->client32) r->ebx = dta_off;
         else SETW(r->ebx, dta_off);
         return;
     case 0x09: {                        /* print a $-terminated string */
@@ -191,6 +204,7 @@ void dos_pm(struct cregs *r)
         if ((d = cptr(r, r->ds, r->esi, 64, 1)) == NULL) { bad_ptr(r); return; }
         call21(r, XSEG, 0, 0, 0, 0, K_SI);
         if (!(r->eflags & EFL_CF)) memcpy(d, (void *)XB, 64);
+        if (dpmi_verbose) trace("{cwd '%s'}", (char *)XB);
         return;
     }
     case 0x60: {                        /* truename: DS:SI to ES:DI */
@@ -213,9 +227,13 @@ void dos_pm(struct cregs *r)
         if (dpmi_dosmem(r)) return;
         break;
     case 0x3F: {                        /* read, in pieces */
-        u32 want = CX(r), done = 0, got;
+        /* a 32-bit client's count is ECX and its result all of EAX
+         * (Windows 3.1 in a DOS box, VXCD.386 under Visual C++'s
+         * DOSXNT: 3F70h with EAX's high word 3 came back as EAX 2; DOSXNT
+         * took w16's 00030002h for a short read and gave up on CL.EXE) */
+        u32 want = cur_vm->client32 ? r->ecx : CX(r), done = 0, got;
         u8 *dst;
-        if (direct(r->ds)) break;
+        if (direct(r->ds) && !cur_vm->client32) break;
         if ((dst = cptr(r, r->ds, r->edx, want, 1)) == NULL) { bad_ptr(r); return; }
         do {
             u32 n = want - done > xbuf_size() ? xbuf_size() : want - done;
@@ -224,7 +242,7 @@ void dos_pm(struct cregs *r)
             SETW(t.ecx, n);
             call21(&t, XSEG, 0, 0, 0, 0, K_DX);
             if (t.eflags & EFL_CF) {
-                if (!done) { *r = t; return; }
+                if (!done) { *r = t; if (cur_vm->client32) r->eax &= 0xFFFF; return; }
                 break;
             }
             got = AX(&t);
@@ -232,14 +250,14 @@ void dos_pm(struct cregs *r)
             done += got;
             if (got < n) break;
         } while (done < want);
-        SETW(r->eax, done);
+        if (cur_vm->client32) r->eax = done; else SETW(r->eax, done);
         r->eflags &= ~EFL_CF;
         return;
     }
     case 0x40: {                        /* write, in pieces (CX=0 truncates: one call) */
-        u32 want = CX(r), done = 0, put;
+        u32 want = cur_vm->client32 ? r->ecx : CX(r), done = 0, put;    /* (as 3Fh) */
         u8 *src;
-        if (direct(r->ds)) break;
+        if (direct(r->ds) && !cur_vm->client32) break;
         if ((src = cptr(r, r->ds, r->edx, want, 0)) == NULL) { bad_ptr(r); return; }
         do {
             u32 n = want - done > xbuf_size() ? xbuf_size() : want - done;
@@ -249,14 +267,14 @@ void dos_pm(struct cregs *r)
             SETW(t.ecx, n);
             call21(&t, XSEG, 0, 0, 0, 0, K_DX);
             if (t.eflags & EFL_CF) {
-                if (!done) { *r = t; return; }
+                if (!done) { *r = t; if (cur_vm->client32) r->eax &= 0xFFFF; return; }
                 break;
             }
             put = AX(&t);
             done += put;
             if (put < n) break;
         } while (done < want);
-        SETW(r->eax, done);
+        if (cur_vm->client32) r->eax = done; else SETW(r->eax, done);
         r->eflags &= ~EFL_CF;
         return;
     }
@@ -367,6 +385,7 @@ void dos_pm(struct cregs *r)
     }
     case 0x50: {                        /* set PSP: a selector */
         int seg = sel_to_seg(BX(r));
+        if (dpmi_verbose) trace("{psp %x base %x seg %x}", BX(r), sel_base(BX(r)), seg);
         if (seg < 0) break;
         v = *r;
         SETW(v.ebx, seg);

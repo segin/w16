@@ -48,12 +48,19 @@
 #          called MFC's WH_CBT hook with its own DS, 3.1 with AX = DS =
 #          ES = SS), and its window must be there as under 3.1 (its
 #          caption, menu and tool bar, as for wps).
+#   cl     CL.EXE, Visual C++'s 32-bit compiler (its passes run under Phar
+#          Lap's DOSXNT.EXE, a DPMI client), compiling and linking a hello
+#          world in a windowed DOS box on the reference install, with
+#          DOSXNT.386 in SYSTEM.INI and without, under Windows 3.1's
+#          WIN386 and w16's (ARCHITECTURE.md 12.16): the program must be
+#          built and say hello, and CL's output must equal Windows 3.1's
+#          (before, w16's boxes had no DPMI host: "Phar Lap err 35").
 # Visual C++ is not w16's: nothing of it is committed. boot and cvw take
 # the installed C:\MSVC directory from $W16_MSVC_DIR (default
 # ~/Downloads/msvc152/MSVC; boot needs BIN's four .386 files, cvw BIN's
 # CVW.EXE and its DLLs too); without it they say so and pass ("skip").
 #
-#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx)
+#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx cl)
 set -u
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -66,7 +73,7 @@ while getopts o: opt; do
     esac
 done
 shift $((OPTIND - 1))
-parts=${*:-vxc boot cvw wx}
+parts=${*:-vxc boot cvw wx cl}
 [ -n "$out" ] || out=$(mktemp -d)
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
@@ -258,6 +265,54 @@ wps|ole2view)
     fi
     if [ "$r" = ok ]; then echo "ok   $part: $prog comes up on w16's tree as on Windows 3.1"
     else echo "FAIL $part: $r"; fails=$((fails + 1)); fi ;;
+cl)
+    [ -n "$(mfile BIN CL.EXE)" ] && [ -n "$(mfile BIN DOSXNT.EXE)" ] && [ -d "$msvc/LIB" ] && [ -d "$msvc/INCLUDE" ] ||
+        { echo "skip cl: no Visual C++ 1.52 compiler at $msvc (W16_MSVC_DIR)"; continue; }
+    set --
+    for d in BIN INCLUDE LIB; do
+        for f in $(cd "$msvc" && find "$d" -type f); do
+            set -- "$@" -f "$msvc/$f=MSVC/$(printf '%s' "$f" | tr a-z A-Z)"
+        done
+    done
+    printf '#include <stdio.h>\r\n\r\nint main(void)\r\n{\r\n    printf("hello, world\\n");\r\n    return 0;\r\n}\r\n' > "$out/HELLO.C"
+    # full paths: on DOSBox's own DOS the current directory is the
+    # emulator's, not in DOS's memory, so no WIN386 can keep one per VM
+    # (w16 keeps DOS's CDS per VM, which real DOS uses): KERNEL's task
+    # switches in the System VM move it under the box
+    printf 'SET PATH=C:\\MSVC\\BIN;C:\\DOS\r\nSET INCLUDE=C:\\MSVC\\INCLUDE\r\nSET LIB=C:\\MSVC\\LIB\r\nSET TMP=C:\\HW\r\nCL /nologo /FoC:\\HW\\HELLO.OBJ /FeC:\\HW\\HELLO.EXE C:\\HW\\HELLO.C > C:\\HW\\CL.TXT\r\nC:\\HW\\HELLO > C:\\HW\\RUN.TXT\r\nECHO done > C:\\HW\\DONE.TXT\r\n' > "$out/HW.BAT"
+    python3 "$root/tools/mkpif.py" "$ref/DOSPRMPT.PIF" "$out/HW.PIF" "title=CL" 'program=C:\HW\HW.BAT' 'dir=C:\HW' \
+        windowed=1 background=1 || exit 2
+    set -- -r -3 -c "WIN /3" -t 360 -W HW/DONE.TXT -f "$out/HELLO.C=HW/HELLO.C" -f "$out/HW.BAT=HW/HW.BAT" \
+        -f "$out/HW.PIF=HW/HW.PIF" -i 'WIN.INI:windows:run=C:\HW\HW.PIF' "$@"
+    x=$(mfile BIN DOSXNT.386)
+    # MSVCVXD_VXCD=1: VXCD.386 logs the box's INT 21h, 2Fh and 31h calls
+    # to COM1 (OUTDIR/cl-ref.log, cl-w16.log)
+    [ -n "${MSVCVXD_VXCD:-}" ] && set -- "$@" -f "$root/build/dos/VXCD.386=WINDOWS/SYSTEM/VXCD.386" \
+        -i '386Enh:+device=VXCD.386'
+    r=ok
+    for k in cl clx; do
+        if [ $k = clx ]; then set -- "$@" -f "$x=MSVC/BIN/DOSXNT.386" -i '386Enh:+device=C:\MSVC\BIN\DOSXNT.386'; fi
+        [ -n "${MSVCVXD_NOREF:-}" ] || DROPIN_NOREDIR=1 run $k-ref "$@" &
+        # shellcheck disable=SC2086
+        DROPIN_NOREDIR=1 run $k-w16 "$@" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE" ${MSVCVXD_W16INI:+-i "$MSVCVXD_W16INI"} &
+        wait
+        for w in ref w16; do
+            for t in CL RUN; do
+                g=$(find "$out/$k-$w" -ipath '*/HW/'$t.TXT | head -1)
+                { tr -d '\r' < "$g"; } > "$out/$k-$w.$t.txt" 2>/dev/null || : > "$out/$k-$w.$t.txt"
+            done
+        done
+        [ "$r" != ok ] || [ "$(cat "$out/$k-ref.RUN.txt")" = "hello, world" ] ||
+            r="$k: Windows 3.1's box did not build the program ($out/$k-ref.CL.txt)"
+        [ "$r" != ok ] || [ "$(cat "$out/$k-w16.RUN.txt")" = "hello, world" ] ||
+            r="$k: w16's box did not build the program: $(head -c 200 "$out/$k-w16.CL.txt") ($out/$k-w16.log)"
+        [ "$r" != ok ] || cmp -s "$out/$k-ref.CL.txt" "$out/$k-w16.CL.txt" ||
+            r="$k: CL's output differs from Windows 3.1's (diff $out/$k-ref.CL.txt $out/$k-w16.CL.txt)"
+        [ "$r" != ok ] || ! grep -q 'not in w16\|panic\|fatal' "$out/$k-w16.log" ||
+            r="$k: $(grep -m1 'not in w16\|panic\|fatal' "$out/$k-w16.log")"
+    done
+    if [ "$r" = ok ]; then echo "ok   cl: CL.EXE builds hello world in a DOS box as under Windows 3.1, with DOSXNT.386 and without"
+    else echo "FAIL cl: $r"; fails=$((fails + 1)); fi ;;
 *)
     echo "FAIL $part: no such part"; fails=$((fails + 1)) ;;
 esac

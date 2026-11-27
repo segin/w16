@@ -308,7 +308,7 @@ setup. w16's WIN386 writes its trace to COM1 (`serial1=file file:com1.txt`).
 Real mouse motion does not reach the guest in DOSBox-X, so the boot-test
 case `win386input` (mouse, keys, Exit Windows) runs in DOSBox through
 `tests/inputrun.sh` (`-c "WIN /3 /B"`, with KRNL386.EXE put back by `-f`:
-see the case in `tests/boottest.sh`). `tests/vsdprobe.sh ms|w16 [fg bg two hung cadd kbd ...]` runs the Virtual Sound Device's probes with the sound recorded (ARCHITECTURE.md 12.8 VSD). `tests/vdmadprobe.sh [-R] ms|w16` runs the Virtual DMA Device's: SBD.COM's Sound Blaster DMA and VDS calls in a box, the probe VxD VXM.386 (`-R`: VXMR, which reserves buffer space; `VDMADPROBE_INI` adds SYSTEM.INI settings), the sound recorded; `tools/vdmadcmp.py REF W16` compares two runs (the boot-test case vdmad). `tests/msvcvxd.sh [-o DIR] [vxc boot cvw]` runs the probe VxD VXC.386 (and VXCU.386, a missing VMM service) under both WIN386s, and, with Visual C++ 1.52 installed in `$W16_MSVC_DIR` (its C:\MSVC; skipped without), boots w16's tree with its four devices, starts CodeView for Windows, and runs WXSRVR.EXE (VMB.386's client) with Program Manager's menus opened, against Windows 3.1 (boot-test cases `win386vxc` and `msvc`, ARCHITECTURE.md 12.7). `tests/vxpprobe.sh ms|w16` loads the
+see the case in `tests/boottest.sh`). `tests/vsdprobe.sh ms|w16 [fg bg two hung cadd kbd ...]` runs the Virtual Sound Device's probes with the sound recorded (ARCHITECTURE.md 12.8 VSD). `tests/vdmadprobe.sh [-R] ms|w16` runs the Virtual DMA Device's: SBD.COM's Sound Blaster DMA and VDS calls in a box, the probe VxD VXM.386 (`-R`: VXMR, which reserves buffer space; `VDMADPROBE_INI` adds SYSTEM.INI settings), the sound recorded; `tools/vdmadcmp.py REF W16` compares two runs (the boot-test case vdmad). `tests/msvcvxd.sh [-o DIR] [vxc boot cvw wx cl]` runs the probe VxD VXC.386 (and VXCU.386, a missing VMM service) under both WIN386s, and, with Visual C++ 1.52 installed in `$W16_MSVC_DIR` (its C:\MSVC; skipped without), boots w16's tree with its four devices, starts CodeView for Windows, runs WXSRVR.EXE (VMB.386's client) with Program Manager's menus opened, and compiles a hello world with CL.EXE in a DOS box with DOSXNT.386 and without, against Windows 3.1 (boot-test cases `win386vxc` and `msvc`, ARCHITECTURE.md 12.7). `tests/vxpprobe.sh ms|w16` loads the
 probe VxD VXP.386 (`make vxprobes`) and prints the control messages and
 service results it saw (ARCHITECTURE.md 12.7). The DPMI host's answers
 are probed by VX11 (`tests/apps/vx11.c`, run as the shell with
@@ -385,7 +385,14 @@ allocations) without Windows (`plain`), under Microsoft's WIN386 (`ms`),
 w16's (`w16`) or on w16's tree alone (`tree`), in DOSBox-X or plain DOSBox,
 and prints its log and DOSBox-X's MCB messages; `MCBRUN_PROG=DIR:PROG`
 runs a program of your own in the box instead. The case `win386mcb`
-compares the logs with Microsoft's WIN386.
+compares the logs with Microsoft's WIN386. DPMI in DOS boxes:
+`tests/dpmirun.sh OUTDIR KIND MODE` runs DPMIPRB.COM, a raw 16- and 32-bit
+DPMI client (KIND `p` the probe twice each way and a nested client, `g`
+a fault no handler takes, `c` two boxes at once) under Microsoft's WIN386
+(`ms`), w16's (`w16`) or the tree alone (`tree`; `DPMIRUN_WIN="WIN /S"`
+for Standard mode), and prints its logs; `tools/dpmicmp.sh KIND REF DIR`
+compares two runs, leaving out the INFO and MEM lines (the case
+`win386dpmi`, ARCHITECTURE.md 12.16).
 
 ## 5. Running on a remote host
 
