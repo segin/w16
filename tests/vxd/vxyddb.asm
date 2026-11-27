@@ -9,7 +9,7 @@
 
 segment _TEXT public align=16 class=CODE use32 flat
 global VXY_DDB, _VXY_DDB, _vxy_hook, _vxy_stepping, _vxy_bp, _vmm_profile_hex, _vxy_thunk, _vxy_next
-global _vxy_pf_on, _vxy_pf_armed
+global _vxy_pf_on, _vxy_pf_armed, _vxy_pf_user
 extern _vxy_int1, _vxy_called, _vxy_returned, _vxy_pf
 VXY_DDB:
 _VXY_DDB:
@@ -36,6 +36,7 @@ idtr:           dw 0
 
 _vxy_pf_on:     dd 0
 _vxy_pf_armed:  dd 0
+_vxy_pf_user:   dd 0
 old_int14:      dd 0
                 dw 0
 
@@ -77,11 +78,13 @@ _vxy_hook:
 ; may be null there) straight on to the VMM's handlers; from ring 0 the C
 ; side with DS and ES set from SS (the VMM's flat data)
 vxy_int14:
+        cmp dword [cs:_vxy_pf_user], 0  ; (VXYWatchUser: V86 and ring 3 too)
+        jne .any
         test dword [esp+12], 20000h     ; (error code, EIP, CS, EFLAGS)
         jnz .chain
         test byte [esp+8], 3
         jnz .chain
-        cmp dword [cs:_vxy_pf_on], 0
+.any:   cmp dword [cs:_vxy_pf_on], 0
         je .chain
         pushad
         push ds
@@ -104,10 +107,13 @@ vxy_int14:
 .chain: jmp far [cs:old_int14]
 
 vxy_int1:
+        cmp dword [cs:_vxy_pf_armed], 0 ; (a watched access, from any mode)
+        jne .any
         test dword [esp+8], 20000h      ; (EIP, CS, EFLAGS)
         jnz .chain
         test byte [esp+4], 3
         jnz .chain
+.any:
         pushad
         push ds
         push es
@@ -165,16 +171,16 @@ vxy_after:
 ; to the previous procedure, the registers and flags as they came
 global _vxy_svc_prev, _vxy_svc_stub, _vxy_svc_after_addr, _vmm_hook_service
 extern _vxy_svc_called, _vxy_svc_returned
-_vxy_svc_prev:  times 16 dd 0
+_vxy_svc_prev:  times 256 dd 0
 _vxy_svc_stub:
 %assign i 0
-%rep 16
+%rep 256
         dd svc_stub_ %+ i
 %assign i i+1
 %endrep
 _vxy_svc_after_addr: dd svc_after
 %assign i 0
-%rep 16
+%rep 256
 svc_stub_ %+ i:
         push dword i
         jmp svc_common
@@ -220,6 +226,105 @@ _vmm_hook_service:
         mov esi, [esp+24]
         int 20h
         dd 00010090h
+        mov eax, esi
+        jnc .ok
+        xor eax, eax
+.ok:    pop ebp
+        pop edi
+        pop esi
+        pop ebx
+        ret
+
+; the hooked PM API procedure (VXYApi): vxy_api_in(struct vregs *), the
+; previous procedure with the registers as they came, vxy_api_out with
+; those it returned
+global _vxy_api_prev, _vxy_api_entry, _vmm_hook_pm_api
+extern _vxy_api_in, _vxy_api_out
+_vxy_api_prev:  dd 0
+_vxy_api_entry:
+        pushfd
+        pushad
+        cld
+        push esp
+        call _vxy_api_in
+        add esp, 4
+        popad
+        popfd
+        call [_vxy_api_prev]
+        pushfd
+        pushad
+        cld
+        push esp
+        call _vxy_api_out
+        add esp, 4
+        popad
+        popfd
+        ret
+
+; the hooked protected-mode faults (VXYFaults): stub i pushes i,
+; vxy_fault(struct vregs *) logs it, then on to the previous handler
+; with the registers and flags as they came
+global _vxy_fault_prev, _vxy_fault_stub, _vmm_hook_pm_fault
+extern _vxy_fault
+_vxy_fault_prev: times 8 dd 0
+_vxy_fault_stub:
+%assign i 0
+%rep 8
+        dd fault_stub_ %+ i
+%assign i i+1
+%endrep
+%assign i 0
+%rep 8
+fault_stub_ %+ i:
+        push dword i
+        jmp fault_common
+%assign i i+1
+%endrep
+fault_common:
+        pushfd
+        pushad
+        cld
+        push esp
+        call _vxy_fault
+        add esp, 4
+        popad
+        popfd
+        xchg eax, [esp]                 ; (the index; flags kept)
+        mov eax, [_vxy_fault_prev + eax * 4]
+        xchg eax, [esp]
+        ret
+
+; vu32 vmm_hook_pm_fault(vu32 n, vu32 proc): Hook_PM_Fault; the previous
+; handler (0 when there was none or it failed)
+_vmm_hook_pm_fault:
+        push ebx
+        push esi
+        push edi
+        push ebp
+        mov eax, [esp+20]
+        mov esi, [esp+24]
+        int 20h
+        dd 00010080h
+        mov eax, esi
+        jnc .ok
+        xor eax, eax
+.ok:    pop ebp
+        pop edi
+        pop esi
+        pop ebx
+        ret
+
+; vu32 vmm_hook_pm_api(vu32 id, vu32 proc): Hook_Device_PM_API; the
+; previous procedure, 0 when it failed
+_vmm_hook_pm_api:
+        push ebx
+        push esi
+        push edi
+        push ebp
+        mov eax, [esp+20]
+        mov esi, [esp+24]
+        int 20h
+        dd 00010092h
         mov eax, esi
         jnc .ok
         xor eax, eax
