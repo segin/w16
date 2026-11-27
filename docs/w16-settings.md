@@ -62,6 +62,7 @@ loaded, as in stock 3.1. Loaded, it changes nothing a program sees
 | `userlog=1` | `0` | USER | Writes USER's diagnostics to `C:\USER.LOG`. |
 | `gdilog=1` | `0` | GDI | Writes GDI's diagnostics to `C:\W16GDI.LOG`: unimplemented ordinals, the display driver's Enable, the font table and font mapping, and each SetDIBits, GetDIBits, SetDIBitsToDevice and StretchDIBits call's DIB format (size, bit count, compression, colours used, image size, colour use) and result. |
 | `vmmtrace=1` | `0` | WIN386 | The 386 Enhanced mode VMM's detailed trace, written to COM1 (with the VxDs' dynamic links and callbacks; a VMM service w16 lacks then fails with carry during initialisation instead of ending Windows with a message, so that one run shows all a device needs). |
+| `vmmtrace=2`..`5` | `0` | WIN386 | More of the VMM's debugging aids (ARCHITECTURE.md 12.18): 2 the DOS VMs' trace; 3 watches a device's reads of the VMM's memory through `_MapPhysToLinear`; 4 steps W32S.386's Device_Init; 5 steps it and runs the oracle that learns, from the device's own flags, what it compares after each hit of its search of the VMM's first pages (`w32soracle=XX [OFF:SIZE:VALUE ...]`, `w32sprefix=HEX`). |
 
 ## Example
 

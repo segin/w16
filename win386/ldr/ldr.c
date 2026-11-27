@@ -754,29 +754,31 @@ static int put_vxd_list(void)
 }
 
 
-/* Page directory (window offset 0), the identity table for the first 4 MB
- * (only the first megabyte and the HMA are present), and the tables that
- * map the window at W386_VMM_LIN. */
+/* Page directory (window offset 0), the VMM's interoperability page
+ * (W386_MARK_OFF, zeroed: the VMM fills it, ARCHITECTURE.md 12.18), the
+ * identity table for the first 4 MB (only the first megabyte and the HMA
+ * are present), and the tables that map the window at W386_VMM_LIN. */
 static int build_page_tables(void)
 {
     unsigned long __far *pt = (unsigned long __far *)page;
     unsigned long i, t;
 
     _fmemset(page, 0, (unsigned)PAGE);
-    pt[0] = (info.xms_phys + PAGE) | 7;                 /* user, writable, present */
+    pt[0] = (info.xms_phys + W386_IDENT_OFF) | 7;       /* user, writable, present */
     for (t = 0; t < info.pt_count; t++)
-        pt[(W386_VMM_LIN >> 22) + t] = (info.xms_phys + (2 + t) * PAGE) | 3;
+        pt[(W386_VMM_LIN >> 22) + t] = (info.xms_phys + W386_TABLES_OFF + t * PAGE) | 3;
     if (!xms_move_to(0, page, PAGE)) return 0;
     _fmemset(page, 0, (unsigned)PAGE);
+    if (!xms_move_to(W386_MARK_OFF, page, PAGE)) return 0;
     for (i = 0; i < 0x110; i++)
         pt[i] = (i * PAGE) | 7;
-    if (!xms_move_to(PAGE, page, PAGE)) return 0;
+    if (!xms_move_to(W386_IDENT_OFF, page, PAGE)) return 0;
     for (t = 0; t < info.pt_count; t++) {
         for (i = 0; i < 1024; i++) {
             unsigned long off = (t * 1024 + i) * PAGE;
             pt[(unsigned)i] = off < info.xms_size ? ((info.xms_phys + off) | 3) : 0;
         }
-        if (!xms_move_to((2 + t) * PAGE, page, PAGE)) return 0;
+        if (!xms_move_to(W386_TABLES_OFF + t * PAGE, page, PAGE)) return 0;
     }
     return 1;
 }
@@ -1020,7 +1022,7 @@ int main(int argc, char **argv)
     info.xms_size = (kb * 1024UL - (info.xms_phys - phys)) & ~(PAGE - 1);
     xms_skew = info.xms_phys - phys;
     info.pt_count = (info.xms_size + 0x3FFFFFUL) >> 22;
-    info.img_off = (2 + info.pt_count) * PAGE;
+    info.img_off = W386_TABLES_OFF + info.pt_count * PAGE;
     if (!page) page = _fmalloc((unsigned)PAGE);
     if (page && load_vmm()) {
         load_devices();
@@ -1113,10 +1115,11 @@ int main(int argc, char **argv)
     info.log_port = 0x3F8;              /* the VMM's trace goes to COM1 */
     {   /* [w16] vmmtrace=1 (w16's own key) turns on the detailed trace;
          * vmmtrace=2 the DOS VMs' trace (their interrupts, VM switches,
-         * the VDD's API); 3 and 4 the device watch and step (vxd.c) */
+         * the VDD's API); 3 and 4 the device watch and step, 5 the step
+         * and the oracle (vxd.c) */
         char __far *q;
         for (q = ini; q && *q; q++)
-            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=", 9) && q[9] >= '1' && q[9] <= '4')
+            if ((*q == 'v' || *q == 'V') && !_fmemicmp(q, "vmmtrace=", 9) && q[9] >= '1' && q[9] <= '5')
                 info.trace = q[9] - '0';
     }
     read_sched(&info);

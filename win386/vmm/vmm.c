@@ -1175,6 +1175,7 @@ void __cdecl trap(struct tframe *f)
         /* the VMM or a device touching a client's page that is in the
          * paging file (or not used yet): pager.c brings it in */
         if (vec == 14 && pager_fault(get_cr2())) return;
+        if ((vec == 14 || vec == 1) && vxd_oracle(vec, f)) return;
         if ((vec == 14 || vec == 1) && vxd_watch_fault(vec, &f->eflags, f->eip)) return;
         if (vec == 1 && vxd_step(f)) return;
         panic("exception %x err %x at %x:%x cr2 %x eax %x esi %x edi %x",
