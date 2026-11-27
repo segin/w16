@@ -17,7 +17,7 @@ extern WORD __cdecl w_regs[10];
 extern void __cdecl __far w_call(FARPROC fn, int nargs, WORD a0, WORD a1,
                                   WORD a2, WORD a3, WORD a4, WORD a5);
 
-static WORD sel, lim, size_lo, size_hi, gmh;
+static WORD sel, lim, size_lo, size_hi, gmh, task, hmod, hinst, pdb;
 extern DWORD FAR PASCAL GlobalMasterHandle(void);
 
 static void reg(const char *what, const char *r, WORD v)
@@ -40,6 +40,14 @@ static void reg(const char *what, const char *r, WORD v)
         obs(n, 0xA006);                 /* GlobalMasterHandle's AX */
     else if (v == (gmh | 1))
         obs(n, 0xA007);                 /* its selector */
+    else if (task && v == task)
+        obs(n, 0xA008);                 /* the current task (TDB) */
+    else if (hmod && v == hmod)
+        obs(n, 0xA009);                 /* our hModule */
+    else if (hinst && v == hinst)
+        obs(n, 0xA00A);                 /* our hInstance */
+    else if (pdb && v == pdb)
+        obs(n, 0xA00B);                 /* our PDB */
     else
         obs(n, v);
 }
@@ -117,6 +125,24 @@ int __cdecl tmain(void)
             h = w_regs[0];
             call("  LocalFree", 7, 1, h, 0, 0, 0);
         }
+    }
+    {
+        /* GetExePtr (KERNEL.133): Win32s's WIN32S16.DLL takes the TDB of
+           a program's task from its DX after GetExePtr(hInstance) and
+           reads the module name there (TDB F2h); ARCHITECTURE.md 12.19 */
+        HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, 100);
+        task = (WORD)GetCurrentTask();
+        hmod = (WORD)GetModuleHandle("TK43");
+        hinst = (WORD)GlobalHandle(SELECTOROF((void FAR *)&sel));
+        pdb = (WORD)GetCurrentPDB();
+        sel = lim = size_lo = 0x0001;
+        out("GetExePtr\r\n");
+        call("  GetExePtr(hInstance)", 133, 1, hinst, 0, 0, 0);
+        call("  GetExePtr(hModule)", 133, 1, hmod, 0, 0, 0);
+        call("  GetExePtr(hTask)", 133, 1, task, 0, 0, 0);
+        call("  GetExePtr(block)", 133, 1, (WORD)g, 0, 0, 0);
+        call("  GetExePtr(KERNEL)", 133, 1, (WORD)GetModuleHandle("KERNEL"), 0, 0, 0);
+        GlobalFree(g);
     }
     out("TK43 done\r\n");
     return 0;

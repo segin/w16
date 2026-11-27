@@ -157,6 +157,7 @@ int  dpmi_set_rights(u16 sel, u16 rights);
 void global_init(void);
 u16  galloc(u16 flags, u32 size, u16 owner, u16 *sel_out); /* returns handle */
 void KAPI FarSetOwner(u16 h, u16 owner);
+u16  KAPI FarGetOwner(u16 h);
 int  gset_code(u16 sel);                    /* make a block executable */
 u32  gsize_of_sel(u16 sel);
 u16  KAPI GlobalReAlloc(u16 h, u32 size, u16 flags);
@@ -286,6 +287,8 @@ extern u16 cur_task, cur_pdb;           /* the running task (0: none) */
 extern u16 dos_owner_task;              /* task whose DOS PSP/DTA/CWD is active */
 extern u8  dos_nosync;                  /* non-zero: do not lazy-sync in INT 21h */
 void __cdecl sync_dos_context(void);    /* kentry.asm: lazy DOS state switch */
+u16  __cdecl task_of_handle(u16 h);   /* task.c: GetExePtr's ES */
+u16  task_hmodule(u16 t);
 u16  task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
                  const u8 FAR *tail, const u16 FAR *show, u16 libinit);
 void task_start(u16 t);

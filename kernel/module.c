@@ -589,11 +589,20 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
 }
 
 /* Observed (tests/apps/tk15.c): the hModule for an hInstance (also a
-   later instance's) or hModule; 0 for an hTask and for 0. */
-u16 KAPI GetExePtr(u16 h)                                     /* KERNEL.133 */
+   later instance's) or hModule; 0 for an hTask and for 0. A block a
+   task allocated (owned by its PDB) gives the task's hModule (TK43, as
+   Schulman describes: the owner's task's). The registers it leaves are
+   kentry.asm's GETEXEPTRX. */
+u16 KAPI GetExePtrC(u16 h)          /* KERNEL.133 (kentry.asm GETEXEPTR: the registers) */
 {
     module FAR *m = module_of(h);
-    return m ? m->ne_sel : 0;
+    u16 t;
+    if (m)
+        return m->ne_sel;
+    t = task_of_handle(h);
+    if (t && (t | 3) != (h | 3))
+        return task_hmodule(t);
+    return 0;
 }
 
 /* Observed: 1 for a module loaded once (implicitly or by LoadLibrary);

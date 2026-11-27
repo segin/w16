@@ -1424,6 +1424,58 @@ FARSETOWNERX:
         pop bp
         retf 4
 
+; GetExePtr (KERNEL.133): AX and CX the hModule, ES the task the handle
+; belongs to (an hInstance, a block the task owns) or the hModule itself
+; (an hModule), DX and BX kept; for a task handle AX and CX 0, DX and ES
+; the task (TK43 on 3.1's KRNL386). Win32s's WIN32S16.DLL takes ES after
+; GetExePtr(hInstance) as the program's TDB and reads its module name
+; at F2h (ARCHITECTURE.md 12.19).
+extern GETEXEPTRC
+extern _task_of_handle          ; u16 __cdecl task_of_handle(u16)
+global GETEXEPTR
+GETEXEPTR:
+        push bp
+        mov bp, sp
+        push bx
+        push dx
+        push ds
+        mov ax, DGROUP
+        mov ds, ax
+        push word [bp + 6]
+        call far GETEXEPTRC             ; (pascal: takes its argument)
+        push ax                         ; the hModule
+        push word [bp + 6]
+        call far _task_of_handle
+        add sp, 2
+        pop cx                          ; CX the hModule, AX the task (0: none)
+        test ax, ax
+        jz .mod
+        mov bx, [bp + 6]
+        or bx, 3
+        mov dx, ax
+        or dx, 3
+        cmp bx, dx
+        jne .task
+        mov es, ax                      ; a task handle: AX = CX = 0, DX = ES = it
+        mov dx, ax
+        pop ds
+        add sp, 2                       ; (DX not restored)
+        pop bx
+        xor ax, ax
+        xor cx, cx
+        pop bp
+        retf 2
+.task:  mov es, ax                      ; the task the handle belongs to
+        jmp .done
+.mod:   jcxz .done                      ; nothing: ES kept
+        mov es, cx                      ; an hModule: itself
+.done:  mov ax, cx
+        pop ds
+        pop dx
+        pop bx
+        pop bp
+        retf 2
+
 ; ---------------------------------------------------------------------------
 ; The default signal handler (task.c, SetSigHandler): a RETF
 global sig_default

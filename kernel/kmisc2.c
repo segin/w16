@@ -14,7 +14,7 @@
  */
 #include "kernel.h"
 
-u16 KAPI GetExePtr(u16 h);
+u16 KAPI GetExePtrC(u16 h);
 u32 KAPI GlobalHandle(u16 sel);
 
 /* ---- hmemcpy (KERNEL.348) ---- */
@@ -219,7 +219,7 @@ u32 KAPI KAnsiLower(u32 p)
    0 for a program's DS and CS and for an hTask. (3.1 faults on 0.) */
 u16 KAPI KIsSharedSelector(u16 sel)
 {
-    u16 h = GetExePtr(sel);
+    u16 h = GetExePtrC(sel);
     module FAR *m = h ? module_of(h) : NULL;
     return m && (m->flags & NEF_LIBRARY) ? 1 : 0;
 }

@@ -2060,7 +2060,7 @@ u16 KAPI WinExec(const char FAR *cmd, u16 show)                /* KERNEL.166 */
 {
     char name[DOS_PATHMAX];
     u8 tail[1 + 0xFF + 1];
-    u16 shw[2];
+    u16 shw[8];
     loadparms lp;
     u16 i = 0, n = 0;
 
@@ -2101,6 +2101,10 @@ u16 KAPI WinExec(const char FAR *cmd, u16 show)                /* KERNEL.166 */
     tail[1 + n] = 13;
     shw[0] = 2;
     shw[1] = show;
+    /* the rest of the first FCB the PDB gets from it (task_create): as
+       DOS's child PSP has it */
+    shw[2] = shw[3] = shw[4] = shw[5] = 0x2020;
+    shw[6] = shw[7] = 0;
     lp.env = 0;
     lp.cmd = tail;
     lp.show = shw;

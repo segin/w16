@@ -208,6 +208,35 @@ static u16 task_of(u16 t)
     return 0;
 }
 
+/* GetExePtr's ES (kentry.asm GETEXEPTRX): the task an hInstance, a task
+   handle or a block a task owns belongs to, as Windows 3.1's KRNL386
+   leaves it in ES (TK43: GetExePtr of a program's hInstance or of a block
+   it allocated gives ES its TDB; Win32s's WIN32S16.DLL reads the module
+   name at TDB F2h from there); 0 if none */
+u16 __cdecl task_of_handle(u16 h)
+{
+    u16 x, owner;
+    if (!h)
+        return 0;
+    if ((x = task_of(h)) != 0)
+        return x;
+    for (x = task_head; x; x = TW(x, TDB_NEXT))
+        if ((TW(x, TDB_HINST) | 1) == (h | 1))
+            return x;
+    owner = FarGetOwner(h);
+    if (owner)
+        for (x = task_head; x; x = TW(x, TDB_NEXT))
+            if ((TW(x, TDB_PDB) | 3) == (owner | 3))
+                return x;
+    return 0;
+}
+
+/* the hModule of task t (GetExePtr of a block a task owns) */
+u16 task_hmodule(u16 t)
+{
+    return t ? TW(t, TDB_HMOD) : 0;
+}
+
 /* ---- DOS: real-mode calls through DPMI 0300h ---- */
 
 /* (each call's own record, on its stack: one shared record would be
@@ -743,8 +772,23 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
     /* the CR; WINOLDAP's tail ends in LF, which stays (WO1 on 3.1:
        "0F 00 'Z:\COMMAND.COM' 0A" at 80h after InitTask) */
     p[0x81 + k] = whole ? '\n' : '\r';
-    *(u16 FAR *)(p + 0x5C) = show ? show[0] : 2;
-    *(u16 FAR *)(p + 0x5E) = show ? show[1] : 1;   /* UNVERIFIED w/o */
+    /* the first FCB (5Ch-6Bh): LoadModule's lpCmdShow block, 16 bytes
+       of it, as DOS's EXEC copies its first FCB (observed on Windows 3.1:
+       Win32s's W32SYS.DLL starts WIN32S.EXE with a block of 2, nCmdShow
+       and data of its own, which WIN32S.EXE's task finds in its PDB at
+       60h-6Bh, and Win32s's 32-bit kernel loads the word at 62h as a
+       selector: ARCHITECTURE.md 12.19). Only as much as the block's
+       selector reaches (WinExec's own block holds what DOS's child PSP
+       has there after its two words). */
+    if (show) {
+        u16 lim = sel_lim16(FP_SEG(show)), o = FP_OFF(show), n16;
+        n16 = lim >= o ? (lim - o >= 15 ? 16 : lim - o + 1) : 0;
+        for (i = 0; i < n16; i++)
+            p[0x5C + i] = ((const u8 FAR *)show)[i];
+    } else {
+        *(u16 FAR *)(p + 0x5C) = 2;
+        *(u16 FAR *)(p + 0x5E) = 1;             /* UNVERIFIED */
+    }
     kernel_psp(0);
 
     /* the TDB */
