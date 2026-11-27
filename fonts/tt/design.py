@@ -78,11 +78,15 @@ class Style:
             self.hair = self.sh
             self.n, self.ni = 2.15, 2.3
             self.thin = self.sv * 0.92
-            self.sl = 175                        # slab length beyond the stem
+            self.sl = 140                        # slab length beyond the stem
             self.st = self.sh                    # slab thickness
             self.sb = 0
         self.dot = self.sv * (1.18 if self.serif else 1.1)
         self.diag = {'sans': 0.86, 'serif': 0.9, 'mono': 0.86}[kind] + (0.04 if b else 0)
+        # the counters' stress, degrees: none (an inclined stress put the
+        # bowls' thick and thin parts between pixels and made w16 Serif's
+        # round letters look slanted at 8-10 pt)
+        self.stress = 0
 
     # vertical zones
     def top(self, caps):
@@ -126,7 +130,7 @@ def bowl(s, x0, x1, y0, y1, tv=None, th=None, rot=None):
     tv = tv if tv is not None else s.sv
     th = th if th is not None else s.hair
     if rot is None:
-        rot = 10 if s.serif else 0
+        rot = s.stress
     return ring_box(s, (x0, y0, x1, y1), (x0 + tv, y0 + th, x1 - tv, y1 - th), rot)
 
 
@@ -269,7 +273,7 @@ def open_bowl(s, x0, x1, y0, y1, a0, a1, cut0=0, cut1=0, tv=None, th=None, rot=N
     tv = tv if tv is not None else s.sv
     th = th if th is not None else s.hair
     if rot is None:
-        rot = 10 if s.serif else 0
+        rot = s.stress
     return arc_box(s, (x0, y0, x1, y1), (x0 + tv, y0 + th, x1 - tv, y1 - th), a0, a1, cut0, cut1, rot)
 
 
@@ -762,11 +766,29 @@ def g_V(s, L, R):
     return out
 
 
+def mono_w(s, x0, x1, top, sv):
+    """w and W of w16 Mono: four strokes of one weight, the middle apex
+    well below the top (meeting at the top, in a glyph this narrow, the
+    inner strokes ran into one blot at 8-10 pt), serifs on the outer two"""
+    q = (x1 - x0) / 4
+    t = sv * 0.82
+    ha = top * 0.7
+    b1, b2, m = x0 + q * 1.05, x1 - q * 1.05, (x0 + x1) / 2
+    h1 = dw(t, b1 - x0, top)
+    h2 = dw(t, m - b1, ha)
+    out = slanted(x0 + h1 / 2, b1, top, 0, h1) + slanted(x1 - h1 / 2, b2, top, 0, h1)
+    out += slanted(m, b1 + h2 * 0.3, ha, 0, h2) + slanted(m, b2 - h2 * 0.3, ha, 0, h2)
+    out += dhead(s, x0, x0 + h1, top, 1, 0.6) + dhead(s, x1 - h1, x1, top, 0.6, 1)
+    return out
+
+
 def g_W(s, L, R):
     top = s.cap
     i = s.sl * 0.6 if not s.sans else 0
     x0, x1 = L + i, R - i
     w = x1 - x0
+    if s.mono:
+        return mono_w(s, x0, x1, top, s.svc)
     thick = s.svc * (1.05 if s.serif else 0.92 if s.sans else 0.74)
     thin = s.thin if s.serif else s.svc * (0.86 if s.sans else 0.68)
     q = w / 4
@@ -936,7 +958,7 @@ def g_e(s, L, R):
     b = (o[3] - o[1]) / 2
     yc = yb - tb / 2 - cy
     a0 = math.degrees(math.asin(math.copysign(min(0.99, abs(yc / b)) ** (s.n / 2), yc)))
-    out = arc_box(s, o, i, a0, 325 if s.sans else 330, 0, 0 if s.sans else 60, 10 if s.serif else 0)
+    out = arc_box(s, o, i, a0, 325 if s.sans else 330, 0, 0 if s.sans else 60, s.stress)
     # bar: its top is the bowl's floor
     out += G.rect(L + sv * 0.5, yb - tb, R, yb)
     return out
@@ -1001,7 +1023,7 @@ def g_g_two(s, L, R):
     w = R - L
     # upper bowl
     ub = (L + w * 0.06, top * 0.36, L + w * 0.06 + w * 0.68, top + s.ov)
-    out = ring_box(s, ub, (ub[0] + sv, ub[1] + th, ub[2] - sv, ub[3] - th), 10)
+    out = ring_box(s, ub, (ub[0] + sv, ub[1] + th, ub[2] - sv, ub[3] - th), s.stress)
     # ear
     out += G.rect(ub[2] - sv * 0.6, top - s.hair * 1.2, R, top)
     out += G.rect(R - s.st * 1.0, top - s.hair * 1.2 - s.sl * 0.35, R, top)
@@ -1265,6 +1287,8 @@ def g_w(s, L, R):
     i = s.sl * 0.6 if not s.sans else 0
     x0, x1 = L + i, R - i
     q = (x1 - x0) / 4
+    if s.mono:
+        return mono_w(s, x0, x1, top, s.sv)
     thick = s.sv * (1.05 if s.serif else 0.9 if s.sans else 0.74)
     thin = s.thin if s.serif else s.sv * (0.85 if s.sans else 0.68)
     flat = s.sv * 0.25 if s.sans else 0
@@ -1443,8 +1467,8 @@ def g_0(s, L, R):
     out = ring_box(s, (L, -s.ov, R, h + s.ov), (L + tv, -s.ov + s.sh * (1.0 if s.sans else 0.9),
                                                  R - tv, h + s.ov - s.sh * (1.0 if s.sans else 0.9)),
                    0, n=s.n - 0.1, ni=s.ni - 0.1)
-    if s.mono:
-        out += dot(s, (L + R) / 2, h / 2, s.sv * 0.55)
+    # (no dot in w16 Mono's zero: at 8-10 pt it filled the counter and
+    # the 0 read as an 8)
     return out
 
 

@@ -69,6 +69,8 @@ N_FUNCS = 4
 MAX_STACK = 256                   # maxp maxStackElements: a LOOPCALL takes 3 a size
 LOOPCALL, SHPIX, WS, RS, MUL = 0x2A, 0x38, 0x42, 0x43, 0x63
 GC, ROUND, SUB, CINDEX, SWAP, POP, ELSE, SCFS = 0x46, 0x68, 0x61, 0x25, 0x23, 0x21, 0x1B, 0x48
+MD1, ABS, DUP = 0x4A, 0x64, 0x20
+RTG, RUTG, RDTG = 0x18, 0x7C, 0x7D
 SCREEN_MAX = 48                   # prep's table covers 6..SCREEN_MAX ppem
 
 
@@ -77,10 +79,13 @@ def fpgm():
     first (the reference point): 0 (b, cvt, a): SRP0 a, MIRP b to the
     control value; 1 (b, a): SRP0 a, MDRP b at its own rounded width; both
     with a minimum distance of one pixel"""
-    # 2 (p, adv): point p (a glyph's rightmost edge, rounded) no further
-    # right than a pixel before the advance width point adv, rounded:
-    # x = min(x, round(adv) - 1 pixel)
-    fit = bytes([FDEF, GC, ROUND]) + push([64]) + bytes([SUB]) + push([2]) + bytes([CINDEX, GC, ROUND])
+    # 2 (p, adv, gap): point p (a glyph's rightmost edge, rounded) no
+    # further right than the advance width point adv, rounded, less the
+    # glyph's right side bearing (the original distance, rounded) or gap
+    # if that is more: x = min(x, round(adv) - max(round(rsb), gap))
+    fit = bytes([FDEF]) + push([3]) + bytes([CINDEX]) + push([3]) + bytes([CINDEX, MD1, ABS, ROUND])
+    fit += push([2]) + bytes([CINDEX]) + push([2]) + bytes([CINDEX, GT, IF, POP, DUP, EIF, SWAP, POP])
+    fit += bytes([SWAP, GC, ROUND, SWAP, SUB]) + push([2]) + bytes([CINDEX, GC, ROUND])
     fit += push([2]) + bytes([CINDEX]) + push([2]) + bytes([CINDEX, LT, IF, POP, ELSE, SWAP, POP, EIF, SCFS, ENDF])
     return (push([FN_LINK]) + bytes([FDEF, SRP0, MIRP_STEM, ENDF])
             + push([FN_LINK_FREE]) + bytes([FDEF, SRP0, MDRP_STEM, ENDF])
@@ -209,8 +214,9 @@ class Hinter:
     screen: None or {ppem: ([zone flat heights in pixels], main stem
     pixels)} for the sizes prep sets from a table."""
 
-    def __init__(self, upem, zones, maxw_y, maxw_x, do_x=True, stems=None, screen=None):
+    def __init__(self, upem, zones, maxw_y, maxw_x, do_x=True, stems=None, screen=None, gap=64):
         self.upem = upem
+        self.gap = gap         # least pixels (26.6) right of a glyph's ink
         self.zones = zones
         self.maxw_y = maxw_y
         self.maxw_x = maxw_x
@@ -224,6 +230,7 @@ class Hinter:
             self.cvt += [int(round(flat)), int(round(over))]
         self.ystems = []
         self.xstems = []
+        self.diag_cvt = {}
 
     def learn(self, glyph_contours):
         """pass 1: the stem widths (given, or the most frequent ones)"""
@@ -266,6 +273,8 @@ class Hinter:
             out[co] = px + (kind if ov >= 0.75 else 0)
         for w, c in list(self.ystem_cvt.items()) + list(self.xstem_cvt.items()):
             out[c] = self.stem_pixels(w, ppem, main_px)
+        for (w, cos), c in self.diag_cvt.items():
+            out[c] = self.stem_pixels(w, ppem, main_px) * cos
         return out
 
     def prep(self):
@@ -285,7 +294,7 @@ class Hinter:
                 vals = self.screen_values(ppem)
                 seq = []
                 for c in sorted(vals):
-                    seq += [c, vals[c] * 64]
+                    seq += [c, int(round(vals[c] * 64))]
                 p += bytes([MPPEM]) + push([ppem]) + bytes([EQ, IF]) + push(seq)
                 p += bytes([WCVTP]) * len(vals) + bytes([EIF])
         return p
@@ -434,61 +443,92 @@ class Hinter:
                 pid.add(id(o))
         return code
 
+    def _diag_cvt(self, w, cos):
+        """the control value for a diagonal stroke of perpendicular width
+        w at cos (of its angle from the vertical): its width across x is
+        to be the stem's it stands for (the main stem, or a hairline),
+        so the perpendicular one is that times cos"""
+        thin = bool(self.ystems) and w < self.main * 0.7
+        base = min(self.ystems, key=lambda v: abs(v - w)) if thin else self.main
+        key = (base, round(cos * 50) / 50.0)
+        if key not in self.diag_cvt:
+            self.diag_cvt[key] = len(self.cvt)
+            self.cvt.append(int(round(key[0] * key[1])))
+        return self.diag_cvt[key]
+
     def _diagonals(self, contours, touched):
-        """diagonal strokes (v, w, x, y, A, K, V ...): where a stroke's two
-        edges end on one level (a cut end, or the top of a serif), the
-        second end at its rounded width across x from the first, a pixel
-        at least: a stroke as wide as a pixel across every row has one
-        pixel in each (heavier ones came out a pixel wide here and two
+        """diagonal strokes (v, w, x, y, A, K, V ...): the two straight
+        edges of a stroke, parallel, ink between them; the second edge's
+        ends moved across x (SFVTCA x) to a control value's distance from
+        the first edge's first point, measured square to it (SPVTL): a
+        width across x of the stem the stroke stands for, one pixel at
+        text sizes, so that each row has one pixel of it (as thick as a
+        stem, square to its slope, a stroke came out a pixel here and two
         there)"""
-        pts = []
-        dirs = []
+        segs = []
         base = 0
         for c in contours:
             n = len(c)
-            for i, p in enumerate(c):
-                if p[2]:
-                    for q in (c[(i + 1) % n], c[i - 1]):
-                        if not q[2]:
-                            continue
-                        dx, dy = q[0] - p[0], q[1] - p[1]
-                        # a straight diagonal at least a quarter em long,
-                        # between 10 and 60 degrees off the vertical
-                        if dy and abs(dx) > abs(dy) * 0.17 and abs(dx) < abs(dy) * 1.8 \
-                                and dx * dx + dy * dy > (self.upem / 4) ** 2:
-                            pts.append((base + i, p[0], p[1]))
-                            dirs.append(dx / dy)
+            on = [i for i in range(n) if c[i][2]]
+            for k, i in enumerate(on):
+                j = on[(k + 1) % len(on)]
+                if (j - i) % n != 1:
+                    continue           # a curve between them
+                (x0, y0), (x1, y1) = c[i][:2], c[j][:2]
+                dx, dy = x1 - x0, y1 - y0
+                if not dy or not (abs(dy) * 0.17 < abs(dx) < abs(dy) * 1.8):
+                    continue
+                ln = (dx * dx + dy * dy) ** 0.5
+                if ln < self.upem / 10:
+                    continue
+                segs.append((base + i, base + j, x0, y0, x1, y1, dx / ln, dy / ln, ln))
             base += n
         code = b''
         used = set()
-        order = sorted(range(len(pts)), key=lambda k: (pts[k][2], pts[k][1]))
-        for a in order:
-            ia, xa, ya = pts[a]
-            if ia in used:
+        for a in segs:
+            if id(a) in used:
                 continue
             best = None
-            for b in order:
-                ib, xb, yb = pts[b]
-                if ib == ia or ib in used or abs(yb - ya) > 1 or xb <= xa:
+            for b in segs:
+                if b is a or id(b) in used:
                     continue
-                if abs(dirs[a] - dirs[b]) > 0.06 or xb - xa > self.maxw_x:
+                # parallel, opposite directions (the two sides of a stroke)
+                if a[6] * b[6] + a[7] * b[7] > -0.998:
                     continue
-                if best is None or xb < best[1]:
-                    best = (ib, xb)
+                # perpendicular distance of b's start from a's line, on
+                # a's ink side (the right of its direction: outer
+                # contours run clockwise), not across a counter
+                d = (b[2] - a[2]) * a[7] - (b[3] - a[3]) * a[6]
+                if not 0 < d <= self.maxw_x:
+                    continue
+                # overlapping along the line
+                t0 = (b[2] - a[2]) * a[6] + (b[3] - a[3]) * a[7]
+                t1 = (b[4] - a[2]) * a[6] + (b[5] - a[3]) * a[7]
+                lo, hi = max(0, min(t0, t1)), min(a[8], max(t0, t1))
+                if hi - lo < 0.5 * min(a[8], b[8]):
+                    continue
+                if best is None or abs(d) < best[0]:
+                    best = (abs(d), b)
             if best is None:
                 continue
-            ib = best[0]
-            if ia in touched or ib in touched:
+            w, b = best
+            pa, pb = a[0], (b[0], b[1])
+            if pa in touched or pb[0] in touched or pb[1] in touched:
                 continue
-            code += push([ia]) + bytes([0x2E]) + push([ib]) + bytes([MDRP_LINK])   # MDAP[0], MDRP
-            touched |= {ia, ib}
-            used |= {ia, ib}
+            used |= {id(a), id(b)}
+            cos = abs(a[7])
+            c = self._diag_cvt(w, cos)
+            code += push([pa]) + bytes([0x2E])                         # MDAP[0]: touch
+            code += push([a[0], a[1]]) + bytes([0x07, 0x05])           # SPVTL[1], SFVTCA[x]
+            code += push([pa]) + bytes([SRP0]) + push([pb[1], c, pb[0], c]) + bytes([0xE0, 0xE0])
+            code += bytes([SVTCA_X])
+            touched |= {pa, pb[0], pb[1]}
         return code
 
     def _xaxis(self, contours, advance=None):
         cls = edges(contours, 0)
         if not cls:
-            return b''
+            return self._diagonals(contours, set())
         pairs = sorted(stems(cls, self.maxw_x), key=lambda pr: pr[0][1])
         partner = {}
         for lo, hi in pairs:
@@ -507,9 +547,15 @@ class Hinter:
         ends = [el] if er is el or partner.get(id(el)) is er else [el, er]
         npts = sum(len(c) for c in contours)
         for e in ends:
-            code += push([e[2][0]]) + bytes([MDAP_R])
+            if self.gap == 0 and len(ends) == 2:
+                # a fixed-pitch face: the ink out to whole pixels (round
+                # down on the left, up on the right, then no further than
+                # the advance), as Courier New fills its cell at 8-10 pt
+                code += bytes([RDTG if e is el else RUTG]) + push([e[2][0]]) + bytes([MDAP_R, RTG])
+            else:
+                code += push([e[2][0]]) + bytes([MDAP_R])
             if e is er and e is not el and e[0] == 1 and advance is not None and advance - e[1] > 0:
-                code += push([e[2][0], npts + 1, FN_FIT]) + bytes([CALL])
+                code += push([e[2][0], npts + 1, self.gap, FN_FIT]) + bytes([CALL])
             touched.add(e[2][0])
             code += self._emit_rest(e, touched)
             placed.append(e)
