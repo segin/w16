@@ -308,11 +308,16 @@ BOOL GDIAPI DeleteDC(HDC hdc)                                      /* GDI.68 */
         saved_free(x);
     }
     vis = dc->hVisRgn;
-    while (vis && ((LPOBJHDR)obj_get(vis, RGN_MAGIC))->hNext) {    /* SaveVisRgn's */
-        LPOBJHDR v = obj_get(vis, RGN_MAGIC);
-        HRGN top = v->hNext;
-        v->hNext = ((LPOBJHDR)obj_get(top, RGN_MAGIC))->hNext;
-        rgn_free(top);
+    for (;;) {                          /* SaveVisRgn's (a chain broken by
+                                           a program's DeleteObject ends) */
+        LPOBJHDR v = vis ? obj_get(vis, RGN_MAGIC) : 0, t;
+        HRGN top = v ? v->hNext : 0;
+        if (!top)
+            break;
+        t = obj_get(top, RGN_MAGIC);
+        v->hNext = t ? t->hNext : 0;
+        if (t)
+            rgn_free(top);
     }
     phys_free(dc, &dc->xPPen, OBJ_PEN);
     phys_free(dc, &dc->xPBrush, OBJ_BRUSH);
@@ -477,6 +482,8 @@ BOOL GDIAPI LPtoDP(HDC hdc, POINT __far *p, int n)                 /* GDI.99 */
     LPDC dc = dc_get(hdc);
     if (!dc)
         return FALSE;
+    if (!p && n > 0)
+        return FALSE;                   /* robustness: 3.1 faults here */
     dc_lp_to_dp(dc, (int __far *)p, n);
     return TRUE;
 }
@@ -486,6 +493,8 @@ BOOL GDIAPI DPtoLP(HDC hdc, POINT __far *p, int n)                 /* GDI.67 */
     LPDC dc = dc_get(hdc);
     if (!dc)
         return FALSE;
+    if (!p && n > 0)
+        return FALSE;                   /* robustness: 3.1 faults here */
     dc_dp_to_lp(dc, (int __far *)p, n);
     return TRUE;
 }
@@ -581,11 +590,8 @@ int GDIAPI SetStretchBltMode(HDC hdc, int m)                       /* GDI.7 */
 static int extra_logical(LPDC dc)
 {
     int v = dc->dm.CharExtra;
-    if (dc->mapMode != 1) {
+    if (dc->mapMode != 1)               /* the inverse of dc_scale_x (signed) */
         v = mul_div(v, dc->wndExt.x, dc->vpExt.x);
-        if ((dc->wndExt.x < 0) != (dc->vpExt.x < 0))
-            v = -v;
-    }
     return v;
 }
 
@@ -684,6 +690,10 @@ COLORREF GDIAPI GetNearestColor(HDC hdc, COLORREF c)               /* GDI.154 */
         return 0;
     if (!dc)
         return 0x80000000L;
+    if (!dc->dev->fn[DRV_COLORINFO])
+        return 0;                       /* robustness: a driver without ColorInfo */
+    /* UNVERIFIED: whether 3.1 resolves PALETTEINDEX here as SetTextColor
+       does (dev_colorinfo); w16 passes the COLORREF to ColorInfo as is */
     return ((DRVCOLORINFO)dc->dev->fn[DRV_COLORINFO])(dc->lpPDevice, c, &pc);
 }
 
@@ -782,17 +792,26 @@ int GDIAPI SetMapMode(HDC hdc, int m)                              /* GDI.3 */
 
 static void iso_fix(LPDC dc)
 {
-    /* MM_ISOTROPIC: shrink the viewport extent so both axes scale alike
-       UNVERIFIED: 3.1's exact rounding */
-    long sx, sy;
+    /* MM_ISOTROPIC: shrink the viewport extent so both axes scale alike,
+       the scales compared exactly (cross-multiplied: every product of two
+       ints fits a long) and the new extent truncated toward zero. GD5 on
+       3.1: window 3,7 with viewport 32000,32000 gives 13714,32000; window
+       32000,1 with viewport 1,32000 gives 1,0 (an extent of 0 is kept).
+       UNVERIFIED: 3.1's rounding of a fraction of a half or more */
+    long ax, ay, wx, wy;
     if (dc->mapMode != 7 || !dc->wndExt.x || !dc->wndExt.y)
         return;
-    sx = (long)dc->vpExt.x * 1000 / dc->wndExt.x;
-    sy = (long)dc->vpExt.y * 1000 / dc->wndExt.y;
-    if ((sx < 0 ? -sx : sx) < (sy < 0 ? -sy : sy))
-        dc->vpExt.y = (int)((long)dc->wndExt.y * (sx < 0 ? -sx : sx) * (sy < 0 ? -1 : 1) / 1000);
-    else
-        dc->vpExt.x = (int)((long)dc->wndExt.x * (sy < 0 ? -sy : sy) * (sx < 0 ? -1 : 1) / 1000);
+    ax = dc->vpExt.x < 0 ? -(long)dc->vpExt.x : dc->vpExt.x;
+    ay = dc->vpExt.y < 0 ? -(long)dc->vpExt.y : dc->vpExt.y;
+    wx = dc->wndExt.x < 0 ? -(long)dc->wndExt.x : dc->wndExt.x;
+    wy = dc->wndExt.y < 0 ? -(long)dc->wndExt.y : dc->wndExt.y;
+    if (ax * wy < ay * wx) {
+        ay = ax * wy / wx;
+        dc->vpExt.y = (int)(dc->vpExt.y < 0 ? -ay : ay);
+    } else {
+        ax = ay * wx / wy;
+        dc->vpExt.x = (int)(dc->vpExt.x < 0 ? -ax : ax);
+    }
 }
 
 #define ORGEXT(fn, ord, field, fix, rec)                                 \
@@ -1235,6 +1254,7 @@ HRGN GDIAPI SaveVisRgn(HDC hdc)                                    /* GDI.129 */
 {
     LPDC dc = dc_get(hdc);
     HRGN copy;
+    LPOBJHDR v, c;
     if (!dc || !dc->hVisRgn)
         return 0;
     copy = rgn_new(0, 0, 0, 0);
@@ -1242,8 +1262,14 @@ HRGN GDIAPI SaveVisRgn(HDC hdc)                                    /* GDI.129 */
         return 0;
     dc = dc_get(hdc);
     rgn_copy(copy, dc->hVisRgn);
-    ((LPOBJHDR)obj_get(copy, 0))->hNext = ((LPOBJHDR)obj_get(dc->hVisRgn, 0))->hNext;
-    ((LPOBJHDR)obj_get(dc->hVisRgn, 0))->hNext = copy;
+    v = obj_get(dc->hVisRgn, RGN_MAGIC);
+    c = obj_get(copy, RGN_MAGIC);
+    if (!v || !c) {
+        rgn_free(copy);
+        return 0;
+    }
+    c->hNext = v->hNext;
+    v->hNext = copy;
     return copy;
 }
 
@@ -1251,13 +1277,19 @@ int GDIAPI RestoreVisRgn(HDC hdc)                                  /* GDI.130 */
 {
     LPDC dc = dc_get(hdc);
     HRGN top;
+    LPOBJHDR v, t;
     int r;
     if (!dc || !dc->hVisRgn)
         return ERROR;
-    top = ((LPOBJHDR)obj_get(dc->hVisRgn, 0))->hNext;
-    if (!top)
+    v = obj_get(dc->hVisRgn, RGN_MAGIC);
+    if (!v || (top = v->hNext) == 0)
         return ERROR;
-    ((LPOBJHDR)obj_get(dc->hVisRgn, 0))->hNext = ((LPOBJHDR)obj_get(top, 0))->hNext;
+    t = obj_get(top, RGN_MAGIC);
+    if (!t) {                           /* robustness: the copy deleted */
+        v->hNext = 0;
+        return ERROR;
+    }
+    v->hNext = t->hNext;
     r = rgn_copy(dc->hVisRgn, top);
     rgn_free(top);
     dc_rao_invalidate(dc_get(hdc));
@@ -1306,6 +1338,24 @@ WORD GDIAPI SetHookFlags(HDC hdc, WORD flags)                      /* GDI.192 */
    nothing was drawn; 3.1 accumulated for USER's DCs without SetBoundsRect.
    8000h is taken here as "screen coordinates" (UNVERIFIED). ---- */
 
+/* without 8000h the rectangle is in logical coordinates (3.1 SDK,
+   GetBoundsRect and SetBoundsRect): to_dev converts it to the DC's
+   device coordinates, else back; then left <= right, top <= bottom (the
+   y axis flips in the metric modes). Identity in MM_TEXT at the default
+   origins. UNVERIFIED: 3.1's rounding when the mapping scales */
+static void bounds_logical(LPDC dc, RECT __far *rc, int to_dev)
+{
+    int t;
+    if (to_dev)
+        dc_lp_to_dp(dc, (int __far *)rc, 2);
+    else
+        dc_dp_to_lp(dc, (int __far *)rc, 2);
+    if (rc->left > rc->right)
+        t = rc->left, rc->left = rc->right, rc->right = t;
+    if (rc->top > rc->bottom)
+        t = rc->top, rc->top = rc->bottom, rc->bottom = t;
+}
+
 WORD GDIAPI GetBoundsRect(HDC hdc, RECT __far *rc, WORD flags)     /* GDI.194 */
 {
     LPDC dc = dc_get(hdc);
@@ -1324,6 +1374,7 @@ WORD GDIAPI GetBoundsRect(HDC hdc, RECT __far *rc, WORD flags)     /* GDI.194 */
             rc->right -= dc->dcOrg.x;
             rc->top -= dc->dcOrg.y;
             rc->bottom -= dc->dcOrg.y;
+            bounds_logical(dc, rc, 0);
         }
     }
     if (flags & 1)
@@ -1343,8 +1394,14 @@ WORD GDIAPI SetBoundsRect(HDC hdc, const RECT __far *rc, WORD flags) /* GDI.193 
     if (flags & 1)
         dc->bounds.left = dc->bounds.top = dc->bounds.right = dc->bounds.bottom = 0;
     if ((flags & 2) && rc) {
-        int ox = (flags & 0x8000) ? 0 : dc->dcOrg.x, oy = (flags & 0x8000) ? 0 : dc->dcOrg.y;
-        dc_update_bounds(dc, rc->left + ox, rc->top + oy, rc->right + ox, rc->bottom + oy);
+        RECT t = *rc;
+        int ox = 0, oy = 0;
+        if (!(flags & 0x8000)) {
+            bounds_logical(dc, &t, 1);
+            ox = dc->dcOrg.x;
+            oy = dc->dcOrg.y;
+        }
+        dc_update_bounds(dc, t.left + ox, t.top + oy, t.right + ox, t.bottom + oy);
     }
     dc->boundsFlags = flags & 0x0C;
     return r;
