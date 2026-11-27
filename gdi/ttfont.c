@@ -474,21 +474,28 @@ static WORD tt_glyph(LPTTFILE t, BYTE c)
     return ttfx_FindGlyphIndex(&ttf, u);
 }
 
-/* a glyph's advance width at a size: hdmx's; else with the size's
-   bytecode state attached (TT_HINT_WIDTHS) the hinted advance, unless
-   LTSH says the width is linear at that size; else scaled, rounded */
-static int tt_width(LPTTFILE t, WORD g, WORD ppem, int square, ttfx_scale sx, ttfx_scale sy)
+/* the hdmx record of a size (0: none) */
+static ttfx_i32 tt_hdmx(LPTTFILE t, WORD ppem)
+{
+    WORD i;
+    for (i = 0; t->hdmx && i < t->hdmxn; i++) {
+        ttfx_i32 r = t->hdmx + 8 + (ttfx_i32)i * t->hdmxsize;
+        if (ttfx_Byte(&ttf, r) == ppem)
+            return r;
+    }
+    return 0;
+}
+
+/* a glyph's advance width at a size: hdmx's (hrec: the size's record,
+   for a size as high as wide; 0: none); else with the size's bytecode
+   state attached (TT_HINT_WIDTHS) the hinted advance, unless LTSH says
+   the width is linear at that size; else scaled, rounded */
+static int tt_width(LPTTFILE t, WORD g, WORD ppem, ttfx_i32 hrec, ttfx_scale sx, ttfx_scale sy)
 {
     ttfx_u16 adv;
     int lsb;
-    if (t->hdmx && square) {
-        WORD i;
-        for (i = 0; i < t->hdmxn; i++) {
-            ttfx_i32 r = t->hdmx + 8 + (ttfx_i32)i * t->hdmxsize;
-            if (ttfx_Byte(&ttf, r) == ppem)
-                return ttfx_Byte(&ttf, r + 2 + g);
-        }
-    }
+    if (hrec)
+        return ttfx_Byte(&ttf, hrec + 2 + g);
     if (ttf.bc) {
         BYTE lin = t->ltsh && g < ttfx_U16(&ttf, t->ltsh + 2) ? ttfx_Byte(&ttf, t->ltsh + 4 + g) : 0;
         ttfx_outline o;
@@ -524,6 +531,7 @@ LPFONTINFO tt_info(XP xs)
     HGLOBAL bch = 0;
     int arena = 0;
     ttfx_scale sy = 0, sx = 0;
+    ttfx_i32 hrec;
     if (!tt_open(t))
         return 0;
     tt_load(t);
@@ -581,9 +589,10 @@ LPFONTINFO tt_info(XP xs)
     *(DWORD __far *)(q + 0x76) = (s->pitch & 1) ? 2 : 1;       /* dfFlags */
     mem_copy(q + (WORD)fi->dfFace, s->face, flen + 1);
     size = off = bits;
+    hrec = xp == ppem ? tt_hdmx(t, ppem) : 0;   /* (found once: the same for every glyph) */
     for (i = 0; i < n; i++) {
         WORD c = i < n - 1 ? first + i : first + dfbreak;      /* (the last: the break) */
-        int w = tt_width(t, tt_glyph(t, (BYTE)c), xp, xp == ppem, sx, sy);
+        int w = tt_width(t, tt_glyph(t, (BYTE)c), xp, hrec, sx, sy);
         if (w < 0)
             w = 0;
         *(WORD __far *)(q + 0x94 + i * 6) = (WORD)w;

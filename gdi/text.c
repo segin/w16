@@ -237,14 +237,18 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     if (n < 0 || !s)
         n = 0;
     if (dx && n) {
-        int i;
-        xdx = xalloc(n * 2);
-        if (xdx) {
-            ddx = xptr(xdx);
-            for (i = 0; i < n; i++)
-                ddx[i] = dc_scale_x(dc, dx[i]);
+        if (dc->mapMode == 1)
+            ddx = (short __far *)dx;    /* MM_TEXT: the caller's widths as they are */
+        else {
+            int i;
+            xdx = xalloc(n * 2);
+            if (xdx) {
+                ddx = xptr(xdx);
+                for (i = 0; i < n; i++)
+                    ddx[i] = dc_scale_x(dc, dx[i]);
+            }
+            dc = dc_get(hdc);
         }
-        dc = dc_get(hdc);
     }
     if (dc->textAlign & TA_UPDATECP) {
         x = dc->cur.x;
@@ -258,7 +262,7 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     /* the width: the driver's extent (GD1's log of GD10 on 3.1: with
        the caller's widths, if any), which the underline and strike-out
        take, and the simulated italic's overhang beyond it */
-    lw = n > 0 ? LOWORD(drv_extent_w(dc, s, n, ddx ? xptr(xdx) : (short __far *)0)) : 0;
+    lw = n > 0 ? LOWORD(drv_extent_w(dc, s, n, xdx ? (short __far *)xptr(xdx) : ddx)) : 0;
     tw = n > 0 ? lw + io : 0;
     if (dc->textAlign & TA_CENTER) {
         if ((dc->textAlign & TA_CENTER) == TA_CENTER)
@@ -291,7 +295,7 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
         clip = nrects == 1 ? rao->box : rao->r[k];
         if (!io || !n) {
             fn(dc->lpPDevice, x, y, &clip, s, n, fi, &dc->dm, &tx,
-               ddx ? xptr(xdx) : (short __far *)0, opt ? &orc : 0, opt);
+               xdx ? (short __far *)xptr(xdx) : ddx, opt ? &orc : 0, opt);
             continue;
         }
         /* italic (GD10, GD1's log on 3.1): the text again for each band
@@ -311,7 +315,7 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
                 if (bc.top >= bc.bottom)
                     continue;
                 fn(dc->lpPDevice, x + io - b, y, &bc, s, n, fi, &dc->dm, &tx,
-                   ddx ? xptr(xdx) : (short __far *)0, opt ? &orc : 0, opt);
+                   xdx ? (short __far *)xptr(xdx) : ddx, opt ? &orc : 0, opt);
             }
         }
     }
