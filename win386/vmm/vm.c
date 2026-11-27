@@ -62,8 +62,6 @@ static struct vmev *events;             /* VM events (vm_event) */
 static struct vm *boost;                /* a VM with events: next to run */
 static int resched;
 static struct vm *cwd_owner;            /* the VM DOS's current directory is (vm_dos_cwd) */
-static void crit_claim(u32 n);
-static void crit_release(u32 n);
 
 void vmm_switch(struct vm *n);
 u32 vmm_pdir_entry(u32 i, u32 v);
@@ -980,7 +978,12 @@ void vm_dos_cwd(void)
 {
     struct vm *v = cur_vm;
     struct cregs t;
-    u32 seg = xbuf_seg(), i;
+    /* the last 128 bytes of the loader's transfer buffer: a DOS VM's own
+     * holds the VM stub's start-up message until it is written, and the
+     * stub's first INT 21h comes here (the MS-DOS Prompt's box showed the
+     * directory's name over its banner); no other VM's DOS call comes
+     * meanwhile (a VM's DOS calls, these too, are not left midway) */
+    u32 seg = info->xbuf_seg + ((info->xbuf_size - 128) >> 4), i;
     char *b = (char *)(seg << 4);
     /* (a DOS that answers from its CDS: instance data does it, and the
      * query below would see the calling VM's own) */
@@ -988,10 +991,6 @@ void vm_dos_cwd(void)
     /* (another VM waiting inside DOS, a box's prompt reading the keyboard,
      * is no reason to wait: DOSBox's DOS does these four at once) */
     if (v->indos || v->crit) return;
-    /* no other VM between the asking and the giving back (a critical
-     * section: the nested calls could be interrupted by a switch) */
-    crit_claim(1);
-    if (cwd_owner == v) goto out;
     if (cwd_owner) {
         memset(&t, 0, sizeof(t));
         t.eax = 0x1900;
@@ -1012,7 +1011,7 @@ void vm_dos_cwd(void)
     if (vm_trace) trace("{cwd %d '%s' > %d '%s'}", cwd_owner ? cwd_owner->id : 0, cwd_owner ? cwd_owner->cwd : "",
                         v->id, v->cwd);
     cwd_owner = v;
-    if (!v->cwd[0]) goto out;           /* (not known yet: as DOS has it) */
+    if (!v->cwd[0]) return;             /* (not known yet: as DOS has it) */
     memset(&t, 0, sizeof(t));
     t.eax = 0x0E00;
     t.edx = (u8)(v->cwd[0] - 'A');
@@ -1023,8 +1022,6 @@ void vm_dos_cwd(void)
     t.eax = 0x3B00;
     t.ds = seg;
     v86_int(&t, 0x21);
-out:
-    crit_release(1);
 }
 
 /* INT 21h from V86 code: on to DOS with a second frame above the
