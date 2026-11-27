@@ -43,7 +43,7 @@ TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK
 # probes for the Windows boot (tests/dropin.sh); not in make test
 # DX probes (tests/dosxtest.sh): DOS extender probes in the KERNEL slot
 DXPROBES := DX1 DX2 DX4 DX5 DX8 DX9
-DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63 TK68 TK68W TK73 TK74 TK69 TK69A TK70 TK71 TK75
+DROPIN   := TK20 TK21 TK22 TK23 TK24 TK25 TK26 TK27 TK28 TK29 TK30 TK31 TK32 TK33 TK34 TK35 TK36 TK37 TK38 TK39 TK40 TK41 TK42 TK43 TK44 TK45 TK46 TK47 TK48 TK49 TK50 TK51 TK51C TK52 TK53 TK55 TK56 TK57 TK59 TK63 TK68 TK68W TK73 TK74 TK69 TK69A TK70 TK71 TK75 TK76
 # TK65's import DLLs (TK65IMP below)
 TK65I   := TK65I1.DLL TK65I2.DLL TK65I3.DLL TK65I4.DLL TK65I5.DLL TK65I6.DLL TK65I7.DLL TK65I8.DLL TK65I9.DLL
 # DLLs and files TK5 uses
@@ -380,6 +380,12 @@ $(DOS)/TK75.EXE: $(B)/tests/start.o $(B)/tests/tk75.o tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win import INITAPP USER.5 \
 	    option map=$(B)/tests/tk75.map file { $(B)/tests/start.o $(B)/tests/tk75.o }
+
+# TK76.EXE: faults with a stack the fault report must not trust
+$(DOS)/TK76.EXE: $(B)/tests/start.o $(B)/tests/tk76.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/tk76.map file { $(B)/tests/start.o $(B)/tests/tk76.o }
 
 # TK57.EXE: KERNEL in 386 Enhanced mode: WinFlags, the Reboot API (tk57s.asm)
 $(B)/tests/tk57.o: tests/apps/tk57ref.h tests/apps/tklog.h
