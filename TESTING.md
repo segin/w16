@@ -416,3 +416,8 @@ The project's own runs use `installation-05`, the script's default host.
   are known, expected failures (each states why).
 - After every merge into master, both are run; see ARCHITECTURE.md §9.2 for
   how the tests are built and what each kind of check means.
+- A case that passes or fails with where code lands is a bug, not a flake.
+  `make build/kpad/N/KRNL386.EXE` links KRNL386 with N bytes of padding
+  after `thunk.o` (kernel/kpad.asm), shifting the rest of its code; swap it
+  into a tree to try a case at other layouts. Boot-test case `win386pad`
+  does that for `win386tree` (sizes 8 and 96, Makefile `KPADS`).

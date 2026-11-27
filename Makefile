@@ -150,6 +150,22 @@ $(DOS)/KRNL386.EXE: $(K386OBJS) $(B)/boot/boot.exe kernel/kernel.lnk
 	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
 	    option map=$(B)/kernel386/krnl386.map file { $(K386OBJS) }
 
+# KRNL386 with its code shifted: build/kpad/N/KRNL386.EXE is KRNL386.EXE
+# with N bytes of padding (kernel/kpad.asm) linked after thunk.o, so
+# everything after it in _TEXT moves by N bytes; the boot test's
+# win386pad runs a case on such KERNELs (bugs that depend on where code
+# lands). Never installed; KPADS are the sizes win386pad uses.
+KPADS := 8 96
+dos: $(KPADS:%=$(B)/kpad/%/KRNL386.EXE)
+$(B)/kpad/%/kpad.o: kernel/kpad.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NFLAGS) -DKPAD=$* -o $@ $<
+$(B)/kpad/%/KRNL386.EXE: $(K386OBJS) $(B)/kpad/%/kpad.o $(B)/boot/boot.exe kernel/kernel.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @kernel/kernel.lnk name $@ option stub=$(B)/boot/boot.exe \
+	    option map=$(@D)/krnl386.map \
+	    file { $(patsubst $(B)/kernel386/thunk.o,$(B)/kernel386/thunk.o $(B)/kpad/$*/kpad.o,$(K386OBJS)) }
+
 # ---- WIN87EM.DLL: floating-point support (win87em/) ----
 $(B)/win87em/%.o: win87em/%.asm
 	@mkdir -p $(@D)
