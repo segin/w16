@@ -26,4 +26,4 @@ W32S.386 finds Microsoft's VMM internals by matching code bytes (a sequence star
 
 ## Test state (2026-11-27, w16-vm3)
 
-See the final report of the w16-vm3 agent; run on installation-05 with `tools/remote-test.sh -n w16-vm3`.
+installation-05, `tools/remote-test.sh -n w16-vm3` at "Docs: 12.18 ...": make test passes; the full boot test 192 ok, 4 failures, none the branch's: toolhelp tree286 (`m`: the W16SANS... font modules; fails on master the same), lzexpand quirks (fails on master the same), holdbtn and trails@timednl (timing under the host's load: both pass rerun, on the branch and on master). The targeted run before it: kernel k386 pestart win32s vmprobe bigmem taskman holdbtn vdmad ver (with w32s) msvc msvccl win386dpmi win386 win386dos win386two win386tree all ok (taskman too, this time; see Open 2).
