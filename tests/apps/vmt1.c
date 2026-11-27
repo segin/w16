@@ -74,7 +74,7 @@ struct snap {
 };
 static struct snap s0, s1;
 
-static char res[6144];
+static char res[16384];                 /* (6144 dropped the last step and "VMT1 done" once the records had memory) */
 static int nres, fails;
 static void FAR *entry;
 static char titles[MAXV][32];          /* each box's PIF title, by start order */
