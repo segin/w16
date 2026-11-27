@@ -58,12 +58,38 @@
 #   heapwalk  HeapWalk (BIN\HEAPWALK.EXE, TOOLHELP's global heap walk) the
 #          same way: no fault, its window (caption, menu bar) there as
 #          under 3.1.
+#   msquery  Microsoft Query (MSAPPS\MSQUERY\MSQUERY.EXE, which Visual
+#          C++ 1.52's Setup installs in the Windows directory, with its
+#          Cue Cards and the ODBC libraries) from WIN.INI run= on w16's
+#          tree alone and on Windows 3.1 without Arial: the Cue Cards' box
+#          "Cue Cards uses Arial font" must take Return, then Alt+F4 closes
+#          the Cue Cards, Alt+F4 Query, Alt+F4 and Return end Windows
+#          (tests/scripts/input/msquery.txt); w16 must not fault and must
+#          end with code 0 (it did not: USER's SetFocus activated Query's
+#          disabled window again, the box took no keys, and closing Query
+#          closed the Cue Cards under their box, which faulted). The
+#          Windows directory's files (MSAPPS\MSQUERY, CCARD200.EXE,
+#          MSQUERY.INI, ODBC.INI, ODBCINST.INI, SYSTEM\: CCAPI200.DLL,
+#          CTL3D.DLL, CTL3DV2.DLL, CUECARD2.DLL, QRYINTL.DLL, ODBC.DLL,
+#          ODBCINST.DLL, ODBCCURS.DLL) come from $W16_MSQUERY_DIR (default:
+#          MSQUERY beside the MSVC directory), laid out as there.
+#   cvdos  CodeView for MS-DOS (BIN\CV.EXE, a DPMI client) in a full-screen
+#          DOS box on w16's tree with Visual C++'s four devices, started
+#          from the MS-DOS prompt in C:\MSVC\BIN, the mouse moved over it,
+#          quit with Escape, EXIT (tests/scripts/input/cvdos.txt): DOSBox-X
+#          must stay alive (the mouse ended it: "IRET: Illegal descriptor
+#          type 12", MOUSE.DRV's PS/2 handler run in CodeView's VM),
+#          CodeView's screen a text screen whose menu bar equals the same
+#          run's under Microsoft's WIN386, and Windows back after EXIT.
+#          (The Load dialog's file list is empty under w16's WIN386: not
+#          compared.)
 # Visual C++ is not w16's: nothing of it is committed. boot and cvw take
 # the installed C:\MSVC directory from $W16_MSVC_DIR (default
 # ~/Downloads/msvc152/MSVC; boot needs BIN's four .386 files, cvw BIN's
 # CVW.EXE and its DLLs too); without it they say so and pass ("skip").
 #
-#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx cl)
+#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx cl;
+#          msquery and cvdos by name: boot-test cases msquery and cvdos)
 set -u
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -321,6 +347,90 @@ wps|ole2view|heapwalk)
     fi
     if [ "$r" = ok ]; then echo "ok   $part: $prog comes up on w16's tree as on Windows 3.1"
     else echo "FAIL $part: $r"; fails=$((fails + 1)); fi ;;
+msquery)
+    mq=${W16_MSQUERY_DIR:-$(dirname "$msvc")/MSQUERY}
+    [ -f "$mq/MSAPPS/MSQUERY/MSQUERY.EXE" ] || { echo "skip msquery: no Microsoft Query at $mq (W16_MSQUERY_DIR)"; continue; }
+    # the Windows directory's files: WINDOWS on 3.1, W16 on the tree
+    # (their paths have no blanks)
+    mqf() {
+        (cd "$mq" && find . -type f) | while read -r f; do
+            f=${f#./}
+            printf ' -f %s=%s/%s' "$mq/$f" "$1" "$(printf '%s' "$f" | tr a-z A-Z)"
+        done
+    }
+    scr=$root/tests/scripts/input/msquery.txt
+    for s in ref w16; do
+        rm -rf "$out/msquery-$s"
+        if [ $s = ref ]; then
+            # Windows 3.1 without Arial, as w16's tree (the Cue Cards' box)
+            set -- -r -3 -c "WIN /3 /B" -i 'WIN.INI:windows:run=C:\WINDOWS\MSAPPS\MSQUERY\MSQUERY.EXE' \
+                -i "WIN.INI:fonts:-Arial (TrueType)=" -i "WIN.INI:fonts:-Arial Bold (TrueType)=" \
+                -i "WIN.INI:fonts:-Arial Bold Italic (TrueType)=" -i "WIN.INI:fonts:-Arial Italic (TrueType)="
+            for x in ARIAL ARIALBD ARIALBI ARIALI; do
+                set -- "$@" -f "WINDOWS/SYSTEM/$x.TTF=-" -f "WINDOWS/SYSTEM/$x.FOT=-"
+            done
+            # shellcheck disable=SC2046
+            set -- "$@" $(mqf WINDOWS)
+        else
+            # shellcheck disable=SC2046
+            set -- -T "$root/build/w16" -3 -c "WIN /3 /B" \
+                -i 'WIN.INI:windows:run=C:\W16\MSAPPS\MSQUERY\MSQUERY.EXE' $(mqf W16)
+        fi
+        timeout 500 "$root/tests/inputrun.sh" -s -b 150 -t 300 "$scr" "$out/msquery-$s" -p 386 "$@" \
+            > "$out/msquery-$s.txt" 2>&1
+    done
+    r=ok
+    grep -q '^Windows ended' "$out/msquery-ref/input.log" 2>/dev/null ||
+        r="Windows 3.1 did not end after Query and its Cue Cards were closed ($out/msquery-ref)"
+    [ "$r" != ok ] || ! grep -q '^w16: exception' "$out/msquery-w16.txt" ||
+        r="$(grep -m1 '^w16: exception' "$out/msquery-w16.txt") ($out/msquery-w16.txt)"
+    [ "$r" != ok ] || { grep -q '^Windows ended' "$out/msquery-w16/input.log" 2>/dev/null &&
+        grep -q '^w16: back to DOS, code 0000' "$out/msquery-w16.txt"; } ||
+        r="w16 did not end Windows after Query and its Cue Cards were closed ($out/msquery-w16)"
+    if [ "$r" = ok ]; then echo "ok   msquery: Microsoft Query's Cue Cards box takes the keys, Query closes and Windows ends as under 3.1"
+    else echo "FAIL msquery: $r"; fails=$((fails + 1)); fi ;;
+cvdos)
+    [ -n "$(mfile BIN CV.EXE)" ] || { echo "skip cvdos: no CV.EXE in $msvc/BIN (W16_MSVC_DIR)"; continue; }
+    set -- -p 386 -T "$root/build/w16" -3 -c "WIN /3 /B"
+    for f in "$msvc"/BIN/*; do
+        case $(basename "$f" | tr a-z A-Z) in
+        *.EXE|*.DLL|*.386|*.HLP) set -- "$@" -f "$f=MSVC/BIN/$(basename "$f" | tr a-z A-Z)" ;;
+        esac
+    done
+    for x in DOSXNT MMD CVW1 VMB; do
+        set -- "$@" -i "386Enh:+device=C:\\MSVC\\BIN\\$x.386"
+    done
+    scr=$root/tests/scripts/input/cvdos.txt
+    # w16's WIN386 first, then Microsoft's (its run's menu bar the reference)
+    for s in w16 ms; do
+        rm -rf "$out/cvdos-$s"
+        [ $s = ms ] && set -- "$@" -f "$ref/SYSTEM/WIN386.EXE=W16/SYSTEM/WIN386.EXE"
+        # (the user's machine: an S3 card, 32 MB)
+        DROPIN_MACHINE=svga_s3 DROPIN_MEMSIZE=32 DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+            timeout 500 "$root/tests/inputrun.sh" -s -b 200 -t 300 \
+            "$scr" "$out/cvdos-$s" "$@" > "$out/cvdos-$s.txt" 2>&1
+    done
+    r=ok
+    for s in ms w16; do
+        [ "$r" != ok ] || ! grep -aq 'E_Exit' "$out/cvdos-$s/dosbox.log" ||
+            r="DOSBox-X ended ($s): $(grep -a -m1 'E_Exit' "$out/cvdos-$s/dosbox.log")"
+        for n in 01-cv 02-moved 04-back; do
+            [ "$r" != ok ] || [ -f "$out/cvdos-$s/$n.png" ] || r="no $n screen ($s: $out/cvdos-$s)"
+        done
+    done
+    if [ "$r" = ok ]; then
+        for n in 01-cv 02-moved; do
+            [ "$(magick identify -format '%wx%h' "$out/cvdos-w16/$n.png")" = 720x400 ] || { r="$n: not a text screen"; break; }
+            # CodeView's menu bar (the top 16 rows)
+            for s in ms w16; do magick "$out/cvdos-$s/$n.png" -crop 720x16+0+0 +repage "$out/cvdos-$s-$n-bar.png"; done
+            d=$(pixdiff "$out/cvdos-ms-$n-bar.png" "$out/cvdos-w16-$n-bar.png")
+            [ "$d" = 0 ] || { r="$n: CodeView's menu bar differs from the run under Microsoft's WIN386: $d pixels"; break; }
+        done
+    fi
+    [ "$r" != ok ] || [ "$(magick identify -format '%wx%h' "$out/cvdos-w16/04-back.png")" = 640x480 ] ||
+        r="Windows not back after EXIT ($out/cvdos-w16/04-back.png)"
+    if [ "$r" = ok ]; then echo "ok   cvdos: CodeView for MS-DOS starts, takes the mouse moving and quits in a DOS box; DOSBox-X stays alive"
+    else echo "FAIL cvdos: $r"; fails=$((fails + 1)); fi ;;
 *)
     echo "FAIL $part: no such part"; fails=$((fails + 1)) ;;
 esac

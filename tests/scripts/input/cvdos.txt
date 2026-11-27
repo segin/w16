@@ -1,0 +1,31 @@
+; CodeView for MS-DOS (a DPMI client) in a full-screen DOS box: started
+; from the MS-DOS prompt in its own directory, the mouse moved over it
+; (the move ended DOSBox-X: IRQ 12 ran MOUSE.DRV's handler in the box),
+; Escape quits it, EXIT goes back to Windows (tests/msvcvxd.sh cvdos)
+sleep 4
+key alt+f
+sleep 1
+key r
+sleep 2
+type command.com
+key Return
+sleep 12
+type cd \msvc\bin
+key Return
+sleep 2
+type cv
+key Return
+sleep 3
+jiggle 40
+sleep 15
+shot 01-cv
+jiggle 40
+sleep 3
+shot 02-moved
+key Escape
+sleep 6
+shot 03-quit
+type exit
+key Return
+sleep 10
+shot 04-back

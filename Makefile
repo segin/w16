@@ -2868,6 +2868,13 @@ $(DOS)/US36.EXE: $(B)/tests/start.o $(B)/tests/us36.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us36.map file { $(B)/tests/start.o $(B)/tests/us36.o }
 dos: $(DOS)/US36.EXE
+# US39: SetFocus on disabled and minimised windows; another task's MessageBox (tests/apps/us39.c)
+$(B)/tests/us39.o: tests/apps/us39ref.h tests/apps/tklog.h
+$(DOS)/US39.EXE: $(B)/tests/start.o $(B)/tests/us39.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us39.map file { $(B)/tests/start.o $(B)/tests/us39.o }
+dos: $(DOS)/US39.EXE
 # US32S: a window spy for US32's question (tests/apps/us32s.c)
 $(B)/tests/us32s.o: tests/apps/us32ref.h tests/apps/tklog.h
 $(DOS)/US32S.EXE: $(B)/tests/start.o $(B)/tests/us32s.o tests/apps/app.lnk

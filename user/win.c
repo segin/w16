@@ -972,7 +972,10 @@ BOOL WINAPI EnableWindow(HWND h, BOOL enable)
     } else if (!enable && !was) {
         send_message(h, WM_CANCELMODE, 0, 0);
         w->style |= WS_DISABLED;
-        if (h == hwndFocus || IsChild(h, hwndFocus))
+        /* the window itself loses the focus; a child of it keeps it
+           (US39 dis on 3.1: A disabled with the focus on its child C,
+           GetFocus still answered C) */
+        if (h == hwndFocus)
             set_focus(0);
         send_message(h, WM_ENABLE, FALSE, 0);
     }
