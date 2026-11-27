@@ -22,6 +22,11 @@
  *           normal inactive window; the icon title window across a
  *           restore; the window made active when the active one is
  *           destroyed with an icon above the next open window
+ *   iconopen  the active window minimised (SW_SHOWMINIMIZED) and opened
+ *           again with WM_SYSCOMMAND SC_RESTORE, SW_RESTORE and
+ *           SW_SHOWNORMAL: its activation and focus messages and where
+ *           the focus is (WINOA386's full-screen box, an active icon,
+ *           going to a window: Alt+Enter)
  *   skip    WH_CBT's CLICKSKIPPED and KEYSKIPPED for a key and a click, with
  *           and without WH_KEYBOARD and WH_MOUSE refusing them
  *   jr      WH_JOURNALRECORD (system-wide) for a key
@@ -477,6 +482,60 @@ static void sec_show(void)
     SetActiveWindow(hMain);
 }
 
+/* ---- iconopen: the active window minimised, then opened again: the
+   activation and focus messages it gets (A WM_ACTIVATE with wParam,
+   HIWORD(lParam) and the other window, b itself, m US30's, 0 none; N WM_NCACTIVATE, P WM_ACTIVATEAPP, S WM_SETFOCUS, K
+   WM_KILLFOCUS, Q WM_QUERYOPEN), and the focus afterwards ---- */
+LRESULT FAR PASCAL __export __loadds icon_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+{
+    char t[16];
+    t[0] = 0;
+    switch (msg) {
+    case WM_ACTIVATE:    wsprintf(t, "A%d%d%c", wp, HIWORD(lp) != 0, wname((HWND)LOWORD(lp))); break;
+    case WM_NCACTIVATE:  wsprintf(t, "N%d", wp != 0); break;
+    case WM_ACTIVATEAPP: wsprintf(t, "P%d", wp != 0); break;
+    case WM_SETFOCUS:    lstrcpy(t, "S"); break;
+    case WM_KILLFOCUS:   lstrcpy(t, "K"); break;
+    case WM_QUERYOPEN:   lstrcpy(t, "Q"); break;
+    }
+    if (t[0])
+        rec_add(t);
+    return DefWindowProc(h, msg, wp, lp);
+}
+
+static void sec_iconopen(void)
+{
+    static const char *const how[] = { "sysrestore", "restore", "shownormal", 0 };
+    char nm[32];
+    int i;
+    frozen = 0;
+    ha = 0;
+    hb = CreateWindow("US30C", "c", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 10, 10, 200, 150, 0, 0, hi, NULL);
+    SetActiveWindow(hb);
+    pump(100);
+    for (i = 0; how[i]; i++) {
+        rec[0] = 0;
+        rec_add("|min");
+        ShowWindow(hb, SW_SHOWMINIMIZED);
+        wsprintf(nm, "iconopen.%s.min.active", how[i]);
+        obs(nm, GetActiveWindow() == hb);
+        wsprintf(nm, "iconopen.%s.min.focus", how[i]);
+        obs(nm, GetFocus() == hb ? 1 : GetFocus() == 0 ? 0 : 2);
+        rec_add("|open");
+        if (i == 0)
+            SendMessage(hb, WM_SYSCOMMAND, SC_RESTORE, 0);
+        else
+            ShowWindow(hb, i == 1 ? SW_RESTORE : SW_SHOWNORMAL);
+        wsprintf(nm, "iconopen.%s.focus", how[i]);
+        obs(nm, GetFocus() == hb ? 1 : GetFocus() == 0 ? 0 : 2);
+        wsprintf(nm, "iconopen.%s", how[i]);
+        obs_str(nm, rec);
+    }
+    DestroyWindow(hb);
+    hb = 0;
+    SetActiveWindow(hMain);
+}
+
 /* ---- HCBT_CLICKSKIPPED, HCBT_KEYSKIPPED: a key and a click with WH_CBT
    alone, then with WH_KEYBOARD and WH_MOUSE refusing them ---- */
 static HHOOK hkc;
@@ -592,6 +651,7 @@ int __cdecl tmain(void)
     reg("US30M", DefWindowProc);
     reg("US30A", DefWindowProc);
     reg("US30B", DefWindowProc);
+    reg("US30C", icon_proc);
     hMain = CreateWindow("US30M", "US30", WS_OVERLAPPEDWINDOW, 0, 0, 400, 300, 0, 0, hi, NULL);
     ShowWindow(hMain, SW_SHOWNORMAL);
     UpdateWindow(hMain);
@@ -606,6 +666,8 @@ int __cdecl tmain(void)
     sec_filter();
     out("show\r\n");
     sec_show();
+    out("iconopen\r\n");
+    sec_iconopen();
     out("skip\r\n");
     sec_skip();
     out("jr\r\n");
