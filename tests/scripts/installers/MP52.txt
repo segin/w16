@@ -1,0 +1,31 @@
+; MP52BETA.EXE (tests/installers.sh): Windows Media Player 5.2 beta,
+; InstallShield behind Blinker's self-loader like WP3: Yes, Next on
+; Welcome, Yes to the licence, Next on the destination (C:\MPlayer) and
+; the program folder; the last page (restart now?) is left as it is. Its
+; uninstall log lists what it copied into the Windows directory, which
+; differs between w16's tree and 3.1's: its size is not compared
+; dest MPLAYER
+; anysize UNINST.ISU
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\INST\MP52\MP52BETA.EXE
+key Return
+settle 60 5
+shot start
+key Return
+settle 240 15
+shot s1
+key Return
+settle 180 10
+shot s2
+key Return
+settle 180 10
+shot s3
+key Return
+settle 180 10
+shot s4
+key Return
+settle 180 10
+shot done
