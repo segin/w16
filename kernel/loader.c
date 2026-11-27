@@ -911,27 +911,81 @@ static module FAR *load_file(const char FAR *name, const char *ext, int program,
    the entry's flags (allocated, loaded). Pietrek: 3.1 never calls
    ExitProc. w16 discards nothing and loads on no fault, so it calls
    LoadAppSeg itself after BootApp for every segment not loaded yet.
-   UNVERIFIED (no 3.1 probe yet): the selector type MyAlloc gives (w16:
-   data; code segments become code once all are loaded, as w16's own
-   loading does) and the fourth table pointer Pietrek mentions. */
+   Observed on Windows 3.1 (tests/apps/tk78.c, KRNL386, boot-test case
+   selfload), and done so here:
+   - the table's reserved slot 0Ch gets a far pointer too (Pietrek's
+     fourth): KERNEL's THHOOK + 2 (pGlobalHeap, then hExeHead ...);
+   - BootApp is called with DS = KERNEL's data segment, CX = ES = segment
+     1's selector, DX = its handle; the file handle stands just past
+     segment 1's relocation records; the module's usage count is 1; the
+     other segments' entries have the file's flags without the privilege
+     bits, code 4000h more and, if not discardable, 0400h (segment 1:
+     4000h, allocated, loaded); the automatic data segment's minimum
+     allocation is the file's (no heap or stack added);
+   - BootApp's AX is LoadModule's result when below 32 (0 "insufficient
+     memory", 2 "cannot find file", the rest UNVERIFIED): the load fails;
+   - MyAlloc(flags, size, elem) returns the selector in AX and the handle
+     in DX (the SDK has them the other way round); a code segment's
+     selector is a code selector; for 0 bytes AX = 0, DX = a handle of a
+     discarded block;
+   - EntryAddrProc returns the address in DX:AX (0 for an entry whose
+     segment is not loaded, FFFFh:value for a constant, as GetProcAddress)
+     and leaves CX = AX | DX (ZF set for 0), ES = the module table, BX =
+     the offset of the entry's 5-byte record in its entry table (3 more
+     for a constant; BX unchanged for no entry). WinPlay3's and an MPEG
+     player's Blinker loader said "BLINKER - Unknown relocation type"
+     after w16's EntryAddrProc left these registers as its C code had
+     them;
+   - after BootApp, KERNEL has closed the file: LoadAppSeg for a segment
+     still to load gets hFile FFFFh; when it returns 0, KERNEL opens the
+     file and calls it again with that handle (at position 0), as Pietrek
+     has it. 3.1 does this for the entry point's segment when the task
+     starts (a test program that left it so failed to start on 3.1 with
+     "insufficient memory": UNVERIFIED why); w16 for every segment, at
+     once.
+   Not done: GlobalFlags of MyAlloc's blocks (3.1: 0900h code, 0400h
+   data, 4000h / 4900h discarded), the type of a reallocated discarded
+   code segment (3.1 code at once, w16 once all are loaded). */
 #define SL_MAX 64
 static module FAR *sl_mod;              /* the module BootApp is loading */
 static u16 sl_hnd[SL_MAX], sl_sel[SL_MAX], sl_n;
 
-/* the segment handles the program stored in the module table into seg[] */
+/* BootApp and LoadAppSeg: the far Pascal procedure cs:ip with up to 3
+   word arguments, DS = KERNEL's, CX = ES = sel1 and DX = hnd1; returns
+   DX:AX (kentry.asm) */
+extern u32 __cdecl sl_call(u16 cs, u16 ip, u16 sel1, u16 hnd1, u16 nargs,
+                           u16 a0, u16 a1, u16 a2);
+extern void __far sl_entryaddr(void);   /* kentry.asm: EntryAddrProc */
+#pragma aux sl_entryaddr "*"
+extern u16 thhook_w[];                  /* toolhelp.c: THHOOK */
+#pragma aux thhook_w "THHOOK"
+
+/* the selector for a handle the program stored in the module table */
+static u16 sl_selector(u16 v)
+{
+    u16 k, s;
+    for (k = 0; k < sl_n; k++)
+        if (sl_hnd[k] == v || sl_sel[k] == v)
+            return sl_sel[k];
+    s = (u16)(GlobalHandle(v) >> 16);
+    return s;                           /* (0: discarded, not loaded) */
+}
+
+/* the segment handles the program stored in the module table into seg[]
+   (a handle MyAlloc gave for 0 bytes, reallocated by the program: its
+   selector through GlobalHandle; w16 jumped to the handle) */
 static void sl_sync(module FAR *m)
 {
     u16 i, k;
     for (i = 0; i < m->seg_count; i++) {
         u16 v = MOD_SEGHND(m, i);
-        if (!v || v == m->seg[i].hnd)
+        if (!v)
             continue;
-        m->seg[i].hnd = m->seg[i].sel = v;
+        m->seg[i].hnd = v;
+        m->seg[i].sel = sl_selector(v);
         for (k = 0; k < sl_n; k++)
-            if (sl_hnd[k] == v || sl_sel[k] == v) {
+            if (sl_sel[k] == v)
                 m->seg[i].hnd = sl_hnd[k];
-                m->seg[i].sel = sl_sel[k];
-            }
     }
 }
 
@@ -957,11 +1011,10 @@ static void sl_trace(const char *what, u16 a, u16 b, u16 c, u16 d, u16 e)
     kdbg_file(t);
 }
 
-/* MyAlloc (table 10h): memory for a segment of wSize << wElem bytes,
-   the handle in the low word and the selector in the high word; for 0
-   bytes only a handle (a discarded block): 0 in the low word and the
-   handle in the high word (SDK). WinPlay3's installer asks for 0 bytes
-   and gives the segment its memory with GlobalReAlloc in LoadAppSeg. */
+/* MyAlloc (table 10h): memory for a segment of wSize << wElem bytes:
+   the selector in AX, the handle in DX (observed); for 0 bytes only a
+   handle (a discarded block), AX = 0. WinPlay3's installer asks for 0
+   bytes and gives the segment its memory with GlobalReAlloc. */
 static u32 KAPI sl_myalloc(u16 flags, u16 size, u16 elem)
 {
     u32 n = elem < 16 ? (u32)size << elem : 0;
@@ -976,25 +1029,41 @@ static u32 KAPI sl_myalloc(u16 flags, u16 size, u16 elem)
         sl_trace("MyAlloc flags size elem hnd (handle only): ", flags, size, elem, h, 0);
         return (u32)h << 16;
     }
+    if (!(flags & NESEG_DATA))
+        gset_code(sel);
     if (sl_n < SL_MAX) {
         sl_hnd[sl_n] = h;
         sl_sel[sl_n++] = sel;
     }
     sl_trace("MyAlloc flags size elem hnd sel: ", flags, size, elem, h, sel);
-    return ((u32)sel << 16) | h;
+    return ((u32)h << 16) | sel;
 }
 
-/* EntryAddrProc (table 14h): the far address of entry wEntryNo */
-static u32 KAPI sl_entryaddr(u16 hblock, u16 entry)
+/* EntryAddrProc (table 14h), its C half (kentry.asm sl_entryaddr sets
+   BX, CX, ES and the flags): the far address of entry wEntryNo; *rec
+   gets the offset of its record in the module table (+3 for a
+   constant), untouched when there is none */
+u32 __cdecl __far sl_entry_c(u16 hblock, u16 entry, u16 FAR *rec)
 {
     module FAR *m = module_of(hblock);
-    u16 sel, off;
+    u16 sel, off, t, b;
     int is_const;
     if (!m)
         return 0;
     sl_sync(m);
-    if (!module_entry(m, entry, &sel, &off, &is_const) || is_const)
+    if (!module_entry(m, entry, &sel, &off, &is_const))
         sel = off = 0;
+    else if (is_const)
+        sel = 0xFFFF;
+    else if (!sel)
+        off = 0;
+    t = m->ne_sel;
+    for (b = MDB_W(t, MDB_ENTRY); b; b = MDB_W(t, b + 4))
+        if (entry > MDB_W(t, b) && entry <= MDB_W(t, b + 2)) {
+            u16 r = b + 6 + 5 * (entry - MDB_W(t, b) - 1);
+            *rec = is_const ? r + 3 : r;
+            break;
+        }
     sl_trace("EntryAddrProc block entry sel off: ", hblock, entry, sel, off, 0);
     return ((u32)sel << 16) | off;
 }
@@ -1029,44 +1098,70 @@ static void sl_note(module FAR *m, u16 i, u16 ret)
     kdbg_file(b);
 }
 
-static int boot_app(module FAR *m)
+/* Run the program's BootApp, then LoadAppSeg for each segment it left.
+   Returns 1 when loaded, else 0 with LoadModule's error in *e (BootApp's
+   AX below 32, or LE_BADFORMAT). */
+static int boot_app(module FAR *m, u16 *e)
 {
     u8 FAR *t = MK_FP(m->seg[0].sel, 0);
-    u16 fh, err, i, hb = m->ne_sel;
-    u32 boot, load;
+    const ne_segment FAR *s1 = MOD_SEG(m, 0);
+    u16 fh, err, i, hb = m->ne_sel, ret, use, sel1 = m->seg[0].sel, hnd1 = m->seg[0].hnd;
+    u32 boot, load, pos;
     module FAR *outer = sl_mod;
-    int ok = 1;
+    u16 shift = NE_HDR(m)->align_shift ? NE_HDR(m)->align_shift : 9;
 
     if (gsize_of_sel(m->seg[0].sel) < 0x28 || t[0] != 'A' || t[1] != '0')
-        return 0;
+        return *e = LE_BADFORMAT, 0;
+    *(u32 FAR *)(t + 0x0C) = (u32)(void __far *)&thhook_w[1];
     *(u32 FAR *)(t + 0x10) = (u32)(void __far *)sl_myalloc;
     *(u32 FAR *)(t + 0x14) = (u32)(void __far *)sl_entryaddr;
     *(u32 FAR *)(t + 0x24) = (u32)(void __far *)sl_setowner;
     boot = *(u32 FAR *)(t + 4);
     load = *(u32 FAR *)(t + 8);
-    if (!(MOD_SEG(m, 0)->flags & NESEG_DATA))
+    if (!(s1->flags & NESEG_DATA))
         gset_code(m->seg[0].sel);
     if (!f_open(m->path, &fh, &err))
-        return 0;
+        return *e = LE_BADFORMAT, 0;
+    /* the handle just past segment 1 and its relocation records */
+    pos = ((u32)s1->sector << shift) + (s1->file_len ? s1->file_len : 0x10000UL);
+    if (s1->flags & NESEG_RELOCS) {
+        u16 cnt = 0;
+        if (f_seek(fh, pos) && f_read(fh, &cnt, 2))
+            pos += 2 + 8 * (u32)cnt;
+    }
+    f_seek(fh, pos);
+    thhook_sync();
     sl_mod = m;
-    pascal_call3((u16)(boot >> 16), (u16)boot, hb, 2, hb, fh, 0);
+    use = MOD_USAGE(m);
+    MOD_USAGE(m) = 1;
+    ret = (u16)sl_call((u16)(boot >> 16), (u16)boot, sel1, hnd1, 2, hb, fh, 0);
+    MOD_USAGE(m) = use;
+    f_close(fh);
     sl_sync(m);
-    for (i = 1; ok && i < m->seg_count; i++) {
+    if (ret < 32) {
+        sl_mod = outer;
+        return *e = ret, 0;
+    }
+    for (i = 1; i < m->seg_count; i++) {
         u16 sel = 0;
         if (!(MOD_SEG(m, i)->flags & NESEG_LOADED) || !m->seg[i].sel) {
-            sel = (u16)pascal_call3((u16)(load >> 16), (u16)load, hb, 3,
-                                    hb, fh, i + 1);
+            sel = (u16)sl_call((u16)(load >> 16), (u16)load, sel1, hnd1, 3, hb, 0xFFFF, i + 1);
+            if (!sel && f_open(m->path, &fh, &err)) {
+                sel = (u16)sl_call((u16)(load >> 16), (u16)load, sel1, hnd1, 3, hb, fh, i + 1);
+                f_close(fh);
+            }
             sl_sync(m);
             if (!m->seg[i].sel && sel)
                 m->seg[i].hnd = m->seg[i].sel = sel;
         }
         sl_note(m, i, sel);
-        if (!m->seg[i].sel)
-            ok = 0;
+        if (!m->seg[i].sel) {
+            sl_mod = outer;
+            return *e = LE_BADFORMAT, 0;
+        }
     }
-    f_close(fh);
     sl_mod = outer;
-    return ok;
+    return 1;
 }
 
 static module FAR *load_body(const char FAR *name, const char *ext, int program,
@@ -1252,17 +1347,17 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
                 size = flen;
         }
         if ((h.flags & NEF_SELFLOAD) && i) {
-            /* BootApp allocates and loads it (boot_app); the automatic
-               data segment's minimum allocation includes the heap and
-               the stack, as below */
+            /* BootApp allocates and loads it (boot_app). Observed (TK78):
+               the file's flags without the privilege bits, code 4000h
+               more and 0400h if not discardable; the automatic data
+               segment's minimum allocation stays the file's */
             m->seg[i].hnd = m->seg[i].sel = 0;
             MOD_SEGHND(m, i) = 0;
             s->flags &= ~(NESEG_DPL | NESEG_ALLOCED | NESEG_LOADED);
-            if (i + 1 == h.auto_data) {
+            if (!(s->flags & NESEG_DATA))
+                s->flags |= (s->flags & NESEG_DISCARD) ? 0x4000 : 0x4400;
+            if (i + 1 == h.auto_data)
                 m->dg_min = s->min_alloc;
-                if (size < 0x10000UL)
-                    s->min_alloc = (u16)size;
-            }
             continue;
         }
         /* observed (KRNL286, tests/apps/tk11.c): a program's fixed
@@ -1291,8 +1386,9 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
                    (((s->flags & NESEG_MOVABLE) || !(h.flags & NEF_LIBRARY)) ? NESEG_MOVABLE : 0);
         if (h.flags & NEF_LIBRARY)
             s->flags |= 0x8000;
-        if (!(s->flags & NESEG_DATA))
-            s->flags |= (h.flags & NEF_LIBRARY) ? 0x4000 : 0x4400;
+        if (!(s->flags & NESEG_DATA))   /* (a self-loader's segment 1:
+                                           4000h only, TK78) */
+            s->flags |= (h.flags & (NEF_LIBRARY | NEF_SELFLOAD)) ? 0x4000 : 0x4400;
         /* observed (TK25): the automatic data segment's minimum
            allocation includes the local heap and the stack */
         if (i + 1 == h.auto_data) {
@@ -1340,10 +1436,8 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
     f_close(fh);
     GlobalFree(m->ft_sel);
     m->ft_sel = 0;
-    if ((h.flags & NEF_SELFLOAD) && !boot_app(m)) {
-        *err = LE_BADFORMAT;
+    if ((h.flags & NEF_SELFLOAD) && !boot_app(m, err))
         return load_fail(m, path, "the program's BootApp failed");
-    }
     if (!(h.flags & NEF_LIBRARY) && !snapshot(m)) {
         *err = LE_NOMEM;
         return load_fail(m, path, "out of memory");

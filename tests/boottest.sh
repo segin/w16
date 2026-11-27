@@ -37,6 +37,12 @@
 #              WM_MOVE right after WM_CREATE); the rest of TK71's log
 #              (other registers, shown windows, WM_MDICREATE) is not
 #              compared yet
+#   selfload   TK78 (tests/apps/tk78.c), a self-loading program, as the
+#              shell on 3.1 (KRNL386), w16's KRNL286 and KRNL386 and w16's
+#              tree: what its BootApp gets (registers, the loader table,
+#              the module table, the file position) and what KERNEL's
+#              MyAlloc, EntryAddrProc and SetOwner give it; the logs the
+#              same but the "~" lines (selectors, sizes)
 #   mdistyle   TK75 (tests/apps/tk75.c) as the shell on 3.1 and on w16's
 #              tree: what WM_MDICREATE makes of the child's style (with
 #              and without MDIS_ALLCHILDSTYLES, hidden, maximised,
@@ -443,7 +449,7 @@
 #   installers third-party installers on w16's install tree in 386
 #              Enhanced mode, against Windows 3.1 (tests/installers.sh):
 #              the files each installs the same as on 3.1; one part per
-#              installer (WEP1 WEP2 WEP3 BW W4 JOHNNY), each skipped
+#              installer (WEP1 WEP2 WEP3 BW W4 JOHNNY WP3 MP52), each skipped
 #              when $W16_INSTDIR (default ~/Downloads/w16-installers) does
 #              not hold it: they are never part of w16
 #   timer      w16's TIMER.DRV (ARCHITECTURE.md 21): the probe TPR.EXE
@@ -1030,7 +1036,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1504,6 +1510,28 @@ runcase() {
             r="differs from 3.1 ($out/mdistyle.diff)"
         if [ "$r" = ok ]; then echo "ok   mdistyle: WM_MDICREATE's styles, showing, activation and focus as 3.1's"
         else echo "FAIL mdistyle: $r"; fails=$((fails + 1)); fi ;;
+    selfload)
+        # TK78: Microsoft's KRNL386 against w16's kernels and tree
+        for k in ref k286 k386 tree; do
+            case $k in ref) o="-r -3" c='WIN /S /B' ;; k286) o= c='WIN /S /B' ;; k386) o=-3 c='WIN /S /B' ;;
+                       tree) o="-T $root/build/w16 -3" c='WIN /3' ;; esac
+            # shellcheck disable=SC2086
+            DROPIN_WSECS=4 "$root/tests/dropin.sh" $o -c "$c" -t 120 -W TK78.LOG -o "$out/selfload-$k" \
+                -f "$root/build/dos/TK78.EXE=TK78.EXE" -i 'boot:shell=C:\TK78.EXE' > "$out/selfload-$k.txt" 2>&1 &
+        done
+        wait
+        for k in ref k286 k386 tree; do
+            tr -d '\r' < "$out/selfload-$k/c/TK78.LOG" 2>/dev/null | grep -v '^~' > "$out/selfload-$k.log"
+        done
+        r=ok
+        grep -q '^T done' "$out/selfload-ref.log" || r="ref did not finish ($out/selfload-ref.log)"
+        for k in k286 k386 tree; do
+            [ "$r" = ok ] || break
+            diff "$out/selfload-ref.log" "$out/selfload-$k.log" > "$out/selfload-$k.diff" ||
+                r="$k: differs from 3.1 ($out/selfload-$k.diff)"
+        done
+        if [ "$r" = ok ]; then echo "ok   selfload: a self-loading program's BootApp, MyAlloc, EntryAddrProc as 3.1's"
+        else echo "FAIL selfload: $r"; fails=$((fails + 1)); fi ;;
     staroff)
         # StarOffice 3.1's CD (tests/staroff.sh; skip without the image)
         "$root/tests/staroff.sh" -o "$out/staroff" > "$out/staroff.txt" 2>&1 || true
@@ -6250,7 +6278,7 @@ caseparts() {
     bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;
     filecdr) echo "$1@k286 $1@k386 $1@userk" ;;
     nametable) echo "$1@k286 $1@k386" ;;
-    installers) echo "$1@WEP1 $1@WEP2 $1@WEP3 $1@BW $1@W4 $1@JOHNNY" ;;
+    installers) echo "$1@WEP1 $1@WEP2 $1@WEP3 $1@BW $1@W4 $1@JOHNNY $1@WP3 $1@MP52" ;;
     toolhelp) echo "$1@ref286 $1@ref386 $1@ref3 $1@tree286 $1@tree386 $1@watson $1@qt" ;;
     treek386) echo "$1@items $1@desk" ;;
     zipsetup) echo "$1@pm $1@tree" ;;
