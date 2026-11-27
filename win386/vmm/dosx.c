@@ -94,12 +94,17 @@ static int copy_in_str(u32 sel, u32 off, u32 at)
 }
 
 /* the client's sel:off for n bytes (16-bit offsets that run past FFFFh
- * fail: the processor would not wrap them either) */
+ * fail: the processor would not wrap them either). A buffer DOS fills
+ * need not be writable from ring 3: Windows 3.1 copies at ring 0, where a
+ * read-only page is written (Win32s reads a file with INT 21h 3Fh into
+ * memory it has just committed PAGE_READONLY, ARCHITECTURE.md 12.20), so
+ * only present and user pages are asked for */
 static u8 *cptr(struct cregs *r, u32 sel, u32 off, u32 n, int write)
 {
     (void)r;
+    (void)write;
     if (!cur_vm->client32 && (off & 0xFFFF) + n > 0x10000) return NULL;
-    return cl_ptr(sel, off, n, write);
+    return cl_ptr(sel, off, n, 0);
 }
 
 /* DOS's current DTA (in V86 mode: INT 21h 2Fh) */
