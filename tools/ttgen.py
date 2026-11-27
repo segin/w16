@@ -476,6 +476,16 @@ class Face:
         # whatever hdmx holds: lines came out wider than Microsoft's)
         if HINT and PHANTOM:
             f.head_flags = 0x001B
+            # LTSH: the size from which each glyph's hinted advance is its
+            # scaled one (3.1 then scales; without the table it took the
+            # advance at the em from a hinted 128 pixels, a multiple of 16)
+            f.ltsh = []
+            for gid, g in enumerate(f.glyphs):
+                lin = 1
+                for p, w in dev.get(gid, {}).items():
+                    if w != int(g.advance * p / self.em + 0.5):
+                        lin = max(lin, min(255, p + 1))
+                f.ltsh.append(lin)
         f.lowest_ppem = otm['minppem']
         f.panose = bytes(PANOSE[(self.kind, self.bold, self.italic)])
         f.family_class = FAMILY_CLASS[self.kind]

@@ -344,14 +344,18 @@ class Hinter:
         if advance is None or not device:
             return b''
         ph = sum(len(c) for c in contours) + 1
+        # both phantom points touched where they are (MDAP[0]): 3.1 moved
+        # an untouched advance width point with the IUP of the last
+        # contour (GetCharWidth a pixel off hdmx's where no move was due)
+        touch = push([ph - 1]) + bytes([0x2E]) + push([ph]) + bytes([0x2E])
         seq = []
         for ppem in sorted(device):
             diff = device[ppem] - int(advance * ppem / self.upem + 0.5)
             if diff and abs(diff) <= 2 and ppem <= 255:
                 seq += [diff + 2, ppem]
         if not seq:
-            return b''
-        code = push([0, ph]) + bytes([WS])
+            return touch
+        code = touch + push([0, ph]) + bytes([WS])
         for k in range(0, len(seq), 200):
             part = seq[k:k + 200]
             code += push(part + [len(part) // 2, FN_ADV]) + bytes([LOOPCALL])
@@ -559,7 +563,11 @@ class Hinter:
             else:
                 code += push([e[2][0]]) + bytes([MDAP_R])
             if e is er and e is not el and e[0] == 1 and advance is not None and advance - e[1] > 0:
-                code += push([e[2][0], npts + 1, self.gap, FN_FIT]) + bytes([CALL])
+                # (the pixel's gap only for a glyph with a side bearing to
+                # speak of: Sans's w, nearly touching its neighbour in the
+                # design, came out a pixel narrower and left a hole)
+                gap = self.gap if advance - e[1] >= self.upem * 0.025 else 0
+                code += push([e[2][0], npts + 1, gap, FN_FIT]) + bytes([CALL])
             touched.add(e[2][0])
             code += self._emit_rest(e, touched)
             placed.append(e)

@@ -167,6 +167,7 @@ class Font:
         self.max_stack = 32
         self.max_fdefs = 2         # maxFunctionDefs (with an fpgm)
         self.max_storage = 0       # maxStorage
+        self.ltsh = None           # [yPels per glyph]: an LTSH table
 
     # ------------------------------------------------------------ tables
     def _head(self, bbox, loca_long):
@@ -389,6 +390,10 @@ class Font:
             tables[b'hdmx'] = self._hdmx()
         if self.vdmx:
             tables[b'VDMX'] = self._vdmx()
+        if self.ltsh:
+            # LTSH: per glyph the size from which its advance width scales
+            # linearly (1: always)
+            tables[b'LTSH'] = struct.pack('>HH', 0, len(self.ltsh)) + bytes(self.ltsh)
         if self.prep:
             tables[b'prep'] = self.prep
         if self.fpgm:
