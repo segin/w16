@@ -589,9 +589,27 @@ HWND WINAPI SetFocus(HWND h)
     HWND old = hwndFocus, top;
     PWND w;
     if (h) {
+        HWND p;
         w = valid_wnd(h);
-        if (!w || (w->style & (WS_DISABLED | WS_MINIMIZE)) && 0)
+        if (!w)
             return 0;
+        /* a disabled or minimised window, or one inside such a window,
+           does not take the focus: SetFocus answers 0 and nothing changes,
+           no activation (US39 on 3.1: dis, dchild, min). Microsoft Query
+           calls SetFocus on its main window while another task's
+           MessageBox (its Cue Cards') has disabled it: w16 activated the
+           main window again, the box took no keys, and closing Query
+           closed the Cue Cards under their own box (a divide fault) */
+        for (p = h; p && p != hwndDesktop; ) {
+            PWND pw = valid_wnd(p);
+            if (!pw)
+                return 0;
+            if (pw->style & (WS_DISABLED | WS_MINIMIZE))
+                return 0;
+            if (!(pw->style & WS_CHILD))
+                break;
+            p = pw->hwndParent;
+        }
         top = top_level(h);
         /* WH_CBT before the activation it brings (US30 cbt on 3.1, the
            window inactive: C9 b m, then C5 a, C9 a m from the activation,
@@ -609,6 +627,11 @@ HWND WINAPI SetFocus(HWND h)
             hwndFocusPending = h;
             activate_window(top, FALSE);
             hwndFocusPending = pend;
+            /* the answer is the focus the activation left (US39 en on
+               3.1: SetFocus of an inactive window, or of its child, with
+               the focus in another window answered the activated window
+               itself) */
+            old = hwndFocus;
         }
         focus_hooked = TRUE;
     }

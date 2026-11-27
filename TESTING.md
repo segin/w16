@@ -308,7 +308,7 @@ setup. w16's WIN386 writes its trace to COM1 (`serial1=file file:com1.txt`).
 Real mouse motion does not reach the guest in DOSBox-X, so the boot-test
 case `win386input` (mouse, keys, Exit Windows) runs in DOSBox through
 `tests/inputrun.sh` (`-c "WIN /3 /B"`, with KRNL386.EXE put back by `-f`:
-see the case in `tests/boottest.sh`). `tests/vsdprobe.sh ms|w16 [fg bg two hung cadd kbd ...]` runs the Virtual Sound Device's probes with the sound recorded (ARCHITECTURE.md 12.8 VSD). `tests/vdmadprobe.sh [-R] ms|w16` runs the Virtual DMA Device's: SBD.COM's Sound Blaster DMA and VDS calls in a box, the probe VxD VXM.386 (`-R`: VXMR, which reserves buffer space; `VDMADPROBE_INI` adds SYSTEM.INI settings), the sound recorded; `tools/vdmadcmp.py REF W16` compares two runs (the boot-test case vdmad). `tests/msvcvxd.sh [-o DIR] [vxc boot cvw wx cl]` runs the probe VxD VXC.386 (and VXCU.386, a missing VMM service) under both WIN386s, and, with Visual C++ 1.52 installed in `$W16_MSVC_DIR` (its C:\MSVC; skipped without), boots w16's tree with its four devices, starts CodeView for Windows, runs WXSRVR.EXE (VMB.386's client) with Program Manager's menus opened, and compiles a hello world with CL.EXE in a DOS box with DOSXNT.386 and without, against Windows 3.1 (boot-test cases `win386vxc` and `msvc`, ARCHITECTURE.md 12.7). `tests/vxpprobe.sh ms|w16` loads the
+see the case in `tests/boottest.sh`). `tests/vsdprobe.sh ms|w16 [fg bg two hung cadd kbd ...]` runs the Virtual Sound Device's probes with the sound recorded (ARCHITECTURE.md 12.8 VSD). `tests/vdmadprobe.sh [-R] ms|w16` runs the Virtual DMA Device's: SBD.COM's Sound Blaster DMA and VDS calls in a box, the probe VxD VXM.386 (`-R`: VXMR, which reserves buffer space; `VDMADPROBE_INI` adds SYSTEM.INI settings), the sound recorded; `tools/vdmadcmp.py REF W16` compares two runs (the boot-test case vdmad). `tests/msvcvxd.sh [-o DIR] [vxc boot cvw wx cl msquery cvdos]` runs the probe VxD VXC.386 (and VXCU.386, a missing VMM service) under both WIN386s, and, with Visual C++ 1.52 installed in `$W16_MSVC_DIR` (its C:\MSVC; skipped without), boots w16's tree with its four devices, starts CodeView for Windows, runs WXSRVR.EXE (VMB.386's client) with Program Manager's menus opened, and compiles a hello world with CL.EXE in a DOS box with DOSXNT.386 and without, against Windows 3.1 (boot-test cases `win386vxc` and `msvc`, ARCHITECTURE.md 12.7); by name, `msquery` closes Microsoft Query and its Cue Cards on w16's tree and on 3.1 (its Windows-directory files from `$W16_MSQUERY_DIR`, default MSQUERY beside the MSVC directory; boot-test case `msquery`, with probe US39) and `cvdos` runs CodeView for MS-DOS in a full-screen box with the mouse moved over it (boot-test case `cvdos`). `tests/vxpprobe.sh ms|w16` loads the
 probe VxD VXP.386 (`make vxprobes`) and prints the control messages and
 service results it saw (ARCHITECTURE.md 12.7). The DPMI host's answers
 are probed by VX11 (`tests/apps/vx11.c`, run as the shell with
@@ -368,6 +368,22 @@ End VM on a busy box (3.1's Terminate warning), End Task on VMTH.EXE
 Shift+F10's shortcut menu, the IDs columns; VMT1 logs the tasks' and
 VMs' IDs for comparison and checks at the end that VMTH and the box are
 gone (shots e0-e8 in OUTDIR).
+`tests/vmtasksoak.sh OUTDIR [tree|ms]` leaves VMTASK.EXE running (0.5 s)
+while VMTSOAK.EXE (`tests/apps/vmtsoak.c`) starts and closes Clock,
+Notepad, Calculator, Cardfile and Write and, every other cycle, a busy
+DOS box it ends through VMTASK.386; after each cycle it logs the free
+memory, GDI's and USER's resources and objects (GDI's by type), the
+global blocks, the tasks, VMTASK's own blocks and the *WOA.FON modules,
+and at the end checks that VMTASK still runs and nothing grew past a
+small margin (exit 1 otherwise; KERNEL's output, a fault report, in
+OUTDIR/OUT.TXT). `VMTASK_CYCLES` (40), `VMTASK_APPS` (the list; empty:
+none), `VMTASK_BOX=0`, `VMTASK_LAUNCH=0` (without VMTASK: what the rest
+leaves by itself), `VMTASK_TREE` (another install tree, e.g. a copy of
+your own), `VMTASK_DOSBOX=x`, `VMTASK_EXTRA` (more dropin.sh options,
+e.g. `-i WIN.INI:vmtsoak:memfill=600`: fill global memory to 600 KB
+free first; `gdifill=N`, `userfill=N`: GDI and USER objects until N per
+cent are free, -1 until one fails). The boot-test case `vmtasksoak`
+runs it on the tree under DOSBox-X for 20 cycles.
 `tests/qtplay.sh` takes `QTPLAY_W16OPTS` and
 `tests/sb16/sbaudio.sh` `SBAUDIO_OPTS`/`SBAUDIO_CONF` (more dropin.sh
 options, a COM1 for the VMM's trace) for the w16 side. XMS and EMS in a DOS box:

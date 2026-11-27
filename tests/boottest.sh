@@ -221,7 +221,8 @@
 #              object viewer (OLE2VIEW.EXE, with the OLE 2.01 libraries
 #              from $W16_OLE2_DIR) and HeapWalk on w16's tree
 #              (tests/msvcvxd.sh wps ole2view heapwalk; skipped without
-#              $W16_MSVC_DIR): no fault, and their frames as under 3.1
+#              $W16_MSVC_DIR): no fault, and their frames as under 3.1;
+#              HeapWalk's list painted within twice 3.1's time and 4 s
 #   faultrep   KERNEL's fault report (kernel/fault.c) with TK79
 #              (tests/apps/tk79.c) on w16's tree: a fault with SS a
 #              32-byte segment (WIN /3 and WIN /S), at SP 0, with SS
@@ -229,6 +230,17 @@
 #              making the report's own steps fault: the whole report must
 #              come out (registers, what each selector is, the stack as far
 #              as it can be read, the INT 21h calls, "back to DOS")
+#   msquery    US39 (tests/apps/us39.c) as the shell on 3.1 and on w16's
+#              USER: SetFocus on disabled and minimised windows and their
+#              children, and another task's MessageBox owned by the
+#              shell's window; the OBS lines identical. Then Microsoft
+#              Query and its Cue Cards closed on w16's tree as on 3.1
+#              (tests/msvcvxd.sh msquery; skipped without its files,
+#              $W16_MSQUERY_DIR)
+#   cvdos      CodeView for MS-DOS in a full-screen DOS box on w16's tree,
+#              the mouse moved over it, quit: DOSBox-X stays alive, its
+#              menu bar as under Microsoft's WIN386, Windows back after EXIT
+#              (tests/msvcvxd.sh cvdos; skipped without $W16_MSVC_DIR)
 #   win386doscad  a DOS program's #GP (VX12 G: the stop box) and Ctrl+Alt+Del
 #              with the MS-DOS Prompt full screen (its screen; Return closes
 #              the box, vx12gc.txt; Escape goes back, dosbox386cad.txt)
@@ -248,6 +260,14 @@
 #              (tests/vmpollrun.sh), Microsoft's WIN386 alongside
 #   win386xms  w16's WIN386: VX15's XMS and EMS calls in a DOS box (3 PIFs)
 #              give the same log as under Microsoft's WIN386
+#   vmtasksoak the VM Task Manager left running (tests/vmtasksoak.sh, the
+#              tree, DOSBox-X): VMTASK.EXE at 0.5 s for 20 cycles of a
+#              program started and closed and, every other cycle, a busy
+#              DOS box ended through VMTASK.386; VMTASK still runs, and
+#              the free memory, GDI's and USER's resources and objects,
+#              the global blocks and VMTASK's own stay within a small
+#              margin (w16 lost four fonts per DOS box, a DC per run of
+#              Write and an icon per program run)
 #   win386memload  w16's WIN386: MEMLOAD's XMS and EMS workloads, XMS 3.0 calls
 #              and three boxes at once, as under Microsoft's WIN386
 #   win386mcb  the DOS memory arena in a DOS box (MCBCHK.EXE, tests/
@@ -1136,7 +1156,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad win386vxc msvc msvcapps faultrep msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2092,12 +2112,53 @@ runcase() {
     msvccl)
         # the user's report (2026-11-26): CL.EXE stopped with "Phar Lap err
         # 35" in a w16 box (tests/msvcvxd.sh cl; skip without $W16_MSVC_DIR)
-        "$root/tests/msvcvxd.sh" -o "$out/msvccl" cl > "$out/msvccl.txt" 2>&1 || true
+        "$root/tests/msvcvxd.sh" -o "$out/msvccl" cl cltree > "$out/msvccl.txt" 2>&1 || true
         if grep -q '^FAIL' "$out/msvccl.txt"; then
             echo "FAIL msvccl: $(grep -m1 '^FAIL' "$out/msvccl.txt") ($out/msvccl.txt)"; fails=$((fails + 1))
         elif grep -q '^skip' "$out/msvccl.txt"; then echo "ok   msvccl: $(grep -m1 '^skip' "$out/msvccl.txt")"
         elif grep -q '^ok' "$out/msvccl.txt"; then echo "ok   msvccl: $(grep -m1 '^ok' "$out/msvccl.txt" | sed 's/^ok *cl: //')"
         else echo "FAIL msvccl: no result ($out/msvccl.txt)"; fails=$((fails + 1)); fi ;;
+    msquery)
+        # the user's report (2026-11-26): closing Microsoft Query ended w16
+        # (exception). US39 (tests/apps/us39.c): SetFocus and another
+        # task's MessageBox, on 3.1 and w16's USER
+        e39() {   # LABEL dropin.sh options...: US39's run, its log in LABEL.log
+            _l=$1; shift
+            DROPIN_WSECS=20 "$root/tests/dropin.sh" -t 200 -W 'WINDOWS/TK.LOG' -o "$out/$_l" \
+                -f "$root/build/dos/US39.EXE=US39.EXE" -i 'boot:shell=C:\US39.EXE' -r "$@" \
+                > "$out/$_l.txt" 2>&1 || true
+            { tr -d '\r' < "$out/$_l/c/WINDOWS/TK.LOG"; } > "$out/$_l.log" 2>/dev/null
+        }
+        e39 msquery-ref &
+        e39 msquery-w16 -f "$user=WINDOWS/SYSTEM/USER.EXE" &
+        wait
+        r=ok
+        for k in ref w16; do
+            grep -q '^US39 end' "$out/msquery-$k.log" ||
+                { [ "$r" = ok ] && r="US39 did not finish ($k: $out/msquery-$k.log)"; }
+            grep '^OBS [^~]' "$out/msquery-$k.log" > "$out/msquery-$k.obs"
+        done
+        [ "$r" != ok ] || cmp -s "$out/msquery-ref.obs" "$out/msquery-w16.obs" ||
+            r="US39: $(diff "$out/msquery-ref.obs" "$out/msquery-w16.obs" | grep -c '^<') observation(s) differ from 3.1's ($out/msquery-ref.obs, msquery-w16.obs)"
+        # Microsoft Query itself (tests/msvcvxd.sh; skip without its files)
+        if [ "$r" = ok ]; then
+            "$root/tests/msvcvxd.sh" -o "$out/msquery" msquery > "$out/msquery.txt" 2>&1 || true
+            if grep -q '^FAIL' "$out/msquery.txt"; then r="$(grep -m1 '^FAIL' "$out/msquery.txt" | sed 's/^FAIL *//') ($out/msquery.txt)"
+            elif grep -q '^skip' "$out/msquery.txt"; then q="US39 as 3.1; $(grep -m1 '^skip' "$out/msquery.txt")"
+            elif grep -q '^ok' "$out/msquery.txt"; then q="US39 as 3.1 (SetFocus, another task's MessageBox; w16 USER); $(grep -m1 '^ok' "$out/msquery.txt" | sed 's/^ok *msquery: //')"
+            else r="no result ($out/msquery.txt)"; fi
+        fi
+        if [ "$r" = ok ]; then echo "ok   msquery: $q"
+        else echo "FAIL msquery: $r"; fails=$((fails + 1)); fi ;;
+    cvdos)
+        # the user's report (2026-11-26): CodeView for MS-DOS ended DOSBox-X
+        # (tests/msvcvxd.sh cvdos; skip without $W16_MSVC_DIR)
+        "$root/tests/msvcvxd.sh" -o "$out/cvdos" cvdos > "$out/cvdos.txt" 2>&1 || true
+        if grep -q '^FAIL' "$out/cvdos.txt"; then
+            echo "FAIL cvdos: $(grep -m1 '^FAIL' "$out/cvdos.txt") ($out/cvdos.txt)"; fails=$((fails + 1))
+        elif grep -q '^skip' "$out/cvdos.txt"; then echo "ok   cvdos: $(grep -m1 '^skip' "$out/cvdos.txt")"
+        elif grep -q '^ok' "$out/cvdos.txt"; then echo "ok   cvdos: $(grep -m1 '^ok' "$out/cvdos.txt" | sed 's/^ok *cvdos: //')"
+        else echo "FAIL cvdos: no result ($out/cvdos.txt)"; fails=$((fails + 1)); fi ;;
     msvc)
         # Visual C++ 1.52's devices (tests/msvcvxd.sh; skip without $W16_MSVC_DIR)
         "$root/tests/msvcvxd.sh" -o "$out/msvc" boot cvw wx > "$out/msvc.txt" 2>&1 || true
@@ -2299,6 +2360,17 @@ runcase() {
         fi
         if [ "$r" = ok ]; then echo "ok   win386idle: Windows at $pct_w16p% beside 4 polling boxes (3.1: $pct_refp%), $pct_w16b% beside a busy one (3.1: $pct_refb%)"
         else echo "FAIL win386idle: $r"; fails=$((fails + 1)); fi ;;
+    vmtasksoak)
+        # the user's report (2026-11-27): VMTASK.EXE left running while
+        # other things happened ended in a fault; tests/vmtasksoak.sh's
+        # checks (its log's CHECK lines)
+        rc=0
+        VMTASK_DOSBOX=x VMTASK_CYCLES=20 VMTASK_TIME=1800 sh "$root/tests/vmtasksoak.sh" "$out/vmtasksoak" tree \
+            > "$out/vmtasksoak.txt" 2>&1 || rc=$?
+        if [ $rc = 0 ] && grep -q '^VMTSOAK done, 0 failed' "$out/vmtasksoak.txt"; then
+            echo "ok   vmtasksoak: $(grep -c '^VMTSOAK sample' "$out/vmtasksoak.txt") cycles, VMTASK up, resources steady"
+        else echo "FAIL vmtasksoak: $(grep -m1 -e '^CHECK FAIL' -e '^no VMTSOAK' "$out/vmtasksoak.txt" || echo 'no result') ($out/vmtasksoak.txt)"
+            fails=$((fails + 1)); fi ;;
     win386xms)
         # V86MMGR (ARCHITECTURE.md 12.13): VX15 (tests/dos/vx15.asm,
         # tests/v86mmrun.sh) in a DOS box calls the XMS driver and INT 67h
@@ -2440,13 +2512,14 @@ runcase() {
             sh "$root/tests/dpmirun.sh" "$out/win386dpmi-w16$k" $k w16 > "$out/win386dpmi-w16$k.txt" 2>&1 &
         done
         sh "$root/tests/dpmirun.sh" "$out/win386dpmi-treep" p tree > "$out/win386dpmi-treep.txt" 2>&1 &
+        sh "$root/tests/dpmirun.sh" "$out/win386dpmi-w16d" d w16 > "$out/win386dpmi-w16d.txt" 2>&1 &
         wait
         r=ok
-        for k in w16p:refp w16g:refg w16c:refc treep:refp; do
+        for k in w16p:refp w16g:refg w16c:refc treep:refp w16d:refp; do
             m=$(sh "$root/tools/dpmicmp.sh" "$(printf '%s' "${k%:*}" | sed 's/^.*\(.\)$/\1/')" \
                 "$out/win386dpmi-${k#*:}" "$out/win386dpmi-${k%:*}") || { r="${k%:*}: ${m#FAIL }"; break; }
         done
-        if [ "$r" = ok ]; then echo "ok   win386dpmi: DPMI clients in DOS boxes (16- and 32-bit, nested, two boxes, a fault) as under Microsoft's WIN386; the tree too"
+        if [ "$r" = ok ]; then echo "ok   win386dpmi: DPMI clients in DOS boxes (16- and 32-bit, nested, two boxes, a fault, one DOS ended) as under Microsoft's WIN386; the tree too; each box its own current directory"
         else echo "FAIL win386dpmi: $r"; fails=$((fails + 1)); fi ;;
     cmdprompt)
         # Main's first item runs CMD.PIF (assets/CMD.PIF: COMMAND.COM,

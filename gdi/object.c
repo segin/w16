@@ -322,7 +322,8 @@ HBRUSH GDIAPI CreateDIBPatternBrush(HGLOBAL hdib, WORD usage)       /* GDI.445 *
     HBRUSH br = 0;
     HDC t;
     long w, ht;
-    WORD bpp, hd, nc;
+    DWORD hd, nc;
+    WORD bpp;
     if (n < 16 || n > 0xFFF0L)
         return 0;
     copy = GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE, n);
@@ -331,28 +332,37 @@ HBRUSH GDIAPI CreateDIBPatternBrush(HGLOBAL hdib, WORD usage)       /* GDI.445 *
     s = GlobalLock(copy);
     mem_copy(s, GlobalLock(hdib), (WORD)n);
     GlobalUnlock(hdib);
-    if (*(DWORD __far *)s == 12) {
+    hd = *(DWORD __far *)s;
+    if (hd == 12) {
         w = ((short __far *)s)[2];
         ht = ((short __far *)s)[3];
         bpp = ((WORD __far *)s)[5];
-        hd = 12;
+    } else if (n < 40 || hd > n) {
+        /* too small for a BITMAPINFOHEADER: biClrUsed (offset 32) would
+           lie past the block (robustness: no valid DIB is refused) */
+        GlobalUnlock(copy);
+        GlobalFree(copy);
+        return 0;
     } else {
         w = ((long __far *)s)[1];
         ht = ((long __far *)s)[2];
         bpp = ((WORD __far *)s)[7];
-        hd = (WORD)*(DWORD __far *)s;
     }
     nc = bpp <= 8 ? 1 << bpp : 0;
     if (hd != 12 && ((DWORD __far *)s)[8])
-        nc = (WORD)((DWORD __far *)s)[8];
+        nc = ((DWORD __far *)s)[8];
+    /* header and colour table summed as a DWORD: an absurd biClrUsed
+       fails the hd < n test below instead of wrapping a WORD */
+    if (nc > n)
+        nc = n;
     hd += nc * (usage == 1 ? 2 : hd == 12 ? 3 : 4);
-    if (ht < 0)
+    if (ht < 0 && ht >= -0x7FFFL)
         ht = -ht;
     t = CreateCompatibleDC(0);
-    if (t && w > 0 && ht > 0 && hd < n) {
+    if (t && w > 0 && w <= 0x7FFF && ht > 0 && ht <= 0x7FFF && hd < n) {
         hb = bm_screen((int)w, (int)ht);
         if (hb)
-            SetDIBits(t, hb, 0, (WORD)ht, s + hd, s, usage);
+            SetDIBits(t, hb, 0, (WORD)ht, s + (WORD)hd, s, usage);
     }
     if (t)
         DeleteDC(t);
@@ -613,8 +623,9 @@ BOOL GDIAPI DeleteObject(HGDIOBJ h)                                 /* GDI.69 */
         return FALSE;
     if (is_stock(h))
         return TRUE;
-    if ((m & MAGIC_MASK) < DC_MAGIC)
-        mf_deleted(h);                  /* the metafiles recording it */
+    /* the metafiles recording it get META_DELETEOBJECT (mf_deleted) only
+       once the deletion is certain: an object DeleteObject refuses is
+       still alive and keeps its slot */
     switch (m & MAGIC_MASK) {
     case DC_MAGIC:
     case DISDC_MAGIC:
@@ -624,18 +635,22 @@ BOOL GDIAPI DeleteObject(HGDIOBJ h)                                 /* GDI.69 */
     case BITMAP_MAGIC:
         if (((LPBITMAPOBJ)obj_get(h, BITMAP_MAGIC))->hdcSel)
             return FALSE;
+        mf_deleted(h);
         bm_free(h);
         return TRUE;
     case RGN_MAGIC:
+        mf_deleted(h);
         rgn_free(h);
         return TRUE;
     case PAL_MAGIC:
+        mf_deleted(h);
         pal_free(h);
         return TRUE;
     case BRUSH_MAGIC: {
         HGLOBAL pat;
         if (dc_uses(h))
             return FALSE;
+        mf_deleted(h);
         dc_brush_changed(h);
         pat = ((LPBRUSHOBJ)obj_get(h, BRUSH_MAGIC))->hPatBits;
         if (((LPBRUSHOBJ)obj_get(h, BRUSH_MAGIC))->lb.lbStyle == 5)
@@ -650,6 +665,8 @@ BOOL GDIAPI DeleteObject(HGDIOBJ h)                                 /* GDI.69 */
     default:
         if (dc_uses(h))
             return FALSE;
+        if ((m & MAGIC_MASK) < DC_MAGIC)
+            mf_deleted(h);              /* a pen or font */
         obj_free(h);
         return TRUE;
     }

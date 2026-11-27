@@ -361,6 +361,12 @@ static void __far *dib_info(const void __far *bmi, WORD usage, BYTE __far *buf, 
     }
     n = dib_ncolors(bi->biBitCount);
     dst = buf + sizeof(BITMAPINFOHEADER);
+    /* only the entries the caller's table has (biClrUsed); the rest 0
+       (the driver reads biClrUsed entries too) */
+    if (!core && bi->biClrUsed && bi->biClrUsed < (DWORD)n) {
+        mem_set(dst + (WORD)bi->biClrUsed * 4, 0, (n - (WORD)bi->biClrUsed) * 4);
+        n = (int)bi->biClrUsed;
+    }
     for (i = 0; i < n; i++) {
         if (usage == 1) {               /* DIB_PAL_COLORS: indices (WORDs) */
             PALENT pe;

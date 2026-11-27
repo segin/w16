@@ -554,6 +554,10 @@ static int ttfx__shape(const ttfx_font *f, ttfx_u16 glyph, ttfx_vertex TTFX_FAR 
         if (10 + (ttfx_u32)numberOfContours * 2 + 2 > glen)
             goto fail;
         ins = DUSHORT(data + 10 + numberOfContours * 2);
+        /* the instructions inside the glyph: past it the sum below would
+           wrap the offset (a malformed glyph) */
+        if (10 + (ttfx_u32)numberOfContours * 2 + 2 + ins > glen)
+            goto fail;
         points = data + 10 + numberOfContours * 2 + 2 + ins;
         n = 1 + DUSHORT(endPtsOfContours + numberOfContours * 2 - 2);
         if ((ttfx_u32)n + 2L * numberOfContours > TTFX_MAXVERTS)
@@ -609,7 +613,9 @@ static int ttfx__shape(const ttfx_font *f, ttfx_u16 glyph, ttfx_vertex TTFX_FAR 
             if (next_move == i) {
                 if (i != 0)
                     num_vertices = ttfx__close_shape(vertices, num_vertices, was_off, start_off, sx, sy, scx, scy, cx, cy);
-                start_off = !(flags & 1) && i < DUSHORT(endPtsOfContours + j * 2);
+                /* (i + 1 < n: ends that fall back look no point past
+                   the last) */
+                start_off = !(flags & 1) && i < DUSHORT(endPtsOfContours + j * 2) && i + 1 < n;
                 if (start_off) {
                     /* a contour starting off the curve: start on it */
                     scx = x;
@@ -664,18 +670,28 @@ static int ttfx__shape(const ttfx_font *f, ttfx_u16 glyph, ttfx_vertex TTFX_FAR 
             comp += 2;
             gidx = DUSHORT(comp);
             comp += 2;
-            if (flags & 2) {            /* x, y values */
-                if (flags & 1) {
+            /* the two arguments are always there: flag 1 gives their
+               size, flag 2 whether they are an offset or point numbers */
+            if (flags & 1) {
+                if (comp + 4 > end)
+                    break;
+                if (flags & 2) {        /* x, y values */
                     e = DSHORT(comp);
                     ff = DSHORT(comp + 2);
-                    comp += 4;
-                } else {
+                }
+                comp += 4;
+            } else {
+                if (comp + 2 > end)
+                    break;
+                if (flags & 2) {
                     e = (ttfx_i8)comp[0];
                     ff = (ttfx_i8)comp[1];
-                    comp += 2;
                 }
+                comp += 2;
             }
-            /* (matching points: not done, as in stb_truetype) */
+            /* (matching points: placed at offset 0, as in stb_truetype) */
+            if ((unsigned)(end - comp) < (flags & 8 ? 2u : flags & 0x40 ? 4u : flags & 0x80 ? 8u : 0u))
+                break;
             if (flags & (1 << 3)) {     /* WE_HAVE_A_SCALE */
                 ma = md = DSHORT(comp);
                 comp += 2;
@@ -761,6 +777,11 @@ void ttfx_FreeShape(const ttfx_font *f, ttfx_vertex TTFX_FAR *v)
 void ttfx_GetGlyphHMetrics(const ttfx_font *f, ttfx_u16 glyph, ttfx_u16 *advanceWidth, int *leftSideBearing)
 {
     ttfx_u16 n = ttUSHORT(f->hhea + 34);
+    if (!n) {                           /* (no metrics: a malformed font) */
+        if (advanceWidth) *advanceWidth = 0;
+        if (leftSideBearing) *leftSideBearing = 0;
+        return;
+    }
     if (glyph < n) {
         if (advanceWidth) *advanceWidth = ttUSHORT(f->hmtx + 4L * glyph);
         if (leftSideBearing) *leftSideBearing = ttSHORT(f->hmtx + 4L * glyph + 2);
@@ -1731,26 +1752,33 @@ static int ttfx__render_tt(const ttfx_font *f, ttfx_bitmap *bm, const ttfx_outli
         return 0;
     }
     t.d = t.r + (unsigned)bytes;
-    for (i = 0; i < (unsigned)bytes * 2; i++)
-        t.r[i] = 0;
+    for (i = 0; i < (unsigned)bytes; i++)       /* r and d: bytes words */
+        ((ttfx_u16 TTFX_FAR *)t.r)[i] = 0;
     ok = ttfx__tt_sweep(f, &t, t.h, 0);
     if (ok && t.mode != TTFX_DROP_NONE)
         ok = ttfx__tt_sweep(f, &t, t.w, 1);
     /* into bm: r's (x, y) is the outline's (x0 + x, y0 + y), bm's that
        less (off_x, off_y) */
-    if (ok)
+    if (ok) {
+        /* each row's pointers and x range once (r, d and bm each in
+           one block under 64K: the products fit an unsigned) */
+        int dx = x0 - off_x, xs = dx < 0 ? -dx : 0, xe = bm->w - dx < t.w ? bm->w - dx : t.w;
         for (y = 0; y < t.h; y++) {
             int by = y + y0 - off_y;
+            const ttfx_u8 TTFX_FAR *rr, TTFX_FAR *dd;
+            ttfx_u8 TTFX_FAR *bp;
             if (by < 0 || by >= bm->h)
                 continue;
-            for (x = 0; x < t.w; x++) {
-                int bx = x + x0 - off_x;
-                if (bx < 0 || bx >= bm->w)
-                    continue;
-                if (TT_BIT(t.r, x, y) || TT_BIT(t.d, x, y))
-                    bm->pixels[(ttfx_u32)by * bm->stride + (bx >> 3)] |= (ttfx_u8)(0x80 >> (bx & 7));
-            }
+            rr = t.r + (unsigned)y * rs_;
+            dd = t.d + (unsigned)y * rs_;
+            bp = bm->pixels + (unsigned)by * bm->stride;
+            for (x = xs; x < xe; x++)
+                if ((rr[x >> 3] | dd[x >> 3]) & (0x80 >> (x & 7))) {
+                    int bx = x + dx;
+                    bp[bx >> 3] |= (ttfx_u8)(0x80 >> (bx & 7));
+                }
         }
+    }
     ttfx_free(f->alloc, t.r);
     ttfx_free(f->alloc, pts);
     ttfx_free(f->alloc, counts);
@@ -1790,10 +1818,13 @@ int ttfx_GetFontNameString(const ttfx_font *f, void TTFX_FAR *buf, int size, int
         ttfx_i32 loc = nm + 6 + 12L * i;
         if ((ttfx_u16)platformID == ttUSHORT(loc) && (ttfx_u16)encodingID == ttUSHORT(loc + 2) &&
             (ttfx_u16)languageID == ttUSHORT(loc + 4) && (ttfx_u16)nameID == ttUSHORT(loc + 6)) {
-            int len = (int)ttUSHORT(loc + 8);
+            /* the length in an unsigned word: one of 8000h or more is
+               no negative int, and no more than size is copied */
+            ttfx_u16 len = ttUSHORT(loc + 8);
             if (buf && size > 0)
-                ttfx_Read(f, stringOffset + ttUSHORT(loc + 10), buf, (unsigned)(len < size ? len : size));
-            return len;
+                ttfx_Read(f, stringOffset + ttUSHORT(loc + 10), buf,
+                          (unsigned)(len < (ttfx_u16)size ? len : (ttfx_u16)size));
+            return len > 0x7FFF ? 0x7FFF : (int)len;
         }
     }
     return -1;

@@ -1239,7 +1239,7 @@ $(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
-VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX16.EXE $(DOS)/VX17.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/MCBCHK.EXE $(DOS)/DOSST.EXE $(DOS)/DPMIPRB.COM $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXC.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/VXB.386 $(DOS)/SBD.COM
+VXPROBES := $(DOS)/VX1.COM $(DOS)/VX2.COM $(DOS)/VX3.EXE $(DOS)/VX4.COM $(DOS)/VX5.EXE $(DOS)/VX6.COM $(DOS)/VX7.COM $(DOS)/VX8.EXE $(DOS)/VX11.EXE $(DOS)/VX12.COM $(DOS)/VX13.EXE $(DOS)/VX16.EXE $(DOS)/VX17.EXE $(DOS)/VX14.COM $(DOS)/VX15.COM $(DOS)/MEMLOAD.EXE $(DOS)/MCBCHK.EXE $(DOS)/DOSST.EXE $(DOS)/DPMIPRB.COM $(DOS)/CWDPRB.COM $(DOS)/VXT.386 $(DOS)/VXI.386 $(DOS)/VXP.386 $(DOS)/VXQ.386 $(DOS)/VXS.386 $(DOS)/VXC.386 $(DOS)/VXV.386 $(DOS)/SPK.COM $(DOS)/VXM.386 $(DOS)/VXMR.386 $(DOS)/VXB.386 $(DOS)/SBD.COM
 vxprobes: $(VXPROBES)
 dos: $(VXPROBES)
 $(B)/tests/vx3.o: tests/apps/vx3ref.h tests/apps/tklog.h
@@ -1288,6 +1288,14 @@ $(DOS)/VMT1.EXE: $(B)/tests/start.o $(B)/tests/vmt1.o $(B)/tests/vx3s.o $(B)/she
 	$(WLINK) @tests/apps/app.lnk library toolhelp.lib name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/vmt1.map file { $(B)/tests/start.o $(B)/tests/vmt1.o $(B)/tests/vx3s.o $(B)/shell/write/i4.o }
 vxprobes: $(DOS)/VMT1.EXE
+# VMTSOAK.EXE: the VM Task Manager left running while programs and DOS
+# boxes come and go (tests/apps/vmtsoak.c; tests/vmtasksoak.sh)
+$(DOS)/VMTSOAK.EXE: $(B)/tests/start.o $(B)/tests/vmtsoak.o $(B)/tests/vx3s.o $(B)/shell/write/i4.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk library toolhelp.lib name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/vmtsoak.map file { $(B)/tests/start.o $(B)/tests/vmtsoak.o $(B)/tests/vx3s.o $(B)/shell/write/i4.o }
+vxprobes: $(DOS)/VMTSOAK.EXE
+dos: $(DOS)/VMTSOAK.EXE
 # VMTH.EXE: a program that will not close (tests/apps/vmth.c; End Task)
 $(DOS)/VMTH.EXE: $(B)/tests/start.o $(B)/tests/vmth.o tests/apps/app.lnk
 	@mkdir -p $(@D)
@@ -1383,6 +1391,11 @@ $(DOS)/DOSST.EXE: $(B)/tests/dosst.o
 	@mkdir -p $(@D)
 	$(WLINK) option quiet format dos name $@ option stack=4096 \
 	    libpath $(WATCOM)/lib286/dos libpath $(WATCOM)/lib286 file $(B)/tests/dosst.o
+# CWDPRB.COM: a box's current directory while others change theirs
+# (tests/dos/cwdprb.asm; tests/dpmirun.sh d)
+$(DOS)/CWDPRB.COM: tests/dos/cwdprb.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
 # VXT.386: the scheduling probe VxD (tests/vxd/vxt.asm)
 $(DOS)/VXT.386: tests/vxd/vxt.asm tests/vxd/vxt.lnk
 	@mkdir -p $(@D) $(B)/tests
@@ -2900,6 +2913,13 @@ $(DOS)/US36.EXE: $(B)/tests/start.o $(B)/tests/us36.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us36.map file { $(B)/tests/start.o $(B)/tests/us36.o }
 dos: $(DOS)/US36.EXE
+# US39: SetFocus on disabled and minimised windows; another task's MessageBox (tests/apps/us39.c)
+$(B)/tests/us39.o: tests/apps/us39ref.h tests/apps/tklog.h
+$(DOS)/US39.EXE: $(B)/tests/start.o $(B)/tests/us39.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us39.map file { $(B)/tests/start.o $(B)/tests/us39.o }
+dos: $(DOS)/US39.EXE
 # US32S: a window spy for US32's question (tests/apps/us32s.c)
 $(B)/tests/us32s.o: tests/apps/us32ref.h tests/apps/tklog.h
 $(DOS)/US32S.EXE: $(B)/tests/start.o $(B)/tests/us32s.o tests/apps/app.lnk
