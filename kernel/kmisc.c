@@ -34,15 +34,23 @@ static u16 filecdr_task;        /* the task that installed it */
 /* ExitKernel (KERNEL.2): leave Windows, back to DOS. USER calls it at the
    end of ExitWindows with one word, the exit code (Pietrek, ch. 1:
    "ExitKernel( ExitCode)"), and it pops that word: should it ever return,
-   the caller's stack stays right (it popped none). UNVERIFIED: the exit
-   code DOS gets (0 here). */
+   the caller's stack stays right (it popped none). KERNEL ends with INT
+   21h AH=4Ch, AL = that code (Pietrek, ch. 1, ExitKernel: "AH = 4CH,
+   AX = exitCode"), which WIN.COM reads: 42h (EW_RESTARTWINDOWS) starts
+   Windows again, 44h (USER's ExitWindowsExec, after it put the program
+   in WIN.COM's buffer, INT 2Fh 4B20h) runs that program first (ch. 1,
+   "the Big Bang"). Observed: ExitWindows(0) ends WIN with ERRORLEVEL 0
+   (TK55); Win32s 1.30c's Setup restarts Windows through ExitWindowsExec,
+   on 3.1 and now on w16's KERNEL, which always exited with 0 before, so
+   that Windows never came back and _MSSETUP.BAT never ran. Not done:
+   43h (EW_REBOOTSYSTEM), for which 3.1 calls the Reboot device or INT
+   19h; w16 exits with 43h. */
 void KAPI ExitKernel(u16 code)
 {
-    (void)code;
     win_screen = 0;                     /* USER's ExitWindows disabled the
                                            display: text mode */
     trace_print();                      /* [w16] trace, if any */
-    kexit_to_dos(0);
+    kexit_to_dos((u8)code);
 }
 
 /* LockCurrentTask (KERNEL.33): Schulman: lock (nonzero) or unlock the

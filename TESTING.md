@@ -163,6 +163,11 @@ merged; BW/DISK1; W4/DISK1, W4/DISK2; JOHNNY), missing
 ones are skipped; the boot-test case `installers`, one part per
 installer; ARCHITECTURE.md 9.12; `[w16] int21log=1` logs every INT 21h
 call and the traced imports into the debuglog),
+`tests/win32sinst.sh [-o OUTDIR] [k386|tree]` (Microsoft Win32s 1.30c's
+Setup from its disk images below `$W16_WIN32S_SRC`, default
+`.tools/win32s/src`, laid out as DISK1-DISK3: on 3.1 with w16's KRNL386 it
+must install and restart Windows, on w16's tree reach Setup's screen;
+skipped without the images; the boot-test case `win32s`),
 `tests/lzexpand/lzscen.sh` (w16's LZEXPAND.DLL against Microsoft's, the
 probe's log section by section; the boot-test case `lzexpand` runs it),
 `tests/ver/vscen.sh` (w16's VER.DLL against Microsoft's, the probe's log

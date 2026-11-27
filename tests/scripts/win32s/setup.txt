@@ -1,0 +1,55 @@
+; Microsoft Win32s 1.30c (tests/installers.sh): Microsoft Setup (_MSTEST,
+; the "Microsoft Test Driver", MS*STF.DLL), whose script binds KERNEL's
+; SetErrorMode by name (GetProcAddress, a non-resident name). Screens, as
+; on 3.1: the welcome (Continue), "SHARE.EXE is not loaded" (OK), the
+; target directory, the Windows system directory (Continue); the files
+; (disks 2 and 3 read from ..\DISK2 and ..\DISK3), "Win32s files
+; successfully installed." (OK); Freecell Setup (Continue), its path
+; (Continue), "Freecell was successfully installed." (OK); "Setup will
+; now exit and restart Microsoft Windows" (Continue): Windows ends,
+; _MSRSTRT.EXE and _MSSETUP.BAT run, Windows comes back with the "Win32
+; Applications" group. Win32s needs virtual memory (a paging file): without
+; one Setup says "Win32s requires Virtual Memory" instead of the SHARE box
+; and then "Microsoft Win32s System Setup has failed."
+; dest %WINDIR%/SYSTEM/WIN32S
+; expect %WINDIR%/SYSTEM/W32SYS.DLL %WINDIR%/SYSTEM/WIN32S/W32S.386 WIN32APP/FREECELL/FREECELL.EXE
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\INST\WIN32S\DISK1\SETUP.EXE
+key Return
+; ("Initializing Microsoft Win32s Setup..." holds still while it copies)
+sleep 10
+settle 180 12
+shot welcome
+key Return
+settle 60 5
+shot share
+key Return
+settle 60 5
+shot target
+key Return
+settle 600 15
+shot installed
+key Return
+settle 120 8
+shot freecell
+key Return
+; (the path box has a blinking caret: no settle)
+sleep 15
+shot freecellpath
+key Return
+; (Freecell's files, then its group made in Program Manager by DDE: the
+; screen can hold still a while in between, on a loaded host past 10 s)
+sleep 10
+settle 300 20
+shot freecelldone
+key Return
+sleep 10
+settle 180 15
+shot restart
+key Return
+sleep 30
+settle 240 10
+shot restarted
