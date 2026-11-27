@@ -106,8 +106,10 @@ static int unit_vector(ttfx_i32 dx, ttfx_i32 dy, ttfx_i16 *v)
         v[1] = dy > 0 ? 0x4000 : -0x4000;
         return 1;
     }
-    /* keep the squares in 32 bits, but no smaller than they need be */
-    while (bc_abs(dx) >= 0x8000L || bc_abs(dy) >= 0x8000L) {
+    /* keep the squares in 32 bits, but no smaller than they need be
+       (the bounds tested signed: bc_abs of -2^31 stays negative, and
+       that pair doubled to 0 would never leave the loop below) */
+    while (dx >= 0x8000L || dx <= -0x8000L || dy >= 0x8000L || dy <= -0x8000L) {
         dx /= 2;
         dy /= 2;
     }
@@ -555,9 +557,11 @@ static void bc_delta(ttfx__bc *bc, int which, ttfx_u8 op)
 
 /* ---- the interpreter ---- */
 
-/* (in line: most instructions pop and push) */
-#define POP() (bc->sp ? bc->stack[--bc->sp] : bc_pop(bc))
-#define PUSH(v) do { ttfx_i32 v_ = (v); if (bc->sp < bc->maxsp) bc->stack[bc->sp++] = v_; else bc_push(bc, v_); } while (0)
+/* (in line: most instructions pop and push; stk and maxsp are
+   ttfx__bcRun's copies, fixed while it runs: sp stays in bc, which the
+   helpers pop and push) */
+#define POP() (bc->sp ? stk[--bc->sp] : bc_pop(bc))
+#define PUSH(v) do { ttfx_i32 v_ = (v); if (bc->sp < maxsp) stk[bc->sp++] = v_; else bc_push(bc, v_); } while (0)
 #define GS bc->gs
 
 int ttfx__bcLastError, ttfx__bcLastProg, ttfx__bcTrace;
@@ -570,6 +574,9 @@ int ttfx__bcRun(ttfx__bc *bc, int prog)
     int ncall = 0;
     ttfx__frame calls[BC_MAXCALL];
     ttfx_u8 cprog = (ttfx_u8)prog;
+    ttfx_i32 TTFX_FAR *stk = bc->stack;
+    ttfx_u16 maxsp = bc->maxsp;
+    ttfx_u32 budget = bc->budget;       /* (on the stack: tested each instruction) */
     bc->prog = (ttfx_u8)prog;
     bc_vectors(bc);
     while (!bc->error) {
@@ -581,7 +588,7 @@ int ttfx__bcRun(ttfx__bc *bc, int prog)
                 bc->error = BC_ECODE;   /* a function without ENDF */
             break;
         }
-        if (!bc->budget--) {
+        if (!budget--) {
             bc->error = BC_ELOOP;
             break;
         }
@@ -1373,6 +1380,7 @@ int ttfx__bcRun(ttfx__bc *bc, int prog)
         }
         ip = next;
     }
+    bc->budget = budget;
     return !bc->error;
 }
 
@@ -1714,7 +1722,10 @@ static int bc_glyph(bc_loader *L, ttfx_u16 glyph, int depth, ttfx_point *pp)
         if (10 + 2UL * nc + 2 > glen)
             goto fail;
         np = nc ? DUSHORT(q + 2 * (nc - 1)) + 1 : 0;
-        if (s + np + 2 > L->maxn || cs + (unsigned)nc > L->maxc)
+        /* in 32 bits: a last end near FFFFh would wrap s + np + 2 past
+           a word and pass (a malformed glyph; np of 0 from FFFFh fails
+           every end below) */
+        if ((ttfx_u32)s + np + 2 > L->maxn || (ttfx_u32)cs + (unsigned)nc > L->maxc)
             goto fail;
         for (i = 0; i < (unsigned)nc; i++) {
             unsigned e = DUSHORT(q + 2 * i);
@@ -1725,9 +1736,11 @@ static int bc_glyph(bc_loader *L, ttfx_u16 glyph, int depth, ttfx_point *pp)
         q += 2 * nc;
         inslen = DUSHORT(q);
         ins = q + 2;
-        q = ins + inslen;
-        if (q > end)
+        /* a length, not a pointer sum: ins + inslen wraps the offset
+           when inslen passes what the glyph holds */
+        if (ins > end || inslen > (unsigned)(end - ins))
             goto fail;
+        q = ins + inslen;
         /* the flags, then x, then y */
         for (i = 0; i < np; i++) {
             if (!rep) {
@@ -1817,6 +1830,9 @@ static int bc_glyph(bc_loader *L, ttfx_u16 glyph, int depth, ttfx_point *pp)
                 a2 = flags & 2 ? (ttfx_i32)(ttfx_i8)q[1] : (ttfx_i32)q[1];
                 q += 2;
             }
+            /* the transform's bytes checked before they are read */
+            if ((unsigned)(end - q) < (flags & 8 ? 2u : flags & 0x40 ? 4u : flags & 0x80 ? 8u : 0u))
+                goto fail;
             if (flags & 8) {            /* WE_HAVE_A_SCALE */
                 ma = md = DSHORT(q);
                 q += 2;
@@ -1834,8 +1850,6 @@ static int bc_glyph(bc_loader *L, ttfx_u16 glyph, int depth, ttfx_point *pp)
                 q += 8;
                 xform = 1;
             }
-            if (q > end)
-                goto fail;
             c0 = L->n;
             if (!bc_glyph(L, gi, depth + 1, cpp))
                 goto fail;
@@ -1887,7 +1901,7 @@ static int bc_glyph(bc_loader *L, ttfx_u16 glyph, int depth, ttfx_point *pp)
                 goto fail;
             inslen = DUSHORT(q);
             q += 2;
-            if (q + inslen > end)
+            if (inslen > (unsigned)(end - q))   /* (a pointer sum wraps) */
                 goto fail;
         }
         np = L->n - s;

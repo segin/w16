@@ -387,6 +387,12 @@ static void t_vectors(void)
     setup();
     RUN(PUSHB2, 2, 0, SPVTL1, GPV);
     stk(2, -0x2D41L, 0x2D41L);
+    what = "SPVTL of -2^31 each way";   /* a line no glyph has: halved first, not doubled to 0 for ever */
+    setup();
+    cur[0].x = cur[0].y = 0;
+    cur[2].x = cur[2].y = -0x7FFFFFFFL - 1;
+    RUN(PUSHB2, 2, 0, SPVTL0, GPV);
+    stk(2, -0x2D41L, -0x2D41L);
     what = "SPVFS SFVTPV";
     setup();
     RUN(PUSHW2, 0x2D, 0x41, 0x2D, 0x41, SPVFS, SFVTPV, GFV);
