@@ -161,6 +161,13 @@ void vm_snapshot(void)
     info->free_mcb = (u16)(mcb >> 4);
     add_range(0, 0x500);
     if (info->sda_lin && info->sda_size) add_range(info->sda_lin, info->sda_size);
+    /* the current directories (DOS's CDS): Windows' tasks change them
+     * (KERNEL's INT 21h 3Bh as it switches tasks), and a box shared them:
+     * Visual C++'s compiler pass in a box opened hello.c in C:\WINDOWS,
+     * not in its PIF's directory */
+    if (info->cds_lin && info->cds_size && info->cds_size <= 26 * 0x58
+        && info->cds_lin + info->cds_size <= ((u32)info->free_mcb << 4))
+        add_range(info->cds_lin, info->cds_size);
     if (info->free_mcb && top > mcb + 0x2000) {
         /* the MCB's paragraph is instance data even when the arena
          * starts on a page (a page of its own then started there, zeros:

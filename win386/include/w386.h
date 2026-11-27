@@ -117,6 +117,11 @@ struct w386_info {
        every VM) for the VMM's profile services during initialisation */
     w_u32 ini_lin;
     w_u32 ini_len;
+    /* DOS's current directory structure (INT 21h 52h: the list of lists'
+       pointer at +16h, LASTDRIVE at +21h), instance data: each VM has
+       current directories of its own (vm.c) */
+    w_u32 cds_lin;
+    w_u32 cds_size;
 };
 #pragma pack()
 
