@@ -45,8 +45,8 @@ conf= lp=DP
 [ -n "${DPMIRUN_COM1:-}" ] && conf="[serial]
 serial1=file file:$o/com1.txt"
 case $kind in
-p)  logs="A B C D E F G H T U" boxes=P
-    printf 'DPMIPRB 16 A\r\nDPMIPRB 16 B\r\nDPMIPRB 32 C\r\nDPMIPRB 32 D\r\nDPMIPRB N E\r\nDPMIPRB O G\r\nDPMIPRB T T\r\nDPMIPRB 16 U\r\nECHO done>DPDONE.TXT\r\n' > "$o/DPP.BAT"
+p)  logs="A B C D E F G H T U P V" boxes=P
+    printf 'DPMIPRB 16 A\r\nDPMIPRB 16 B\r\nDPMIPRB 32 C\r\nDPMIPRB 32 D\r\nDPMIPRB N E\r\nDPMIPRB O G\r\nDPMIPRB T T\r\nDPMIPRB 16 U\r\nDPMIPRB P P\r\nDPMIPRB 16 V\r\nECHO done>DPDONE.TXT\r\n' > "$o/DPP.BAT"
     wait=$wd/DPDONE.TXT ;;
 g)  logs="G H" boxes=P
     printf 'DPMIPRB G16 G\r\nDPMIPRB G32 H\r\nECHO after>DPGAFT.TXT\r\n' > "$o/DPP.BAT"

@@ -21,7 +21,7 @@ d)  # w16 only: each box found its own directory (Windows 3.1's boxes
             { echo "FAIL CW$t.LOG: $(cat "$b/CW$t.LOG" 2>/dev/null || echo none)"; exit 1; }
     done
     echo "ok   two boxes each kept their own current directory"; exit 0 ;;
-p) logs="A B C D E F G H T U" ;;
+p) logs="A B C D E F G H T U P V" ;;
 g) logs="G" ;;
 c) logs="X Y" ;;
 *) echo "FAIL kind $kind"; exit 1 ;;
@@ -36,8 +36,8 @@ for t in $logs; do
     # 3.1 keeps (and three more of its own: the next first 0000h gives E7h;
     # 3.1 goes on as if T's client still ran, so a 32-bit client after it
     # is refused there: w16 frees it, and that is not compared)
-    m='s/=00[0-9A-F][0-9A-F]\b/=..../g'
-    [ "$t" = F ] || [ "$t" = U ] || m=
+    m='s/=0[0-9A-F][0-9A-F][0-9A-F]\b/=..../g'
+    [ "$t" = F ] || [ "$t" = U ] || [ "$t" = P ] || [ "$t" = V ] || m=
     grep -v '^INFO\|^MEM' "$a/DP$t.LOG" | sed "$m" > "$b/DP$t.ref"
     grep -v '^INFO\|^MEM' "$b/DP$t.LOG" | sed "$m" > "$b/DP$t.cmp"
     if ! cmp -s "$b/DP$t.ref" "$b/DP$t.cmp"; then

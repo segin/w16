@@ -198,6 +198,36 @@ L(main):
         NL
         jmp L(fin)
 .nott:
+        ; P: another PSP current (INT 21h 55h in a DOS block, as a DOS
+        ; extender makes its programs'), then INT 21h 4C00h from protected
+        ; mode: DOS must end the probe, not that PSP
+        cmp byte [mode], 'P'
+        jne .notp
+        CLR
+        mov bx, 20h
+        I31 0100h
+        mov ax, [r_eax]
+        mov [tmp], ax
+        call L(clrr)
+        mov dword [rmr + 1Ch], 5500h
+        movzx eax, word [tmp]
+        mov [rmr + 14h], eax
+        add eax, 20h
+        mov [rmr + 4], eax
+        push es
+        push ds
+        pop es
+        CLR
+        mov bx, 21h
+        mov edi, rmr
+        mov ax, 0300h
+        int 31h
+        pop es
+        LS "P child PSP current"
+        NL
+        mov ax, 4C00h
+        int 21h
+.notp:
         ; ---- INT 2Fh in protected mode ----
         mov ax, 1686h
         int 2Fh
