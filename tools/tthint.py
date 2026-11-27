@@ -214,8 +214,9 @@ class Hinter:
     screen: None or {ppem: ([zone flat heights in pixels], main stem
     pixels)} for the sizes prep sets from a table."""
 
-    def __init__(self, upem, zones, maxw_y, maxw_x, do_x=True, stems=None, screen=None, gap=64):
+    def __init__(self, upem, zones, maxw_y, maxw_x, do_x=True, stems=None, screen=None, gap=64, italic=False):
         self.upem = upem
+        self.italic = italic
         self.gap = gap         # least pixels (26.6) right of a glyph's ink
         self.zones = zones
         self.maxw_y = maxw_y
@@ -527,7 +528,10 @@ class Hinter:
 
     def _xaxis(self, contours, advance=None):
         cls = edges(contours, 0)
-        if not cls:
+        if not cls or self.italic:
+            # (an italic face: its stems are slanted, hinted as diagonal
+            # strokes; rounding its few vertical edges, serif tips and
+            # curve extrema, spaced the letters unevenly)
             return self._diagonals(contours, set())
         pairs = sorted(stems(cls, self.maxw_x), key=lambda pr: pr[0][1])
         partner = {}

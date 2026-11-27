@@ -374,7 +374,7 @@ class Face:
         for ppem, (xh, cap, asc, desc, stem) in SCREEN.get(self.base, {}).items():
             screen[ppem] = ([0, -desc, xh, cap] + ([asc] if has_asc else []), stem)
         h = tthint.Hinter(self.em, zones, maxw_y, maxw_x, do_x=True, stems=st, screen=screen,
-                          gap=0 if s.mono else 64)
+                          gap=0 if s.mono else 64, italic=bool(self.italic))
         h.learn([g.contours for g in f.glyphs])
         for i, g in enumerate(f.glyphs):
             g.instructions = h.glyph(g.contours, g.advance, dev.get(i) if PHANTOM else None)
