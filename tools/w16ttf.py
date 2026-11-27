@@ -165,6 +165,8 @@ class Font:
         self.cvt = []              # control values (FWORDs)
         self.fpgm = b''            # font program
         self.max_stack = 32
+        self.max_fdefs = 2         # maxFunctionDefs (with an fpgm)
+        self.max_storage = 0       # maxStorage
 
     # ------------------------------------------------------------ tables
     def _head(self, bbox, loca_long):
@@ -194,7 +196,7 @@ class Font:
         return struct.pack('>IHHHHHHHHHHHHHH', 0x00010000, len(self.glyphs),
                            max(g.npoints() for g in self.glyphs),
                            max(len(g.contours) for g in self.glyphs),
-                           0, 0, 2, 0, 0, 2 if self.fpgm else 0, 0, self.max_stack,
+                           0, 0, 2, 0, self.max_storage, self.max_fdefs if self.fpgm else 0, 0, self.max_stack,
                            max(len(g.instructions) for g in self.glyphs), 0, 0)
 
     def _os2(self):

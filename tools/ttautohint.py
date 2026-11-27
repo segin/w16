@@ -157,7 +157,7 @@ def autohint(data, zones=None, keep_device=False):
     m = bytearray(t[b'maxp'])
     if len(m) >= 32:
         struct.pack_into('>H', m, 14, max(2, struct.unpack_from('>H', m, 14)[0]))
-        struct.pack_into('>H', m, 20, 2)          # maxFunctionDefs
+        struct.pack_into(">H", m, 20, tthint.N_FUNCS)  # maxFunctionDefs
         struct.pack_into('>H', m, 22, 0)          # maxInstructionDefs
         struct.pack_into('>H', m, 24, 32)         # maxStackElements
         struct.pack_into('>H', m, 26, max(maxins, len(t[b'prep']), len(t[b'fpgm'])))

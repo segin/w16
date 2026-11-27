@@ -82,6 +82,7 @@ class Style:
             self.st = self.sh                    # slab thickness
             self.sb = 0
         self.dot = self.sv * (1.18 if self.serif else 1.1)
+        self.diag = {'sans': 0.86, 'serif': 0.9, 'mono': 0.86}[kind] + (0.04 if b else 0)
 
     # vertical zones
     def top(self, caps):
@@ -157,9 +158,10 @@ def _bracket_poly(x_stem, y, sl, st, sb, side, up):
     y1 = y + up * st
     tip = x_stem + sgn * sl
     p = G.Path(x_stem - sgn * 26, y0)
+    # a square tip, as thick as the serif (a thinner tip than serif
+    # rounds away on the screen: serifs went missing at 8-10 pt)
     p.line(tip, y0)
-    p.line(tip, y1 - up * st * 0.12)
-    p.line(tip - sgn * min(sl * 0.3, 18), y1)
+    p.line(tip, y1)
     if sb > 0:
         p.qto(x_stem + sgn * sb * 0.15, y1, x_stem, y1 + up * sb)
     else:
@@ -351,9 +353,16 @@ def slanted(x_top, x_bot, y_top, y_bot, w):
     return G.stem(x_bot, y_bot, x_top, y_top, w)
 
 
+# diagonal strokes are drawn this much lighter than the stems they are
+# given as (Style.diag; set by draw()): a diagonal as thick as a stem
+# covers more pixels across a row, and v, w, x, y came out a pixel
+# heavier than the stems at 10-14 pt
+_DIAG = [1.0]
+
+
 def dw(w, dx, dy):
     """horizontal width of a stroke of thickness w with run dx over rise dy"""
-    return w / math.cos(math.atan2(abs(dx), abs(dy)))
+    return w * _DIAG[0] / math.cos(math.atan2(abs(dx), abs(dy)))
 
 
 def tail_hook(s, xc, xl, ybot, sv, th, side=-1, depth=None, cut=0):
@@ -2368,6 +2377,7 @@ for base, acc, chars in (
 
 def draw(s, ch, L, R):
     """the shape of character ch with its ink in L..R (upright)"""
+    _DIAG[0] = s.diag
     if ch in BASE:
         return BASE[ch](s, L, R)
     if ch in SPACING_ACCENTS:

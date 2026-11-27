@@ -61,6 +61,7 @@ CREATED = 2082844800 + 1795305600
 
 PREP = os.environ.get('W16TT_PREP', '1') != '0'
 HINT = os.environ.get('W16TT_HINT', '1') != '0'
+PHANTOM = os.environ.get('W16TT_PHANTOM', '1') != '0'
 CC0_URL = 'https://creativecommons.org/publicdomain/zero/1.0/'
 LICENSE = 'CC0 1.0 Universal public domain dedication: no rights reserved.'
 
@@ -96,6 +97,22 @@ PANOSE = {
     ('mono', 1, 1): (2, 7, 7, 9, 2, 2, 5, 9, 4, 4),
 }
 FAMILY_CLASS = {'sans': 0x0805, 'serif': 0x0104, 'mono': 0x0501}
+
+
+def read_screen(path=os.path.join(ROOT, 'fonts', 'tt', 'screen.txt')):
+    """fonts/tt/screen.txt: {face: {ppem: (xh, cap, asc, desc, stem)}}"""
+    out = {}
+    if not os.path.exists(path):
+        return out
+    for line in open(path):
+        if line.startswith('#') or not line.strip():
+            continue
+        f = line.split()
+        out.setdefault(f[0], {})[int(f[1])] = tuple(int(v) for v in f[2:7])
+    return out
+
+
+SCREEN = read_screen()
 
 # ------------------------------------------------------------ repertoire
 
@@ -339,24 +356,33 @@ class Face:
         sh = G.move(sh, L - x0, 0)
         return G.fit(self.clamp(sh, ch, L, R))
 
-    def hint(self, f):
+    def hint(self, f, dev):
         """TrueType instructions for every glyph (tools/tthint.py): blue
         zones from the design's heights, stems from the outlines"""
         s = self.s
         ov = s.ov
         zones = [(0, -ov, -1), (s.desc, s.desc - ov, -1), (s.xh, s.xh + ov, 1),
                  (s.cap, s.cap + ov, 1)]
-        if abs(s.asc - s.cap) > 8:
+        has_asc = abs(s.asc - s.cap) > 8
+        if has_asc:
             zones.append((s.asc, s.asc + ov, 1))
         maxw_y = max(s.sv, s.svc, s.sh, s.shc) * 1.6
         maxw_x = max(s.sv, s.svc) * 1.6
-        h = tthint.Hinter(self.em, zones, maxw_y, maxw_x, do_x=True)
+        ys = [s.sh, s.shc, s.hair] + ([s.st] if not s.sans else [])
+        st = {'x': [s.sv, s.svc], 'y': ys, 'main': s.sv}
+        screen = {}
+        for ppem, (xh, cap, asc, desc, stem) in SCREEN.get(self.base, {}).items():
+            screen[ppem] = ([0, -desc, xh, cap] + ([asc] if has_asc else []), stem)
+        h = tthint.Hinter(self.em, zones, maxw_y, maxw_x, do_x=True, stems=st, screen=screen)
         h.learn([g.contours for g in f.glyphs])
-        for g in f.glyphs:
-            g.instructions = h.glyph(g.contours)
+        for i, g in enumerate(f.glyphs):
+            g.instructions = h.glyph(g.contours, g.advance, dev.get(i) if PHANTOM else None)
         f.cvt = h.cvt
         f.prep = h.prep()
         f.fpgm = tthint.fpgm()
+        f.max_fdefs = tthint.N_FUNCS
+        f.max_stack = tthint.MAX_STACK
+        f.max_storage = 1
         self.hinter = h
 
     def clamp(self, sh, ch, L, R):
@@ -416,7 +442,7 @@ class Face:
             dev[gid] = self.device_widths(ch)
         f.cmap[0x2219] = f.cmap[0xB7]
         if HINT:
-            self.hint(f)
+            self.hint(f, dev)
         self.gid = {ch: f.cmap[ord(ch)] for ch in self.chars}
         # metrics
         # 3.1 reports these negative values one nearer zero than the file
@@ -442,6 +468,13 @@ class Face:
         f.bbox_min = (otm['box.l'] - 1, otm['box.b'] - 1, otm['box.r'], otm['box.t'])
         # per-size ascent and descent as 3.1 reports them (VDMX)
         f.vdmx = {p: (t['a'], -t['d']) for p, t in r['tmsize'].items()}
+        # head flags bit 4, instructions may change the advance width: the
+        # hints move the advance width point to hdmx's width (9-40 pixels
+        # per em), and 3.1's TextOut only sets the glyphs by their hinted
+        # advance with the bit (without it, by the rounded scaled advance,
+        # whatever hdmx holds: lines came out wider than Microsoft's)
+        if HINT and PHANTOM:
+            f.head_flags = 0x001B
         f.lowest_ppem = otm['minppem']
         f.panose = bytes(PANOSE[(self.kind, self.bold, self.italic)])
         f.family_class = FAMILY_CLASS[self.kind]
