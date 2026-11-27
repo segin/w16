@@ -23,6 +23,7 @@ static u8 idt[256 * 8];
 #define LDT_MAX 8192                    /* the architecture's limit: 64 KB of descriptors */
 static u8 ldt_store[LDT_MAX * 8];
 u8 *ldt = ldt_store;
+u8 *ldt_sys = ldt_store;            /* the System VM's (dpmi.c: a DOS VM's client has its own) */
 u32 ldt_limit = LDT_MAX * 8 - 1;
 
 #pragma pack(1)
@@ -665,8 +666,20 @@ void exec_return(struct cregs *r)
     k_longjmp(cur_exec->jb, 1);
 }
 
-u32 xbuf_lin(void) { return (u32)info->xbuf_seg << 4; }
-u32 xbuf_size(void) { return info->xbuf_size; }
+/* The transfer buffer for DOS calls from protected mode: the System VM's
+ * is the loader's 16 KB; a DOS VM's is its own (another VM may run while
+ * DOS has the buffer), the 2 KB of its VM stub's block that are free once
+ * its program runs: after the start-up message, below the reflection
+ * stack */
+u32 xbuf_seg(void)
+{
+    return cur_vm == &sysvm ? info->xbuf_seg : cur_vm->refstk_seg + (DOSVM_MSG >> 4);
+}
+u32 xbuf_lin(void) { return xbuf_seg() << 4; }
+u32 xbuf_size(void)
+{
+    return cur_vm == &sysvm ? info->xbuf_size : DOSVM_REFSTK_TOP - DOSVM_REFSTK_SIZE - DOSVM_MSG;
+}
 
 /* ---- INT 2Fh in V86 mode: the Windows functions (DDK INT 2Fh 16xxh) ---- */
 static int int2f_v86(struct cregs *r)
@@ -698,14 +711,15 @@ static int int2f_v86(struct cregs *r)
         return 1;
     }
     case 0x1687:                        /* DPMI: observed values (ARCHITECTURE.md 12.2) */
-        /* the System VM's only: a DOS VM has no DPMI host yet (UNVERIFIED
-         * what Windows 3.1 offers there; its DOS boxes run DPMI programs) */
-        if (cur_vm != &sysvm) return 0;
+        /* in every VM (ARCHITECTURE.md 12.16): a DOS VM's as Windows 3.1's
+         * in a box (DPMIPRB), 27h paragraphs of host data asked (w16's host
+         * does not use them, but DOS memory after them is then where 3.1
+         * puts it); the System VM's KRNL386 is asked for none, as before */
         SETW(r->eax, 0);
         SETW(r->ebx, 1);                /* 32-bit clients supported */
         SETLO(r->ecx, 3);               /* 386 */
         SETW(r->edx, 0x005A);           /* 0.90 */
-        SETW(r->esi, 0);                /* no host data needed */
+        SETW(r->esi, cur_vm == &sysvm ? 0 : 0x0027);
         r->es = info->ldr_cs;
         SETW(r->edi, info->bp_off + W386_BP_DPMI);
         return 1;
@@ -824,7 +838,7 @@ int vmm_deliver(u32 vec, int iret)
     if (vm_trace && cur_vm != &sysvm) trace("(I%x%s)", vec, r && (r->eflags & EFL_IF) ? "" : "-");
     if (!r || !(r->eflags & EFL_IF)) return 0;
     if (r->eflags & EFL_VM) {
-        if (cur_vm == &sysvm && dpmi_v86_hook(r, vec, 1)) {
+        if (dpmi_v86_hook(r, vec, 1)) {
             if (iret) vpicd->iret();
         } else {
             v86_reflect(r, vec);
@@ -863,6 +877,7 @@ void vmm_switch(struct vm *n)
     cur_vm = n;
     pdir()[0] = n->ptab_phys | 7;
     flush_tlb();
+    dpmi_vm_in(n);
     vm_inst_in(n);
     io_vm_switch(n);
     kesp0 = n->kesp0;
@@ -922,7 +937,7 @@ static void software_int(struct cregs *r, int vec)
         if (vec == 0x2A) vm_int2a(r);   /* DOS's critical sections: noted, then on to DOS's handler */
         if (vec == 0x21) { vm_int21(r); return; }
         /* INT 1Ch, 23h, 24h go to a protected-mode handler (DPMI 0.9) */
-        if ((vec == 0x1C || vec == 0x23 || vec == 0x24) && cur_vm == &sysvm && dpmi_v86_hook(r, vec, 0)) return;
+        if ((vec == 0x1C || vec == 0x23 || vec == 0x24) && dpmi_v86_hook(r, vec, 0)) return;
         v86_reflect(r, vec);
     } else
         dpmi_int(r, vec, 0);
@@ -937,6 +952,7 @@ static void v86_breakpoint(struct cregs *r, u32 idx)
     case W386_BP_VMEXIT: vm_exited(r); break;
     case W386_BP_VMSTART: vm_start(r); break;
     case W386_BP_INT21RET: vm_int21_ret(r); break;
+    case W386_BP_DPMIRM: dpmi_rm_entry(r); break;
     case W386_BP_NOEMS:                 /* INT 67h without EMS: back, unchanged */
         r->eip = v86_pop16(r);
         r->cs = v86_pop16(r);
@@ -1142,9 +1158,9 @@ void __cdecl trap(struct tframe *f)
     }
 
     if (!(r->eflags & EFL_VM) && r->cs != SEL_PMBP) {
-        sysvm.last_cs = r->cs;
-        sysvm.last_ip = r->eip;
-        sysvm.last_ds = r->ds;
+        cur_vm->last_cs = r->cs;
+        cur_vm->last_ip = r->eip;
+        cur_vm->last_ds = r->ds;
     }
     /* also at the breakpoints: a handler that chains with PUSHF, CALL FAR
      * has its own words below the frame */

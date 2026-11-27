@@ -640,8 +640,11 @@ BYTE __far *font_huge(BYTE __far *base, DWORD off);    /* a byte of a block over
 
 /* ttfont.c: TrueType fonts (.FOT pointing at a .TTF; gdi/ttf/ttfx.c) */
 extern BYTE tt_enabled;                 /* WIN.INI [TrueType] TTEnable */
-extern BYTE tt_hint;                    /* SYSTEM.INI [w16] TrueTypeHinting: TTFX_HINT_* */
-#define TT_HINT_DEFAULT 5               /* TTFX_HINT_Y | TTFX_HINT_DROPOUT */
+extern BYTE tt_hint;                    /* SYSTEM.INI [w16] TrueTypeHinting: TTFX_HINT_*, TT_HINT_WIDTHS */
+#define TT_HINT_WIDTHS 16               /* advance widths from the instructions (no hdmx record) */
+/* the font's instructions (TTFX_HINT_BYTECODE) and widths from them, as
+   3.1; without instructions the autohinter, vertical and dropout control */
+#define TT_HINT_DEFAULT 29
 int tt_dirent(XP xf, HINSTANCE h);      /* a .FOT's entry: made TrueType (1) */
 void tt_free(LPFONT f);                 /* a base entry goes: its TTFILE */
 int tt_usable(LPFONT f);                /* enabled, and its .TTF found and valid */

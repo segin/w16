@@ -41,7 +41,7 @@ int KAPI GetPrivateProfileString(const char FAR *sec, const char FAR *key,
 u16 KAPI_ES GetWindowsDirectory(char FAR *buf, u16 n);
 u16 KAPI LoadLibrary(const char FAR *name);
 u32 KAPI GetProcAddress(u16 h, const char FAR *name);
-u16 KAPI GetModuleHandle(const char FAR *name);
+u32 KAPI GetModuleHandle(const char FAR *name);
 u16 KAPI GetPrivateProfileInt(const char FAR *sec, const char FAR *key, u16 def,
                               const char FAR *file);
 
@@ -267,7 +267,7 @@ static int take_switch_b(void)
 /* USER's FinalUserInit (USER.400, Pietrek) */
 static void final_user_init(void)
 {
-    u16 u = GetModuleHandle("USER");
+    u16 u = (u16)GetModuleHandle("USER");
     u32 p = u ? GetProcAddress(u, "#400") : 0;  /* (0 is the task's own) */
     if (p)
         ((void (__far __pascal *)(void))p)();

@@ -102,6 +102,34 @@ _call_wndproc:
         pop bp
         retf
 
+; LONG __cdecl call_hookproc(HOOKPROC f, int code, WPARAM, LPARAM): a
+; hook procedure, called as Windows 3.1 calls it: AX = DS = ES = SS (TK71,
+; "H" lines: every hook type, set with the hInstance or the hModule), so
+; that one set without a MakeProcInstance thunk, or one that takes DS as
+; it comes, has the calling task's data segment. Visual C++ 1.52's MFC
+; programs (OLE2VIEW) set their WH_CBT hook so, and faulted reading
+; their own data through USER's DS.
+global _call_hookproc
+_call_hookproc:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push word [bp+10]       ; code
+        push word [bp+12]       ; wParam
+        push word [bp+16]       ; lParam high
+        push word [bp+14]       ; lParam low
+        mov ax, ss
+        mov ds, ax
+        mov es, ax
+        call far [bp+6]
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf
+
 global _keybd_event_entry, KEYBD_EVENT
 _keybd_event_entry:
 KEYBD_EVENT:

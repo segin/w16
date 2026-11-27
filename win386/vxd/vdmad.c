@@ -161,6 +161,8 @@ static vu32 cb_off;
 
 static vu32 sys_vm;
 static int inited;                      /* Init_Complete done: the buffer exists */
+static vu8 bda_vds;                     /* 40:7Bh before Device_Init set the VDS bits */
+static int bda_vds_saved;
 
 /* ---- the buffer ---- */
 static vu32 buf_size, buf_max = ISA_LIMIT, buf_lin, buf_phys, buf_used;
@@ -953,6 +955,8 @@ void __cdecl vdmad_control(struct vregs *r)
         /* the Virtual DMA Services are there: 40:7Bh bit 5, and bit 3
          * (Windows 3.1's boxes read 28h there; the VDS specification:
          * INT 4Bh is chained) */
+        bda_vds = *(vu8 *)0x47B;
+        bda_vds_saved = 1;
         *(vu8 *)0x47B |= 0x28;
         break;
     case INIT_COMPLETE:
@@ -974,6 +978,11 @@ void __cdecl vdmad_control(struct vregs *r)
     case SYSTEM_EXIT:
         for (i = 0; i < 8; i++)
             if (chans[i].run_vm) { phys_mask(i, 1); finish(&chans[i], 0); }
+        /* 40:7Bh as before Windows: DOS has no VDS once Windows has ended
+         * (DOSST, tests/dosstrun.sh: under Windows 3.1 it is as before
+         * WIN; w16 left 28h, and a DOS program doing DMA would call INT
+         * 4Bh, which nothing serves then) */
+        if (bda_vds_saved) *(vu8 *)0x47B = bda_vds;
         break;
     }
 }

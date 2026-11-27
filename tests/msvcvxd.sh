@@ -30,12 +30,40 @@
 #          have been called (the user's hang: VMB.386's _HeapAllocate, a
 #          service w16 lacked, halted Windows while Program Manager
 #          painted its groups).
+#   cl     CL.EXE, Visual C++'s 32-bit compiler (its passes run under Phar
+#          Lap's DOSXNT.EXE, a DPMI client), compiling and linking a hello
+#          world in a windowed DOS box on the reference install, with
+#          DOSXNT.386 in SYSTEM.INI and without, under Windows 3.1's
+#          WIN386 and w16's (ARCHITECTURE.md 12.16): the program must be
+#          built and say hello, and CL's output must equal Windows 3.1's
+#          (before, w16's boxes had no DPMI host: "Phar Lap err 35").
+#   wps    Windows Process Status (BIN\WPS.EXE) from WIN.INI run= on
+#          w16's tree alone (C:\W16, its KRNL386 and WIN386) and on
+#          Windows 3.1: w16 must not fault (it did: GetModuleHandle's DX,
+#          the module list WPS walks, was a stray selector), and WPS's
+#          window must be there, at the bottom of the screen, as under
+#          Windows 3.1: its caption and menu bar (the active caption's
+#          blue within 5% of 3.1's; the tree's USER, fonts and lists are
+#          w16's).
+#   ole2view  the OLE 2 object viewer (BIN\OLE2VIEW.EXE) the same way,
+#          with the OLE 2.01 libraries Visual C++'s Setup puts in the
+#          system directory (COMPOBJ.DLL, OLE2.DLL, STORAGE.DLL,
+#          OLE2DISP.DLL, OLE2NLS.DLL, OLE2PROX.DLL, OLE2CONV.DLL,
+#          TYPELIB.DLL, STDOLE.TLB; and REG.DAT, the registration
+#          database, when there is one) from $W16_OLE2_DIR (default: OLE2
+#          beside the MSVC directory): w16 must not fault (it did: USER
+#          called MFC's WH_CBT hook with its own DS, 3.1 with AX = DS =
+#          ES = SS), and its window must be there as under 3.1 (its
+#          caption, menu and tool bar, as for wps).
+#   heapwalk  HeapWalk (BIN\HEAPWALK.EXE, TOOLHELP's global heap walk) the
+#          same way: no fault, its window (caption, menu bar) there as
+#          under 3.1.
 # Visual C++ is not w16's: nothing of it is committed. boot and cvw take
 # the installed C:\MSVC directory from $W16_MSVC_DIR (default
 # ~/Downloads/msvc152/MSVC; boot needs BIN's four .386 files, cvw BIN's
 # CVW.EXE and its DLLs too); without it they say so and pass ("skip").
 #
-#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx)
+#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx cl)
 set -u
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -48,7 +76,7 @@ while getopts o: opt; do
     esac
 done
 shift $((OPTIND - 1))
-parts=${*:-vxc boot cvw wx}
+parts=${*:-vxc boot cvw wx cl}
 [ -n "$out" ] || out=$(mktemp -d)
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
@@ -175,6 +203,124 @@ serial1=file file:$out/wx-w16.com1" timeout 600 "$root/tests/inputrun.sh" -s -b 
         r="$(grep -m1 'not in w16\|panic\|fatal' "$out/cvw-w16.log")"
     if [ "$r" = ok ]; then echo "ok   cvw: CodeView for Windows comes up as under Windows 3.1"
     else echo "FAIL cvw: $r"; fails=$((fails + 1)); fi ;;
+cl)
+    [ -n "$(mfile BIN CL.EXE)" ] && [ -n "$(mfile BIN DOSXNT.EXE)" ] && [ -d "$msvc/LIB" ] && [ -d "$msvc/INCLUDE" ] ||
+        { echo "skip cl: no Visual C++ 1.52 compiler at $msvc (W16_MSVC_DIR)"; continue; }
+    set --
+    for d in BIN INCLUDE LIB; do
+        for f in $(cd "$msvc" && find "$d" -type f); do
+            set -- "$@" -f "$msvc/$f=MSVC/$(printf '%s' "$f" | tr a-z A-Z)"
+        done
+    done
+    printf '#include <stdio.h>\r\n\r\nint main(void)\r\n{\r\n    printf("hello, world\\n");\r\n    return 0;\r\n}\r\n' > "$out/HELLO.C"
+    # full paths: on DOSBox's own DOS the current directory is the
+    # emulator's, not in DOS's memory, so no WIN386 can keep one per VM
+    # (w16 keeps DOS's CDS per VM, which real DOS uses): KERNEL's task
+    # switches in the System VM move it under the box
+    printf 'SET PATH=C:\\MSVC\\BIN;C:\\DOS\r\nSET INCLUDE=C:\\MSVC\\INCLUDE\r\nSET LIB=C:\\MSVC\\LIB\r\nSET TMP=C:\\HW\r\nCL /nologo /FoC:\\HW\\HELLO.OBJ /FeC:\\HW\\HELLO.EXE C:\\HW\\HELLO.C > C:\\HW\\CL.TXT\r\nC:\\HW\\HELLO > C:\\HW\\RUN.TXT\r\nECHO done > C:\\HW\\DONE.TXT\r\n' > "$out/HW.BAT"
+    python3 "$root/tools/mkpif.py" "$ref/DOSPRMPT.PIF" "$out/HW.PIF" "title=CL" 'program=C:\HW\HW.BAT' 'dir=C:\HW' \
+        windowed=1 background=1 || exit 2
+    set -- -r -3 -c "WIN /3" -t 360 -W HW/DONE.TXT -f "$out/HELLO.C=HW/HELLO.C" -f "$out/HW.BAT=HW/HW.BAT" \
+        -f "$out/HW.PIF=HW/HW.PIF" -i 'WIN.INI:windows:run=C:\HW\HW.PIF' "$@"
+    x=$(mfile BIN DOSXNT.386)
+    # MSVCVXD_VXCD=1: VXCD.386 logs the box's INT 21h, 2Fh and 31h calls
+    # to COM1 (OUTDIR/cl-ref.log, cl-w16.log)
+    [ -n "${MSVCVXD_VXCD:-}" ] && set -- "$@" -f "$root/build/dos/VXCD.386=WINDOWS/SYSTEM/VXCD.386" \
+        -i '386Enh:+device=VXCD.386'
+    r=ok
+    for k in cl clx; do
+        if [ $k = clx ]; then set -- "$@" -f "$x=MSVC/BIN/DOSXNT.386" -i '386Enh:+device=C:\MSVC\BIN\DOSXNT.386'; fi
+        [ -n "${MSVCVXD_NOREF:-}" ] || DROPIN_NOREDIR=1 run $k-ref "$@" &
+        # shellcheck disable=SC2086
+        DROPIN_NOREDIR=1 run $k-w16 "$@" -f "$w386=WINDOWS/SYSTEM/WIN386.EXE" ${MSVCVXD_W16INI:+-i "$MSVCVXD_W16INI"} &
+        wait
+        for w in ref w16; do
+            for t in CL RUN; do
+                g=$(find "$out/$k-$w" -ipath '*/HW/'$t.TXT | head -1)
+                { tr -d '\r' < "$g"; } > "$out/$k-$w.$t.txt" 2>/dev/null || : > "$out/$k-$w.$t.txt"
+            done
+        done
+        [ "$r" != ok ] || [ "$(cat "$out/$k-ref.RUN.txt")" = "hello, world" ] ||
+            r="$k: Windows 3.1's box did not build the program ($out/$k-ref.CL.txt)"
+        [ "$r" != ok ] || [ "$(cat "$out/$k-w16.RUN.txt")" = "hello, world" ] ||
+            r="$k: w16's box did not build the program: $(head -c 200 "$out/$k-w16.CL.txt") ($out/$k-w16.log)"
+        [ "$r" != ok ] || cmp -s "$out/$k-ref.CL.txt" "$out/$k-w16.CL.txt" ||
+            r="$k: CL's output differs from Windows 3.1's (diff $out/$k-ref.CL.txt $out/$k-w16.CL.txt)"
+        [ "$r" != ok ] || ! grep -q 'not in w16\|panic\|fatal' "$out/$k-w16.log" ||
+            r="$k: $(grep -m1 'not in w16\|panic\|fatal' "$out/$k-w16.log")"
+    done
+    if [ "$r" = ok ]; then echo "ok   cl: CL.EXE builds hello world in a DOS box as under Windows 3.1, with DOSXNT.386 and without"
+    else echo "FAIL cl: $r"; fails=$((fails + 1)); fi ;;
+wps|ole2view|heapwalk)
+    prog=WPS.EXE
+    [ "$part" = ole2view ] && prog=OLE2VIEW.EXE
+    [ "$part" = heapwalk ] && prog=HEAPWALK.EXE
+    [ -n "$(mfile BIN $prog)" ] || { echo "skip $part: no $prog in $msvc/BIN (W16_MSVC_DIR)"; continue; }
+    ole=${W16_OLE2_DIR:-$(dirname "$msvc")/OLE2}
+    # BIN's programs and libraries (the program's directory)
+    set --
+    for f in "$msvc"/BIN/*; do
+        case $(basename "$f" | tr a-z A-Z) in
+        *.EXE|*.DLL|*.HLP) set -- "$@" -f "$f=MSVC/BIN/$(basename "$f" | tr a-z A-Z)" ;;
+        esac
+    done
+    if [ "$part" = ole2view ]; then
+        for x in COMPOBJ.DLL OLE2.DLL STORAGE.DLL OLE2DISP.DLL OLE2NLS.DLL OLE2PROX.DLL \
+                 OLE2CONV.DLL TYPELIB.DLL STDOLE.TLB; do
+            [ -f "$ole/$x" ] || { set -- missing "$x"; break; }
+        done
+        if [ "${1:-}" = missing ]; then
+            echo "skip ole2view: no OLE 2 libraries at $ole (W16_OLE2_DIR: $2 missing)"
+            continue
+        fi
+    fi
+    # the system directory's files: WINDOWS on 3.1, W16 on the tree
+    sysf() {
+        [ "$part" = ole2view ] || return 0
+        for x in COMPOBJ.DLL OLE2.DLL STORAGE.DLL OLE2DISP.DLL OLE2NLS.DLL OLE2PROX.DLL \
+                 OLE2CONV.DLL TYPELIB.DLL STDOLE.TLB; do
+            printf ' -f %s=%s/SYSTEM/%s' "$ole/$x" "$1" "$x"
+        done
+        [ ! -f "$ole/REG.DAT" ] || printf ' -f %s=%s/REG.DAT' "$ole/REG.DAT" "$1"
+    }
+    # (the paths have no blanks: the MSVC directory's files are listed
+    # word by word above too)
+    # shellcheck disable=SC2046
+    DROPIN_FIXED=1 run $part-ref -r -3 -c "WIN /3" -t 60 -s "$out/$part-ref.png" \
+        -i "WIN.INI:windows:run=C:\\MSVC\\BIN\\$prog" "$@" $(sysf WINDOWS) &
+    # shellcheck disable=SC2046
+    DROPIN_FIXED=1 run $part-w16 -T "$root/build/w16" -3 -c "WIN /3 /B" -t 60 -s "$out/$part-w16.png" \
+        -i "WIN.INI:windows:run=C:\\MSVC\\BIN\\$prog" "$@" $(sysf W16) &
+    wait
+    r=ok
+    grep -q '^boot: complete' "$out/$part-w16.txt" || r="Windows did not come up ($out/$part-w16.txt)"
+    [ "$r" != ok ] || ! grep -q '^w16: exception' "$out/$part-w16.txt" ||
+        r="$(grep -m1 '^w16: exception' "$out/$part-w16.txt") ($out/$part-w16.txt)"
+    # the program's frame: WPS at the bottom (its caption and menu bar),
+    # OLE2VIEW maximised (caption, menu and tool bar)
+    case $part in
+    wps) crop=640x36+0+304 ;;
+    heapwalk) crop=640x36+0+0 ;;
+    *) crop=640x70+0+0 ;;
+    esac
+    for s in ref w16; do
+        magick "$out/$part-$s.png" -crop $crop +repage "$out/$part-$s-frame.png" 2>/dev/null
+    done
+    # (w16's tree has its own USER, fonts and system bitmaps, so the
+    # frames are not compared to the pixel: the active caption's blue,
+    # #0000AA, must cover as much, within 5%, as on 3.1)
+    blue() {
+        magick "$1" -fill black +opaque '#0000AA' -fill white -opaque '#0000AA' \
+            -format '%[fx:round(mean*w*h)]' info: 2>/dev/null || echo 0
+    }
+    nr=$(blue "$out/$part-ref-frame.png") nw=$(blue "$out/$part-w16-frame.png")
+    if [ "$r" = ok ] && [ "$nr" -lt 5000 ]; then
+        r="no $prog window under Windows 3.1 ($out/$part-ref.png)"
+    elif [ "$r" = ok ] && { [ $(( (nw - nr) * 20 )) -gt "$nr" ] || [ $(( (nr - nw) * 20 )) -gt "$nr" ]; }; then
+        r="$prog's window is not there as under Windows 3.1: $nw caption pixels, 3.1 $nr ($out/$part-w16.png)"
+    fi
+    if [ "$r" = ok ]; then echo "ok   $part: $prog comes up on w16's tree as on Windows 3.1"
+    else echo "FAIL $part: $r"; fails=$((fails + 1)); fi ;;
 *)
     echo "FAIL $part: no such part"; fails=$((fails + 1)) ;;
 esac

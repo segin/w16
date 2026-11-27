@@ -451,6 +451,79 @@ static void hint_test(ttfx_font *f, const int *glyphs, int ng)
         fail("hinting changed nothing", 0, 0, 0);
 }
 
+/* the font's own instructions (gdi/ttf/ttfbc.c): at every size from 6
+   to 72 pixels to the em, fpgm and prep run and every glyph is grid-fitted
+   by its program and scan-converted (none left to the autohinter); where
+   the font has an hdmx table (Microsoft's fonts: widths their tools took
+   from their rasteriser), the hinted advances against its widths */
+static void bc_test(ttfx_font *f)
+{
+    int ppem, nfail = 0, nglyph = 0, hbad = 0, hn = 0;
+    ttfx_u32 hlen, bytes = ttfx_bcBytes(f);
+    ttfx_i32 hd = ttfx_FindTable(f, "hdmx", &hlen);
+    void *mem = bytes ? malloc(bytes) : 0;
+    static unsigned char pix[64 * 512];
+    clock_t t0 = clock();
+    if (!mem) {
+        printf("    bytecode: none (no maxp 1.0, or over 64K)\n");
+        return;
+    }
+    ttfx_SetHinting(f, TTFX_HINT_ALL);
+    for (ppem = 6; ppem <= 72; ppem++) {
+        ttfx_scale sc = ttfx_ScaleForMappingEmToPixels(f, ppem);
+        ttfx_i32 rec = -1;
+        unsigned g;
+        if (!ttfx_bcPrepare(f, mem, bytes, sc, sc, ppem, ppem)) {
+            fail("bytecode: fpgm or prep", ppem, 0, 0);
+            continue;
+        }
+        if (hd) {
+            int i, n = ttfx_U16(f, hd + 2);
+            for (i = 0; i < n; i++)
+                if (ttfx_Byte(f, hd + 8 + (ttfx_i32)i * ttfx_U32(f, hd + 4)) == ppem)
+                    rec = hd + 8 + (ttfx_i32)i * ttfx_U32(f, hd + 4);
+        }
+        for (g = 0; g < f->numGlyphs; g++) {
+            ttfx_outline o;
+            ttfx_bitmap bm;
+            int x0, y0, x1, y1;
+            nglyph++;
+            if (!ttfx_LoadOutline(f, (ttfx_u16)g, sc, sc, &o)) {
+                if (nfail++ < 5)
+                    printf("    bytecode: glyph %u at %d failed\n", g, ppem);
+                continue;
+            }
+            ttfx_OutlineBox(&o, &x0, &y0, &x1, &y1);
+            bm.w = 512;
+            bm.h = 64;
+            bm.stride = 64;
+            bm.pixels = pix;
+            if (!ttfx_RenderOutline(f, &bm, &o, x0, y0))
+                nfail++;
+            if (rec >= 0) {
+                hn++;
+                if (((o.adv + 32) >> 6) != ttfx_Byte(f, rec + 2 + g)) {
+                    hbad++;
+                    if (verbose)
+                        printf("    hdmx: glyph %u at %d: %ld, hdmx %d\n", g, ppem, (long)((o.adv + 32) >> 6),
+                               ttfx_Byte(f, rec + 2 + g));
+                }
+            }
+            ttfx_FreeOutline(f, &o);
+        }
+    }
+    printf("    bytecode: %d glyph renders at 6-72 pixels, %d failed, %.0f ms", nglyph, nfail,
+           (clock() - t0) * 1000.0 / CLOCKS_PER_SEC);
+    if (hn)
+        printf("; hinted advances against hdmx: %d of %d differ (%.2f%%)", hbad, hn, 100.0 * hbad / hn);
+    printf("\n");
+    if (nfail)
+        fail("bytecode: glyphs not grid-fitted by their instructions", nfail, 0, 0);
+    free(mem);
+    ttfx_SetHinting(f, TTFX_HINT_DEFAULT);
+    f->bc = 0;
+}
+
 static int test_font(const char *path)
 {
     FILE *fp = fopen(path, "rb");
@@ -568,6 +641,7 @@ static int test_font(const char *path)
     for (i = 0; i < (int)(sizeof sizes / sizeof sizes[0]); i++)
         size_test(&f, sizes[i], glyphs, ng, &S);
     hint_test(&f, glyphs, ng);
+    bc_test(&f);
     free(glyphs);
     printf("  sizes 6-300 px (%d sizes x %d characters, %ld pixels):\n", (int)(sizeof sizes / sizeof sizes[0]),
            ng, S.px);
