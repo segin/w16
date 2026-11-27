@@ -1,0 +1,5 @@
+# VXY.386: the Device_Init stepping probe VxD (tests/vxd/vxy.c), an LE VxD with no device ID
+format windows vxd
+option quiet
+option nodefaultlibs
+export VXY_DDB.1
