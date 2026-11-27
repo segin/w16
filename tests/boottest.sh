@@ -251,6 +251,16 @@
 #              nested client, two boxes' clients at once and the end of a
 #              box on a fault no handler takes, under w16's WIN386 as under
 #              Microsoft's; the probe's lines on the tree alone as well
+#   win386exit  what Windows leaves DOS with (DOSST.EXE, tests/
+#              dosstrun.sh: the interrupt vectors, MCB chain and UMBs, PIC
+#              masks, BIOS data, INT 33h handler, XMS, before WIN and after
+#              it), the mouse moved after the exit and a DOS command run:
+#              the tree (Exit Windows, and TK55X ending Windows through
+#              ExitKernel with the mouse left on) and w16's WIN386 on 3.1,
+#              DOSBox-X and DOSBox, against Microsoft's WIN386 (w16 left
+#              the BIOS's PS/2 handler on a WIN386 breakpoint: DOSBox-X
+#              looped on INT 6 for ever; and the VDS and keyboard flags in
+#              the BIOS data)
 #   win386pifwin  plain DOSBox, the tree alone, WIN /3: a PIF that starts
 #              its program windowed (made at run time with tools/mkpif.py),
 #              then VER typed: the window shows the text (not black), as
@@ -1116,7 +1126,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386dpmi vsd vdmad win386vxc msvc msvcapps faultrep msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad win386vxc msvc msvcapps faultrep msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2319,6 +2329,46 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386memload: XMS, EMS, XMS 3.0 and three boxes at once as under Microsoft's WIN386; KB/s$rates"
         else echo "FAIL win386memload: $r"; fails=$((fails + 1)); fi ;;
+    win386exit)
+        # the user's report (2026-11-26): after Exit Windows, DOSBox-X
+        # logged millions of "Illegal Unhandled Interrupt Called 6" and
+        # stopped responding. Each run: DOSST before WIN and after it, the
+        # mouse moved after the exit, a DOS command at the prompt (DONE.TXT
+        # "after ok"); what changed from before to after (the cursor's
+        # place, BDA 50h, aside) must be what changed under Microsoft's
+        # WIN386 ended the same way, and DOSBox-X must log no INT 6
+        r=ok
+        xk=$root/build/dos/TK55X.EXE
+        for k in x:x: dosbox:dosbox: xk:x:$xk; do
+            rn=${k%%:*} e=${k#*:}
+            sh_=${e#*:} e=${e%%:*}
+            refrun win386exit-ref$rn win386exit \
+                env DOSSTRUN_SHELL=$sh_ sh "$root/tests/dosstrun.sh" "$out/win386exit-ref$rn" ms $e \
+                "$root/build/dos/DOSST.EXE" "$root/tests/dosstrun.sh" $sh_ &
+        done
+        sh "$root/tests/dosstrun.sh" "$out/win386exit-treex" tree x > "$out/win386exit-treex.txt" 2>&1 &
+        sh "$root/tests/dosstrun.sh" "$out/win386exit-treedosbox" tree dosbox > "$out/win386exit-treedosbox.txt" 2>&1 &
+        DOSSTRUN_SHELL=$xk sh "$root/tests/dosstrun.sh" "$out/win386exit-treexk" tree x > "$out/win386exit-treexk.txt" 2>&1 &
+        sh "$root/tests/dosstrun.sh" "$out/win386exit-w16x" w16 x > "$out/win386exit-w16x.txt" 2>&1 &
+        wait
+        for k in treex:refx treedosbox:refdosbox treexk:refxk w16x:refx; do
+            a=$out/win386exit-${k#*:} b=$out/win386exit-${k%:*}
+            [ "$(cat "$a/DONE.TXT" 2>/dev/null)" = "after ok" ] || { r="${k#*:}: the reference's DOS prompt did not answer ($a)"; break; }
+            n6=$(grep -c 'Interrupt Called 6$' "$b/emu.log" 2>/dev/null || true)
+            [ "$(cat "$b/DONE.TXT" 2>/dev/null)" = "after ok" ] || { r="${k%:*}: the DOS prompt did not answer after Windows ended ($b; INT 6 in the log: ${n6:-0})"; break; }
+            [ "${n6:-0}" = 0 ] || { r="${k%:*}: $n6 invalid opcodes (INT 6) in DOSBox-X's log ($b/emu.log)"; break; }
+            # through ExitKernel alone (TK55X) w16's KERNEL never disables
+            # the keyboard driver, whose Disable gives 40:96h bit 4 back
+            # (BDA 90h): with Microsoft's KRNL386 the flag is back
+            # (UNVERIFIED how); that row is left out there
+            skip=' BDA 50 '
+            [ "${k%:*}" = treexk ] && skip=' BDA [59]0 '
+            { diff "$a/DSB.LOG" "$a/DSA.LOG" | grep '^[<>]' | grep -v "$skip" || true; } > "$out/win386exit-a.txt"
+            { diff "$b/DSB.LOG" "$b/DSA.LOG" | grep '^[<>]' | grep -v "$skip" || true; } > "$out/win386exit-b.txt"
+            cmp -s "$out/win386exit-a.txt" "$out/win386exit-b.txt" || { r="${k%:*}: what Windows left differs from 3.1's (diff $out/win386exit-a.txt $out/win386exit-b.txt)"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386exit: DOS after Windows (vectors, MCBs and UMBs, PIC, BIOS data, XMS) as under Microsoft's WIN386; the prompt answers, no INT 6 loop"
+        else echo "FAIL win386exit: $r"; fails=$((fails + 1)); fi ;;
     win386mcb)
         # the user's report (2026-11-23): Norton Utilities' NCC.EXE in a
         # DOS box under w16's WIN386 on DOSBox-X ended the emulator with

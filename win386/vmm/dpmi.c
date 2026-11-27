@@ -476,6 +476,7 @@ void dpmi_switch(struct cregs *r)
 int dpmi_verbose;
 
 static int ps2_set_handler(struct cregs *r);
+static void ps2_release(void);
 
 /* An interrupt from protected mode that the client has not hooked: run the
  * V86 handler with the client's registers; DS and ES become segments where
@@ -1651,6 +1652,7 @@ static void terminate_client(struct cregs *r)
      * selector there, DPMI 0.9) */
     if (cur_vm->psp_seg && env_seg) *(u16 *)(((u32)cur_vm->psp_seg << 4) + 0x2C) = env_seg;
     vxd_pm_app(0, r);
+    if (cur_vm == &sysvm) ps2_release();
     cur_vm->pm = 0;
     v.eax = r->eax;
     v.ebx = r->ebx;
@@ -2117,6 +2119,27 @@ static int ps2_set_handler(struct cregs *r)
     r->eflags = (r->eflags & ~0x8D5u) | (v.eflags & 0x8D5u);
     if (!((r->es & 0xFFFF) || BX(r))) ps2_sel = ps2_off = 0;
     return 1;
+}
+
+/* The System VM's client (KRNL386) ends with a PS/2 handler still set
+ * (MOUSE.DRV's Disable gives the BIOS 0:0 before Windows ends; Windows
+ * ended without it, e.g. through ExitKernel alone: TK55X): the
+ * device off and no handler, so the BIOS never calls the breakpoint
+ * again. Once Windows has ended the breakpoint (an ARPL, the loader's
+ * bp_table) is an invalid opcode in real mode, and the next mouse packet
+ * would loop on INT 6 for ever. */
+static void ps2_release(void)
+{
+    struct cregs v;
+    if (!ps2_sel) return;
+    trace("DPMI: the client's PS/2 handler %x:%x released\n", ps2_sel, ps2_off);
+    ps2_sel = ps2_off = 0;
+    memset(&v, 0, sizeof(v));
+    v.eax = 0xC200;                     /* disable */
+    v86_int(&v, 0x15);
+    memset(&v, 0, sizeof(v));
+    v.eax = 0xC207;                     /* no handler: ES:BX 0:0 */
+    v86_int(&v, 0x15);
 }
 
 void dpmi_ps2cb(struct cregs *r)
