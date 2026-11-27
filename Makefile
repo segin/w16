@@ -1142,8 +1142,9 @@ $(DOS)/WC9.EXE: $(B)/tests/start.o $(B)/tests/wc9.o tests/apps/app.lnk
 
 # FN1.EXE: the font metrics probe; FN3.EXE: its companion for the rest of
 # the VGA set and the DOS-box fonts; FN2.EXE: a window showing every
-# character of each font (tests/fonts.sh; ARCHITECTURE.md 6.9)
-FNPROBES := $(DOS)/FN1.EXE $(DOS)/FN2.EXE $(DOS)/FN3.EXE
+# character of each font (tests/fonts.sh; ARCHITECTURE.md 6.9); FN4.EXE:
+# the TrueType probe (tests/ttfonts.sh; ARCHITECTURE.md 6.9.3)
+FNPROBES := $(DOS)/FN1.EXE $(DOS)/FN2.EXE $(DOS)/FN3.EXE $(DOS)/FN4.EXE
 fnprobes: $(FNPROBES)
 dos: $(FNPROBES)
 $(DOS)/FN%.EXE: $(B)/tests/start.o $(B)/tests/fn%.o tests/apps/app.lnk tests/apps/fn.lnk
@@ -2477,6 +2478,28 @@ $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD: $(W16SYS)/%: $(DOS)
 	@mkdir -p $(@D)
 	cp $< $@
 $(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
+	@mkdir -p $(@D)
+	cp $< $@
+# w16's TrueType fonts (fonts/tt; ARCHITECTURE.md 6.9.3): w16 Sans, Serif
+# and Mono, CC0, metric-compatible with Arial, Times New Roman and Courier
+# New, built by tools/ttgen.py from the designs and FN4's 3.1 metrics
+# (tests/fonts/fn4ref.txt), their .FOT files by tools/mkfot.py; installed
+# in SYSTEM with WIN.INI [fonts] entries (assets/WIN.INI), as Windows 3.1's
+# Setup installs its TrueType fonts
+TTF     := $(B)/ttfonts
+TTFACES := W16SANS W16SANBD W16SANIT W16SANBI W16SERIF W16SERBD W16SERIT W16SERBI \
+           W16MONO W16MONBD W16MONIT W16MONBI
+TTFILES := $(foreach f,$(TTFACES),$(TTF)/$(f).TTF $(TTF)/$(f).FOT)
+ttfonts: $(TTF)/.stamp
+$(TTF)/.stamp: fonts/tt/design.py fonts/tt/screen.txt tests/fonts/fn4ref.txt tools/ttgen.py \
+               tools/ttgeom.py tools/w16ttf.py tools/tthint.py tools/mkfot.py
+	@mkdir -p $(TTF)
+	python3 tools/ttgen.py --out $(TTF)
+	python3 tools/mkfot.py $(TTF)
+	touch $@
+$(TTFILES): $(TTF)/.stamp
+install-tree: $(TTFILES:$(TTF)/%=$(W16SYS)/%)
+$(TTFILES:$(TTF)/%=$(W16SYS)/%): $(W16SYS)/%: $(TTF)/%
 	@mkdir -p $(@D)
 	cp $< $@
 # the display grabber (drivers/grabber/)
