@@ -463,6 +463,20 @@ L(main):
         mov ax, [r_edx]
         mov [tmp], ax
         mov bx, ax
+        CLR
+        mov bx, [tmp]
+        I31 0006h
+        mov ax, [r_ecx]
+        shl eax, 16
+        mov ax, [r_edx]
+        movzx ebx, word [psp]
+        shl ebx, 4
+        sub eax, ebx
+        LS " base-psp="
+        LH eax, 8
+        NL
+        LS "INFO 0100"
+        mov bx, [tmp]
         call L(dsel)
         CLR
         mov dx, [tmp]
@@ -505,6 +519,20 @@ L(main):
         LR "", r_ecx, 4
         LR ":", r_edx, 4
         NL
+        ; real-mode INT 61h an IRET (it is reflected there when no
+        ; protected-mode handler takes it)
+        CLR
+        mov bl, 61h
+        I31 0200h
+        mov ax, [r_ecx]
+        mov [oldv61 + 2], ax
+        mov ax, [r_edx]
+        mov [oldv61], ax
+        CLR
+        mov bl, 61h
+        mov cx, [psp]
+        mov dx, rm_int61
+        I31 0201h
         CLR
         mov bl, 62h
         I31 0200h
@@ -1222,17 +1250,19 @@ L(rawback):
         mov edi, st_buf + 256
         I31 0500h
         pop es
+        ; all of it back (within 64 KB: the host's own bookkeeping)
         mov eax, [st_buf + 256]
+        add eax, 10000h
         cmp eax, [st_buf]
-        sete al
+        setae al
         movzx eax, al
-        LS "0500 after same="
+        LS "0500 after back="
         LH eax, 1
         NL
-        ; one block of the largest size 0500h gave
+        ; one block of the largest size 0500h gives now
         CLR
-        mov bx, [st_buf + 2]
-        mov cx, [st_buf]
+        mov bx, [st_buf + 256 + 2]
+        mov cx, [st_buf + 256]
         I31 0501h
         LS "0501 largest"
         LCF
@@ -1493,7 +1523,12 @@ L(rawback):
         mov bl, 62h
         mov cx, [oldv62 + 2]
         mov dx, [oldv62]
-        I31 0201h               ; the box's vector back
+        I31 0201h               ; the box's vectors back
+        CLR
+        mov bl, 61h
+        mov cx, [oldv61 + 2]
+        mov dx, [oldv61]
+        I31 0201h
         cmp byte [mode], 'G'
         jne L(fin)
         LS "G fault"

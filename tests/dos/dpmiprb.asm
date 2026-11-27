@@ -172,6 +172,8 @@ rm_int62:                       ; INT 62h reflected from protected mode
         add ax, 1
         mov [cs:rm62ds], ds
         iret
+rm_int61:                       ; INT 61h reflected: nothing
+        iret
 rm_args:                        ; 0301h with two words copied
         push bp
         mov bp, sp
@@ -245,6 +247,7 @@ badsel  dd 0FFF4h
 section .bss
 bss_start:
 oldv62  resd 1
+oldv61  resd 1
 psp     resw 1
 envseg  resw 1
 mode    resb 1
