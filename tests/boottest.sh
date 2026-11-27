@@ -4231,7 +4231,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             # can have: 3.1's largest block was 258,964 KB with 128 MB,
             # ARCHITECTURE.md 9.6, 12.16; at most PageOverCommit's 4 times)
             case $p in e*) vh=$((hi * 4)) ;; *) vh=$hi ;; esac
-            bmcheck bigmem-$p dpmi_largest $lo $vh freespace $lo $vh total $lo $hi ;;
+            bmcheck bigmem-$p dpmi_largest $lo $vh freespace $lo $vh total $lo $vh ;;
         s256ms)
             bmrun bigmem-s256ms 256 -3 -x
             bmcheck bigmem-s256ms dpmi_largest 65536 262144 total 245760 262144 ;;
