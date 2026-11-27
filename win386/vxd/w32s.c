@@ -706,14 +706,28 @@ void __cdecl w32s_fault(struct vregs *r)
 {
     vu32 a = get_cr2() & ~(PAGE - 1), *p, *up;
     struct region *g;
+    vu32 prot;
     r->eflags |= VF_CF;
     if (r->arg != 0) return;
     g = region_of(a);
-    if (!g || a + PAGE >= g->base + g->size) return;
+    if (trace_on && g) {
+        tput("W32S: fault at ");
+        thex(get_cr2());
+        tput(" eip ");
+        thex(((struct client_regs *)r->ebp)->eip);
+        tend();
+    }
+    if (!g) return;
     p = pte_of(a, 0);
-    up = pte_of(a + PAGE, 0);
-    if (!p || !up || (*p & W_COM) || !(*up & W_COM)) return;
-    if (!commit(a, PAGE, pte_prot(*up) == 0x01 ? 0x04 : pte_prot(*up))) return;
+    up = a + PAGE < g->base + g->size ? pte_of(a + PAGE, 0) : NULL;
+    if (!p || (*p & W_COM)) return;
+    if (up && (*up & W_COM))
+        prot = pte_prot(*up) == 0x01 ? 0x04 : pte_prot(*up);    /* a stack's next page */
+    else if ((g->prot & 0xFF) != 0x01)
+        prot = g->prot;                 /* reserved with access: committed when touched */
+    else
+        return;
+    if (!commit(a, PAGE, prot)) return;
     if (trace_on) {
         tput("W32S: stack page committed at ");
         thex(a);
