@@ -48,19 +48,29 @@ void __cdecl __far gdi_unimpl(WORD ord)
     }
 }
 
+/* mem_copy and mem_set: forward string moves, words then the odd byte
+   (a byte loop with two far pointers reloads ES twice a byte; REP MOVSW
+   moves a word in 4 clocks on a 286). DS, the direction flag aside, is
+   kept; n = 0 does nothing (CX = 0). */
+void far_copy(void __far *d, const void __far *s, WORD n);
+#pragma aux far_copy = \
+    "push ds" "mov ds, dx" "cld" "shr cx, 1" "rep movsw" "adc cx, cx" \
+    "rep movsb" "pop ds" \
+    parm [es di] [dx si] [cx] modify exact [si di cx];
+
+void far_fill(void __far *d, BYTE v, WORD n);
+#pragma aux far_fill = \
+    "cld" "mov ah, al" "shr cx, 1" "rep stosw" "adc cx, cx" "rep stosb" \
+    parm [es di] [al] [cx] modify exact [di cx ah];
+
 void mem_copy(void __far *d, const void __far *s, WORD n)
 {
-    char __far *dp = d;
-    const char __far *sp = s;
-    while (n--)
-        *dp++ = *sp++;
+    far_copy(d, s, n);
 }
 
 void mem_set(void __far *d, BYTE v, WORD n)
 {
-    char __far *dp = d;
-    while (n--)
-        *dp++ = v;
+    far_fill(d, v, n);
 }
 
 static int lower(int c)
