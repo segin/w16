@@ -312,6 +312,20 @@ static void probe_handles(void)
     obs("result is odd", ((WORD)GetModuleHandle("TKFB") & 1) != 0);
     obs("result points to NE", m && *(WORD FAR *)MAKELP(m, 0) == 0x454E);
     obs("result == GetExePtr", (WORD)GetModuleHandle("TKFB") == exeptr((WORD)ha));
+    /* DX: the first module table of the list (Pietrek ch. 3: "upon
+       return from this call, DX contains the module handle of the first
+       module in the system"; Visual C++ 1.52's WPS.EXE walks the modules
+       from it) */
+    {
+        typedef DWORD (FAR PASCAL *GMH32)(LPCSTR);
+        GMH32 g = (GMH32)GetModuleHandle;
+        obs("GetModuleHandle DX(TKFB)", who(HIWORD(g("TKFB"))));
+        obs("GetModuleHandle DX(KERNEL)", who(HIWORD(g("KERNEL"))));
+        obs("GetModuleHandle DX(unknown)", who(HIWORD(g("TKNOSUCH"))));
+        obs("GetModuleHandle DX(MAKELP(0,hInstance))", who(HIWORD(g((LPCSTR)MAKELP(0, (WORD)ha)))));
+        obs("GetModuleHandle DX(MAKELP(0,hTask))", who(HIWORD(g((LPCSTR)MAKELP(0, (WORD)GetCurrentTask())))));
+        obs("GetModuleHandle DX(NULL)", who(HIWORD(g(NULL))));
+    }
     unload(1, ha);
 }
 

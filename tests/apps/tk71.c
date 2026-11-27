@@ -14,15 +14,22 @@
  * window of the same (global) class made with USER's hInstance
  * (WM_USER+5: "inst2DS" is that instance's data segment); then the
  * messages CreateWindow itself sends ("S" lines) to hidden and visible
- * children, a visible overlapped window and popups.
+ * children, a visible overlapped window and popups. Last, "H" lines:
+ * the registers a hook procedure is called with, set with
+ * SetWindowsHookEx without a MakeProcInstance thunk (TK71_HOOKENTRY, as
+ * Visual C++ 1.52's MFC programs do with their WH_CBT hook: OLE2VIEW
+ * faulted on w16's USER, called with USER's DS): WH_CBT's
+ * HCBT_CREATEWND, WH_CALLWNDPROC, WH_GETMESSAGE and WH_MSGFILTER.
  * Writes C:\TK71.LOG.
  */
 #include <windows.h>
 
 extern WORD __cdecl tk71_regs[8];       /* ax bx cx dx si di es ds */
+extern WORD __cdecl tk71_hregs[8];      /* the same, for the hook */
 extern WORD __cdecl init_regs[7];       /* InitTask's ax bx cx dx si di es */
 extern BOOL FAR PASCAL INITAPP(HINSTANCE inst);                 /* USER.5 */
 extern LRESULT FAR PASCAL TK71_ENTRY(HWND, UINT, WPARAM, LPARAM);
+extern LRESULT FAR PASCAL TK71_HOOKENTRY(int, WPARAM, LPARAM);
 
 static char line[300];
 static int ln;
@@ -130,6 +137,103 @@ LRESULT FAR PASCAL __loadds TK71_PROC(HWND h, UINT m, WPARAM w, LPARAM l)
     if (m >= WM_USER)
         return 0;
     return DefWindowProc(h, m, w, l);
+}
+
+/* the hook being probed: its type, and the call to log (once) */
+static int hook_type, hook_logged;
+static const char *hook_kind;           /* the hInstance it was set with */
+static HHOOK hook_h;
+
+static WORD get_ss(void);
+#pragma aux get_ss = "mov ax, ss" value [ax];
+
+typedef struct { LPARAM lParam; WPARAM wParam; UINT message; HWND hwnd; } CWP16;
+
+LRESULT FAR PASCAL __loadds TK71_HOOK(int code, WPARAM w, LPARAM l)
+{
+    WORD r[8];
+    int i, hit = 0;
+    for (i = 0; i < 8; i++)
+        r[i] = tk71_hregs[i];
+    switch (hook_type) {
+    case WH_CBT:
+        hit = code == HCBT_CREATEWND;
+        break;
+    case WH_CALLWNDPROC:
+        hit = l && ((CWP16 FAR *)l)->message == WM_USER + 6;
+        break;
+    case WH_GETMESSAGE:
+        hit = l && ((MSG FAR *)l)->message == WM_USER + 7;
+        break;
+    case WH_MSGFILTER:
+        hit = code == 0x4321;
+        break;
+    }
+    if (hit && !hook_logged) {
+        static const char *const rn[8] = { "AX", "BX", "CX", "DX", "SI", "DI", "ES", "DS" };
+        WORD cur_ss = get_ss();
+        hook_logged = 1;
+        put("H ");
+        hex((WORD)hook_type);
+        put(hook_kind);
+        for (i = 0; i < 8; i++) {
+            if (r[i] == cur_ss) {
+                put(" ");
+                put(rn[i]);
+                put("=SS");
+            } else {
+                what(rn[i], r[i], (HWND)0xFEFE, code, w, l);
+            }
+        }
+        flush();
+    }
+    return CallNextHookEx(hook_h, code, w, l);
+}
+
+static void hook_probe(int type, WORD hk_inst)
+{
+    /* the MSG outside the stack segment, so that lParam's selector is
+       not SS */
+    static HGLOBAL gm;
+    MSG FAR *pm;
+    if (!gm)
+        gm = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, sizeof(MSG));
+    pm = (MSG FAR *)GlobalLock(gm);
+    hook_type = type;
+    hook_logged = 0;
+    hook_h = SetWindowsHookEx(type, (HOOKPROC)TK71_HOOKENTRY, (HINSTANCE)hk_inst,
+                              GetCurrentTask());
+    switch (type) {
+    case WH_CBT:
+        DestroyWindow(CreateWindow("TK71", "h", WS_CHILD, 0, 0, 10, 10, main_wnd, (HMENU)9,
+                                   (HINSTANCE)hinst, NULL));
+        break;
+    case WH_CALLWNDPROC:
+        SendMessage(main_wnd, WM_USER + 6, 0x6666, 0x66667777L);
+        break;
+    case WH_GETMESSAGE:
+        PostMessage(main_wnd, WM_USER + 7, 0x7777, 0x77778888L);
+        while (PeekMessage(pm, 0, 0, 0, PM_REMOVE))
+            DispatchMessage(pm);
+        break;
+    case WH_MSGFILTER:
+        pm->hwnd = main_wnd;
+        pm->message = WM_USER + 8;
+        pm->wParam = 0x8888;
+        pm->lParam = 0x88889999L;
+        pm->time = 0;
+        pm->pt.x = pm->pt.y = 0;
+        CallMsgFilter(pm, 0x4321);
+        break;
+    }
+    UnhookWindowsHookEx(hook_h);
+    if (!hook_logged) {
+        put("H ");
+        hex((WORD)type);
+        put(hook_kind);
+        put(" not called");
+        flush();
+    }
 }
 
 int __cdecl tmain(void)
@@ -241,6 +345,14 @@ int __cdecl tmain(void)
         }
         DestroyWindow(cl);
     }
+    hook_kind = "";
+    hook_probe(WH_CBT, hinst);
+    hook_probe(WH_CALLWNDPROC, hinst);
+    hook_probe(WH_GETMESSAGE, hinst);
+    hook_probe(WH_MSGFILTER, hinst);
+    /* set with the program's hModule (OLE2VIEW's WH_CALLWNDPROC hook) */
+    hook_kind = " hModule";
+    hook_probe(WH_CBT, (WORD)GetModuleHandle((LPCSTR)MAKELP(0, hinst)));
     DestroyWindow(main_wnd);
     put("T done");
     flush();
