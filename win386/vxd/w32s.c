@@ -583,16 +583,18 @@ void __cdecl w32s_api(struct vregs *r)
         c->eax = 1;
         break;
     }
-    case 0x0D: {                        /* a file to map: ESI the client's handle for it,
-                                           [1] the DOS handle; [0] -> 1 (made) */
-        vu32 i, size = 0, dup = 0, ax, psp;
+    case 0x0D: {                        /* a file to map: ESI the client's key for it,
+                                           [6] the DOS handle, [7] the PSP (selector) it is
+                                           the program's in; [0] -> 1 (made) */
+        vu32 i, size = 0, dup = 0, ax, psp, h;
         b = BLK(c);
+        h = b[6];
         for (i = 0; i < NFILE && fobj[i].dos; i++) ;
         psp = task_psp_in();
-        if (i < NFILE && dos(0x4202, b[1], 0, 0, &ax)) {
+        if (i < NFILE && dos(0x4202, h, 0, 0, &ax)) {
             size = cur_dx << 16 | ax;
-            dos(0x4200, b[1], 0, 0, NULL);
-            if (dos(0x4500, b[1], 0, 0, &dup)) {
+            dos(0x4200, h, 0, 0, NULL);
+            if (dos(0x4500, h, 0, 0, &dup)) {
                 fobj[i].key = c->esi;
                 fobj[i].dos = dup;
                 fobj[i].size = size;
