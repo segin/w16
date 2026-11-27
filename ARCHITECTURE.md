@@ -3313,6 +3313,33 @@ VerInstallFile:
 
 Standard and 386 Enhanced mode behave the same.
 
+**Win32 (PE) files** (2026-11-27; the probe's PE files from
+`tools/mkpe.py`, written from Microsoft's PE/COFF specification: Win32
+version blocks in UTF-16 with wType, other languages and ids, a 16-bit
+block in a PE file, none; the calls seen with w16's KERNEL tracing VER's
+imports and, with `[w16] trace=W32SYS.*`, the procedures it looks up).
+Without Win32s a PE file has no resources (as any file that is not NE).
+With Win32s's `W32SYS.DLL` on the search path, VER.DLL takes every file
+that is not an NE file (a text file and an empty one too; an NE file
+without the resource never) to Win32s: LoadLibrary("w32sys.dll") under
+SetErrorMode(8000h), once (the library stays loaded and the procedures
+are kept), then W32SYS's exports 2 (IsPEFormat: a far name, NULL here,
+and the open file's DOS handle; nonzero for a PE file), 7
+(GetPEResourceTable: the handle; a global handle to the resource table)
+and, with that table locked, 6 (LoadPEResource: the handle, the table,
+the name and the type as integer resources; a global handle to the
+resource), all Pascal far calls; the handles are freed after. W32SYS
+hands back a version resource already in the 16-bit layout (UTF-16 keys
+and strings converted, the language of its choice when there are
+several). For such a resource: GetFileResourceSize returns its block's
+GlobalSize and offset 0; GetFileVersionInfoSize sets the handle to 0
+and checks the root's wLength against that size as for NE files;
+GetFileResource and GetFileVersionInfo with offset 0 copy at most that
+many bytes and return TRUE (with a nonzero handle they read the file
+raw, as always). Win32s's W32SYS.DLL checks the version of OLE32.DLL
+(a PE file) when a Win32 program starts, and says "At least one system
+component is out of date" when there is none.
+
 ### 20.3 w16's VER.DLL
 
 `shell/ver/`: `ver.c` (everything), `ver.h` (the SDK's constants),
@@ -3344,7 +3371,10 @@ read as zeros (20.8).
   its log compares with 3.1's line for line; `tests/ver/vmods.sh`: w16's
   modules (20.5); `tests/ver/vfonts.sh`: Control Panel's Fonts applet.
 - Boot-test case **ver**, parts s, 3, x, tree286, tree386, mods, fonts,
-  fontsnew. Results (installation-05, 2026-11-16; again 2026-11-21 with
+  fontsnew, w32s (sections size and query with Win32s's W32SYS.DLL,
+  expanded from its disk image, in the reference install: w16's log
+  equal to Microsoft's, Win32 versions read; skipped without the image).
+  Results (installation-05, 2026-11-16; again 2026-11-21 with
   the section audit, 20.8): every part passes.
   s and 3: all eight sections equal Microsoft's (about 50 files sized and
   read, 2000 VerQueryValue calls, 140 VerFindFile, 190 VerInstallFile);
