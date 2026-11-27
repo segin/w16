@@ -28,6 +28,8 @@
 ;     caller's frame, the returned flags kept);
 ;   - at System_Exit: how many INT 2Fh calls the hook saw, and how many
 ;     with AX=1689h (KERNEL's idle call).
+; Built with DOSVM defined it is VXCD.386, which logs every INT 21h, 2Fh
+; and 31h of the DOS VMs instead (a DOS extender's calls in a box).
 ; Built with UNKNOWN defined it is VXCU.386, which first calls
 ; In_Debug_Chr, a VMM service w16 does not have: w16 must end with a
 ; message naming it.
@@ -418,7 +420,17 @@ cb_hook:
         je .log
         cmp ah, 86h
         je .log
-.n2:    cmp byte [logon], 0
+.n2:
+%ifdef DOSVM
+        ; VXCD.386: every call a DOS VM makes (its DPMI client's), up to
+        ; 40000 lines (tests/msvcvxd.sh cl with MSVCVXD_VXCD=1)
+        VMMCALL 4                       ; Test_Sys_VM_Handle (EBX)
+        je .chain
+        cmp dword [nlog], 40000
+        jae .chain
+        jmp .log
+%endif
+        cmp byte [logon], 0
         je .chain
         cmp dword [nlog], 1000
         jae .chain
