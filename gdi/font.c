@@ -189,6 +189,9 @@ void font_init(void)
     /* SYSTEM.INI [w16] TrueTypeHinting: the autohinter's TTFX_HINT_*
        flags (1 vertical, 2 horizontal, 4 dropout control; 0 none) */
     tt_hint = (BYTE)GetPrivateProfileInt("w16", "TrueTypeHinting", TT_HINT_DEFAULT, "SYSTEM.INI");
+    /* SYSTEM.INI [w16] FontAliases (font_alias) */
+    GetPrivateProfileString("w16", "FontAliases", "Arial,Times New Roman,Courier New",
+                            font_aliases, sizeof font_aliases, "SYSTEM.INI");
     font_load_boot("FONTS.FON");
     GetPrivateProfileString("boot", "fixedfon.fon", "", buf, sizeof buf, "SYSTEM.INI");
     if (buf[0]) {
@@ -408,16 +411,110 @@ BOOL GDIAPI RemoveFontResource(LPCSTR file)                        /* GDI.136 */
 
 /* ---- mapping ---- */
 
+static int enum_listed(LPFONT f, int pass);
+
+/* the face WIN.INI [FontSubstitutes] gives for the face asked, or that
+   face: only a face no installed font has is substituted (GD16 on 3.1:
+   with Arial installed, Arial=Liberation Sans changes nothing; "Helv"
+   is MS Sans Serif) */
 static void substitute(LPCSTR face, char *out)
 {
     char name[LF_FACESIZE];
     int i;
+    XP x;
     for (i = 0; i < LF_FACESIZE - 1 && face[i]; i++)
         name[i] = face[i];
     name[i] = 0;
-    out[0] = 0;
-    if (name[0])
-        GetProfileString("FontSubstitutes", name, name, out, LF_FACESIZE);
+    for (i = 0; i < LF_FACESIZE; i++)
+        out[i] = name[i];
+    if (!name[0])
+        return;
+    for (x = fonts; x; x = ((LPFONT)xptr(x))->next) {
+        LPFONT f = xptr(x);
+        if (!str_icmp(f->face, name) && (enum_listed(f, 0) || enum_listed(f, 1)))
+            return;
+    }
+    GetProfileString("FontSubstitutes", name, name, out, LF_FACESIZE);
+}
+
+/* w16's font aliases (SYSTEM.INI [w16] FontAliases, a comma-separated
+   list; ARCHITECTURE.md 11.12): a name of the list that no installed
+   font has and that WIN.INI [FontSubstitutes] gives a TrueType face
+   (w16's tree: Arial=Liberation Sans) is listed by EnumFonts and
+   EnumFontFamilies as that face's fonts named so, also with no face
+   asked, and GetTextFace answers it: a program that looks for "Arial"
+   in the font list (Microsoft Query's Cue Cards) finds it. 3.1 lists a
+   TrueType substitute under neither name and its GetTextFace gives the
+   TrueType face (GD16); FontAliases= (empty) is that. Default: Arial,
+   Times New Roman, Courier New. */
+char font_aliases[64];
+
+/* the alias's name as FontAliases spells it (after font_alias) */
+static char alias_spelled[LF_FACESIZE];
+
+int font_alias(LPCSTR name, char *target)
+{
+    char subst[LF_FACESIZE];
+    const char *p = font_aliases, *q = 0;
+    int i;
+    XP x;
+    while (*p && !q) {
+        for (i = 0; p[i] && p[i] != ',' && name[i] &&
+             (p[i] | 0x20) == (name[i] | 0x20); i++)
+            ;
+        if (!name[i] && (!p[i] || p[i] == ','))
+            q = p;
+        while (*p && *p != ',')
+            p++;
+        if (*p)
+            p++;
+    }
+    if (!q)
+        return 0;
+    substitute(name, subst);            /* (an installed face: itself) */
+    if (!str_icmp(subst, name))
+        return 0;
+    for (x = fonts; x; x = ((LPFONT)xptr(x))->next) {
+        LPFONT f = xptr(x);
+        if (!str_icmp(f->face, subst) && enum_listed(f, 1))
+            break;
+    }
+    if (!x)
+        return 0;                       /* no TrueType face of it */
+    for (i = 0; i < LF_FACESIZE - 1 && q[i] && q[i] != ','; i++)
+        alias_spelled[i] = q[i];
+    alias_spelled[i] = 0;
+    if (target)
+        for (i = 0; i < LF_FACESIZE; i++)
+            target[i] = subst[i];
+    return 1;
+}
+
+/* GetTextFace's name for the DC's realized font (GD16 on 3.1): the
+   face asked when WIN.INI [FontSubstitutes] gave the font's face and
+   the font is raster or vector ("Helv": "Helv"), the font's own face
+   when it is TrueType ("Arial" substituted by Liberation Sans:
+   "Liberation Sans"), but a w16 font alias's name (font_alias) */
+LPCSTR font_text_face(LPDC dc)
+{
+    static char asked[LF_FACESIZE];
+    char subst[LF_FACESIZE];
+    LPFONTOBJ fo = obj_get(dc->hFont, FONT_MAGIC);
+    LPFONT f = dc_font(dc);
+    int i;
+    if (!fo || !f)
+        return f ? f->face : "";
+    for (i = 0; i < LF_FACESIZE - 1 && fo->lf.lfFaceName[i]; i++)
+        asked[i] = fo->lf.lfFaceName[i];
+    asked[i] = 0;
+    if (!asked[0] || !str_icmp(asked, f->face))
+        return f->face;
+    substitute(asked, subst);
+    if (str_icmp(subst, f->face))
+        return f->face;
+    if (!f->tt)
+        return asked;
+    return font_alias(asked, 0) ? alias_spelled : f->face;
 }
 
 /* The mapper's rules for raster fonts, as GD11 found them on 3.1
@@ -1151,21 +1248,93 @@ static int enum_first(XP x, int pass)
      display. TrueType fonts at 24 points of the device (32 pixels per
      em at 96 dpi). UNVERIFIED: a printer's DC (w16 drives no printer
      yet: its own fonts, the driver's EnumDFonts, are not asked for). */
-static int enum_fonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
+/* one entry for enum_fonts: font x (TrueType when pass is 1) named
+   name; the callback's value, or -1 when the entry is not listed */
+static int enum_entry(HDC hdc, XP x, int pass, LPCSTR name, FARPROC proc, DWORD data)
 {
     LPDC dc = dc_get(hdc);
-    char asked[LF_FACESIZE], subst[LF_FACESIZE];
     ENUMLF elf;
     ENUMTM etm;
     BYTE hdr[0x71];
-    WORD ppem, ax, ay;
-    XP x;
-    int pass, r = 1, i, type;
-    if (!dc || !proc)
+    WORD ax, ay;
+    int i, type;
+    if (!dc)
         return 0;
     ax = dc->dev->info.dpLogPixelsX;
     ay = dc->dev->info.dpLogPixelsY;
-    ppem = (WORD)mul_div(24, ay, 72);
+    mem_set(&elf, 0, sizeof elf);
+    mem_set(&etm, 0, sizeof etm);
+    if (pass) {
+        if (!tt_enum(x, (WORD)mul_div(24, ay, 72), &etm.tm, etm.ntm, elf.full, elf.style))
+            return -1;
+        etm.tm.tmDigitizedAspectX = ax;
+        etm.tm.tmDigitizedAspectY = ay;
+        /* the face's pitch and family: TrueType's bits (vector,
+           TrueType) whatever the .FOT says */
+        etm.tm.tmPitchAndFamily |= 6;
+        type = TRUETYPE_FONTTYPE;
+    } else {
+        if (!fontdir_header(xptr(x), hdr))
+            return -1;
+        etm.tm.tmHeight = *(short *)(hdr + 88);
+        etm.tm.tmAscent = *(short *)(hdr + 74);
+        etm.tm.tmDescent = etm.tm.tmHeight - etm.tm.tmAscent;
+        etm.tm.tmInternalLeading = *(short *)(hdr + 76);
+        etm.tm.tmExternalLeading = *(short *)(hdr + 78);
+        etm.tm.tmAveCharWidth = *(short *)(hdr + 91);
+        etm.tm.tmMaxCharWidth = *(short *)(hdr + 93);
+        etm.tm.tmWeight = *(short *)(hdr + 83);
+        etm.tm.tmItalic = hdr[80];
+        etm.tm.tmUnderlined = hdr[81];
+        etm.tm.tmStruckOut = hdr[82];
+        etm.tm.tmFirstChar = hdr[95];
+        etm.tm.tmLastChar = hdr[96];
+        etm.tm.tmDefaultChar = hdr[97] + hdr[95];
+        etm.tm.tmBreakChar = hdr[98] + hdr[95];
+        etm.tm.tmPitchAndFamily = hdr[90];
+        etm.tm.tmCharSet = hdr[85];
+        /* (as GetTextMetrics: X dfVertRes, Y dfHorizRes) */
+        etm.tm.tmDigitizedAspectX = *(short *)(hdr + 70);
+        etm.tm.tmDigitizedAspectY = *(short *)(hdr + 72);
+        type = RASTER_FONTTYPE;
+        if (*(short *)(hdr + 66) & 1) {
+            /* FN1 on 3.1: a vector font's has TMPF_VECTOR (ROMAN.FON's
+               11h is 13h) */
+            etm.tm.tmPitchAndFamily |= 2;
+            type = 0;
+        }
+    }
+    dc = dc_get(hdc);
+    if (!dc)
+        return 0;
+    tm_logical(dc, &etm.tm);
+    elf.lf.lfHeight = etm.tm.tmHeight;
+    elf.lf.lfWidth = etm.tm.tmAveCharWidth;
+    elf.lf.lfWeight = etm.tm.tmWeight;
+    elf.lf.lfItalic = etm.tm.tmItalic;
+    elf.lf.lfUnderline = etm.tm.tmUnderlined;
+    elf.lf.lfStrikeOut = etm.tm.tmStruckOut;
+    elf.lf.lfCharSet = etm.tm.tmCharSet;
+    elf.lf.lfOutPrecision = type == RASTER_FONTTYPE ? 1 : 3;
+    elf.lf.lfClipPrecision = 2;
+    elf.lf.lfQuality = 1;
+    /* TEXTMETRIC's pitch bit is set for a variable pitch */
+    elf.lf.lfPitchAndFamily = (etm.tm.tmPitchAndFamily & 0xF0) |
+                              ((etm.tm.tmPitchAndFamily & 1) ? 2 : 1);
+    for (i = 0; i < LF_FACESIZE - 1 && name[i]; i++)
+        elf.lf.lfFaceName[i] = name[i];
+    return ((ENUMFONTPROC)proc)(&elf, &etm, type, data);
+}
+
+static int enum_fonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
+{
+    LPDC dc = dc_get(hdc);
+    char asked[LF_FACESIZE], subst[LF_FACESIZE], name[LF_FACESIZE];
+    LPCSTR p;
+    XP x;
+    int pass, r = 1, i, k, alias = 0;
+    if (!dc || !proc)
+        return 0;
     if (face) {
         for (i = 0; i < LF_FACESIZE - 1 && face[i]; i++)
             asked[i] = face[i];
@@ -1173,6 +1342,9 @@ static int enum_fonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
         if (!asked[0])
             return 1;
         substitute(asked, subst);
+        if ((alias = font_alias(asked, 0)) != 0)
+            for (i = 0; i < LF_FACESIZE; i++)
+                name[i] = alias_spelled[i];     /* as FontAliases spells it */
     }
     for (pass = 0; pass < 2; pass++) {
         for (x = fonts; x; x = ((LPFONT)xptr(x))->next) {
@@ -1183,78 +1355,45 @@ static int enum_fonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)
             if (face) {
                 if (!str_icmp(asked, f->face))
                     ;
-                else if (subst[0] && !str_icmp(subst, f->face))
+                /* GD16 on 3.1: a substitute's name lists a raster or
+                   vector face's fonts only ("Arial" substituted by a
+                   TrueType face lists nothing); w16's font aliases
+                   (font_alias) a TrueType face's too */
+                else if (subst[0] && !str_icmp(subst, f->face) && (!pass || alias))
                     named = 1;          /* listed by the name asked */
                 else
                     continue;
             } else if (!enum_first(x, pass))
                 continue;
-            mem_set(&elf, 0, sizeof elf);
-            mem_set(&etm, 0, sizeof etm);
-            if (pass) {
-                if (!tt_enum(x, ppem, &etm.tm, etm.ntm, elf.full, elf.style))
-                    continue;
-                etm.tm.tmDigitizedAspectX = ax;
-                etm.tm.tmDigitizedAspectY = ay;
-                /* the face's pitch and family: TrueType's bits (vector,
-                   TrueType) whatever the .FOT says */
-                etm.tm.tmPitchAndFamily |= 6;
-                type = TRUETYPE_FONTTYPE;
-            } else {
-                if (!fontdir_header(xptr(x), hdr))
-                    continue;
-                etm.tm.tmHeight = *(short *)(hdr + 88);
-                etm.tm.tmAscent = *(short *)(hdr + 74);
-                etm.tm.tmDescent = etm.tm.tmHeight - etm.tm.tmAscent;
-                etm.tm.tmInternalLeading = *(short *)(hdr + 76);
-                etm.tm.tmExternalLeading = *(short *)(hdr + 78);
-                etm.tm.tmAveCharWidth = *(short *)(hdr + 91);
-                etm.tm.tmMaxCharWidth = *(short *)(hdr + 93);
-                etm.tm.tmWeight = *(short *)(hdr + 83);
-                etm.tm.tmItalic = hdr[80];
-                etm.tm.tmUnderlined = hdr[81];
-                etm.tm.tmStruckOut = hdr[82];
-                etm.tm.tmFirstChar = hdr[95];
-                etm.tm.tmLastChar = hdr[96];
-                etm.tm.tmDefaultChar = hdr[97] + hdr[95];
-                etm.tm.tmBreakChar = hdr[98] + hdr[95];
-                etm.tm.tmPitchAndFamily = hdr[90];
-                etm.tm.tmCharSet = hdr[85];
-                /* (as GetTextMetrics: X dfVertRes, Y dfHorizRes) */
-                etm.tm.tmDigitizedAspectX = *(short *)(hdr + 70);
-                etm.tm.tmDigitizedAspectY = *(short *)(hdr + 72);
-                type = RASTER_FONTTYPE;
-                if (*(short *)(hdr + 66) & 1) {
-                    /* FN1 on 3.1: a vector font's has TMPF_VECTOR (ROMAN.FON's
-                       11h is 13h) */
-                    etm.tm.tmPitchAndFamily |= 2;
-                    type = 0;
-                }
-            }
-            dc = dc_get(hdc);
-            if (!dc)
-                return 0;
-            tm_logical(dc, &etm.tm);
-            f = xptr(x);
-            elf.lf.lfHeight = etm.tm.tmHeight;
-            elf.lf.lfWidth = etm.tm.tmAveCharWidth;
-            elf.lf.lfWeight = etm.tm.tmWeight;
-            elf.lf.lfItalic = etm.tm.tmItalic;
-            elf.lf.lfUnderline = etm.tm.tmUnderlined;
-            elf.lf.lfStrikeOut = etm.tm.tmStruckOut;
-            elf.lf.lfCharSet = etm.tm.tmCharSet;
-            elf.lf.lfOutPrecision = type == RASTER_FONTTYPE ? 1 : 3;
-            elf.lf.lfClipPrecision = 2;
-            elf.lf.lfQuality = 1;
-            /* TEXTMETRIC's pitch bit is set for a variable pitch */
-            elf.lf.lfPitchAndFamily = (etm.tm.tmPitchAndFamily & 0xF0) |
-                                      ((etm.tm.tmPitchAndFamily & 1) ? 2 : 1);
-            for (i = 0; i < LF_FACESIZE - 1 && (named ? asked[i] : f->face[i]); i++)
-                elf.lf.lfFaceName[i] = named ? asked[i] : f->face[i];
-            r = ((ENUMFONTPROC)proc)(&elf, &etm, type, data);
-            if (!r)
+            k = enum_entry(hdc, x, pass, !named ? (LPCSTR)f->face : pass ? (LPCSTR)name : (LPCSTR)asked,
+                           proc, data);
+            if (k == -1)
+                continue;
+            if (!(r = k))
                 return 0;
         }
+    }
+    /* w16's font aliases, no face asked: each after the fonts, as its
+       TrueType face's first style, named the alias */
+    for (p = face ? "" : font_aliases; *p; ) {
+        for (i = 0; i < LF_FACESIZE - 1 && *p && *p != ','; i++, p++)
+            name[i] = *p;
+        name[i] = 0;
+        while (*p && *p != ',')
+            p++;
+        if (*p)
+            p++;
+        if (!font_alias(name, subst))
+            continue;
+        for (x = fonts; x; x = ((LPFONT)xptr(x))->next) {
+            LPFONT f = xptr(x);
+            if (enum_listed(f, 1) && !str_icmp(subst, f->face) && enum_first(x, 1))
+                break;
+        }
+        if (!x || (k = enum_entry(hdc, x, 1, name, proc, data)) == -1)
+            continue;
+        if (!(r = k))
+            return 0;
     }
     return r;
 }

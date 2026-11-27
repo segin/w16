@@ -109,6 +109,16 @@
 #              log as 3.1's, tests/gdi/gd14ref.txt) with Microsoft's GDI
 #              and VGA.DRV,
 #              w16's GDI, w16's VGA.DRV and both: no FAIL
+#   gdisubst   GD16 (tests/gd16.sh: WIN.INI [FontSubstitutes] names of
+#              TrueType faces, Arial as Liberation Sans as on w16's tree;
+#              enumeration, CreateFont, GetTextFace, GetTextMetrics) with
+#              w16's GDI: with [w16] FontAliases= (stock) as 3.1's logs
+#              (tests/gdi/gd16ref.txt, Microsoft's Arial, Times New Roman
+#              and Courier New not installed; gd16mref.txt, installed);
+#              with the default aliases as w16's approved log
+#              (tests/gdi/gd16w16.txt) and, with Microsoft's fonts there,
+#              as 3.1's; the extents (ext=) left out: they need hinting
+#              (ARCHITECTURE.md 11.12)
 #   shell      w16's SHELL.DLL on Microsoft's KRNL286 must be 0
 #   shellk     w16's SHELL.DLL on w16's KRNL286   must be 0
 #   win386     w16's WIN386.EXE, WIN /3 (386 Enhanced) must be 0
@@ -1093,7 +1103,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad win386vxc msvc bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad win386vxc msvc bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1798,6 +1808,30 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   gdifont: GD10 (simulations, integer scaling), GD11 (font mapping) and GD14 (enumeration) with w16's GDI and VGA.DRV as with Microsoft's"
         else echo "FAIL gdifont: $r"; fails=$((fails + 1)); fi ;;
+    gdisubst)
+        # GD16 (tests/apps/gd16.c, tests/gd16.sh): [FontSubstitutes]
+        # names of TrueType faces and w16's font aliases (ARCHITECTURE.md
+        # 11.12) with w16's GDI against 3.1's logs and w16's approved one;
+        # GetTextExtent's values (ext=) are left out (hinting, stage 4)
+        r=ok
+        "$root/tests/gd16.sh" -i FontAliases= "$out/gdisubst-stock.log" > "$out/gdisubst-stock.txt" 2>&1 &
+        "$root/tests/gd16.sh" -m -i FontAliases= "$out/gdisubst-mstock.log" > "$out/gdisubst-mstock.txt" 2>&1 &
+        "$root/tests/gd16.sh" "$out/gdisubst-alias.log" > "$out/gdisubst-alias.txt" 2>&1 &
+        "$root/tests/gd16.sh" -m "$out/gdisubst-malias.log" > "$out/gdisubst-malias.txt" 2>&1 &
+        wait
+        if grep -q '^skip' "$out/gdisubst-stock.txt"; then
+            echo "ok   gdisubst: $(head -1 "$out/gdisubst-stock.txt")"
+        else
+            for k in stock:gd16ref mstock:gd16mref alias:gd16w16 malias:gd16mref; do
+                f=$out/gdisubst-${k%%:*}.log
+                [ -s "$f" ] || { r="${k%%:*}: no log ($out/gdisubst-${k%%:*}.txt)"; break; }
+                sed 's/ ext=[0-9-]*//' "$root/tests/gdi/${k#*:}.txt" > "$f.want"
+                sed 's/ ext=[0-9-]*//' "$f" | diff "$f.want" - > "$f.diff" ||
+                    { r="${k%%:*}: GD16 differs from ${k#*:}.txt ($f.diff)"; break; }
+            done
+            if [ "$r" = ok ]; then echo "ok   gdisubst: GD16 with w16's GDI: [FontSubstitutes] to TrueType as 3.1's (FontAliases=), Arial, Times New Roman and Courier New aliased by default"
+            else echo "FAIL gdisubst: $r"; fails=$((fails + 1)); fi
+        fi ;;
     shell)  ref; boot shell -r -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"
             check shell shell ref ;;
     shellk) ref; boot shellk -f "$shell=WINDOWS/SYSTEM/SHELL.DLL"

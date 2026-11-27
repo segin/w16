@@ -2128,6 +2128,14 @@ $(DOS)/GD14.EXE: $(B)/tests/start.o $(B)/tests/gd14.o $(B)/gdi/i4.o tests/apps/a
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/gd14.map file { $(B)/tests/start.o $(B)/tests/gd14.o $(B)/gdi/i4.o }
+# GD16.EXE: [FontSubstitutes] names of TrueType fonts (Arial as Liberation
+# Sans: tests/apps/gd16.c, tests/gd16.sh; the boot-test case gdisubst)
+gdprobes: $(DOS)/GD16.EXE
+dos: $(DOS)/GD16.EXE
+$(DOS)/GD16.EXE: $(B)/tests/start.o $(B)/tests/gd16.o $(B)/gdi/i4.o tests/apps/app.lnk tests/apps/fn.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/fn.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/gd16.map file { $(B)/tests/start.o $(B)/tests/gd16.o $(B)/gdi/i4.o }
 # GD12.EXE: integer-scaled fonts drawn for GD1's log (tests/apps/gd12.c;
 # tests/gdiboot.sh -l with it as the shell)
 gdprobes: $(DOS)/GD12.EXE

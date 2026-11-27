@@ -1,0 +1,103 @@
+GD16 start
+F System:1 Fixedsys:1 Terminal:1 MS Sans Serif:1 Courier:1 MS Serif:1 Roman:0 Script:0 Modern:0 Small Fonts:1 Wingdings:4 Symbol:4 Liberation Sans:4 Liberation Mono:4 Liberation Serif:4 r=1 n=15
+E fam ask="Arial"
+E fam r=1 n=0
+E fonts ask="Arial"
+E fonts r=1 n=0
+E fam ask="arial"
+E fam r=1 n=0
+E fonts ask="arial"
+E fonts r=1 n=0
+E fam ask="Times New Roman"
+E fam r=1 n=0
+E fonts ask="Times New Roman"
+E fonts r=1 n=0
+E fam ask="Courier New"
+E fam r=1 n=0
+E fonts ask="Courier New"
+E fonts r=1 n=0
+E fam ask="Helvetica"
+E fam r=1 n=0
+E fonts ask="Helvetica"
+E fonts r=1 n=0
+E fam ask="Times"
+E fam r=1 n=0
+E fonts ask="Times"
+E fonts r=1 n=0
+E fam ask="Liberation Sans"
+   face="Liberation Sans" type=4 h=36 w=19 wt=400 it=0 cs=0 pf=34 full="Liberation Sans" style="Regular"
+   face="Liberation Sans" type=4 h=36 w=20 wt=700 it=0 cs=0 pf=34 full="Liberation Sans Bold" style="Bold"
+   face="Liberation Sans" type=4 h=36 w=20 wt=700 it=255 cs=0 pf=34 full="Liberation Sans Bold Italic" style="Bold Italic"
+   face="Liberation Sans" type=4 h=36 w=19 wt=400 it=255 cs=0 pf=34 full="Liberation Sans Italic" style="Italic"
+E fam r=1 n=4
+E fonts ask="Liberation Sans"
+   face="Liberation Sans" type=4 h=36 w=19 wt=400 it=0 cs=0 pf=34
+   face="Liberation Sans" type=4 h=36 w=20 wt=700 it=0 cs=0 pf=34
+   face="Liberation Sans" type=4 h=36 w=20 wt=700 it=255 cs=0 pf=34
+   face="Liberation Sans" type=4 h=36 w=19 wt=400 it=255 cs=0 pf=34
+E fonts r=1 n=4
+E fam ask="Liberation Mono"
+   face="Liberation Mono" type=4 h=37 w=19 wt=400 it=0 cs=0 pf=49 full="Liberation Mono" style="Regular"
+   face="Liberation Mono" type=4 h=37 w=19 wt=700 it=0 cs=0 pf=49 full="Liberation Mono Bold" style="Bold"
+   face="Liberation Mono" type=4 h=37 w=19 wt=700 it=255 cs=0 pf=49 full="Liberation Mono Bold Italic" style="Bold Italic"
+   face="Liberation Mono" type=4 h=37 w=19 wt=400 it=255 cs=0 pf=49 full="Liberation Mono Italic" style="Italic"
+E fam r=1 n=4
+E fonts ask="Liberation Mono"
+   face="Liberation Mono" type=4 h=37 w=19 wt=400 it=0 cs=0 pf=49
+   face="Liberation Mono" type=4 h=37 w=19 wt=700 it=0 cs=0 pf=49
+   face="Liberation Mono" type=4 h=37 w=19 wt=700 it=255 cs=0 pf=49
+   face="Liberation Mono" type=4 h=37 w=19 wt=400 it=255 cs=0 pf=49
+E fonts r=1 n=4
+E fam ask="Helv"
+   face="Helv" type=1 h=13 w=5 wt=400 it=0 cs=0 pf=34
+   face="Helv" type=1 h=16 w=7 wt=400 it=0 cs=0 pf=34
+   face="Helv" type=1 h=20 w=8 wt=400 it=0 cs=0 pf=34
+   face="Helv" type=1 h=24 w=9 wt=400 it=0 cs=0 pf=34
+   face="Helv" type=1 h=29 w=12 wt=400 it=0 cs=0 pf=34
+   face="Helv" type=1 h=37 w=16 wt=400 it=0 cs=0 pf=34
+E fam r=1 n=6
+E fonts ask="Helv"
+   face="Helv" type=1 h=13 w=5 wt=400 it=0 cs=0 pf=34
+   face="Helv" type=1 h=16 w=7 wt=400 it=0 cs=0 pf=34
+   face="Helv" type=1 h=20 w=8 wt=400 it=0 cs=0 pf=34
+   face="Helv" type=1 h=24 w=9 wt=400 it=0 cs=0 pf=34
+   face="Helv" type=1 h=29 w=12 wt=400 it=0 cs=0 pf=34
+   face="Helv" type=1 h=37 w=16 wt=400 it=0 cs=0 pf=34
+E fonts r=1 n=6
+C ask="Arial" h=-12 wt=400 it=0 textface="Liberation Sans" r=15 obj="Arial" H=14 A=11 D=3 IL=2 EL=0 AW=7 MW=22 WT=400 IT=0 PF=39 CS=0 ext=118
+C ask="Arial" h=-16 wt=400 it=0 textface="Liberation Sans" r=15 obj="Arial" H=17 A=14 D=3 IL=1 EL=1 AW=9 MW=30 WT=400 IT=0 PF=39 CS=0 ext=149
+C ask="Arial" h=20 wt=700 it=0 textface="Liberation Sans" r=15 obj="Arial" H=20 A=16 D=4 IL=2 EL=1 AW=11 MW=32 WT=700 IT=0 PF=39 CS=0 ext=183
+C ask="Arial" h=-27 wt=400 it=1 textface="Liberation Sans" r=15 obj="Arial" H=30 A=24 D=6 IL=3 EL=1 AW=16 MW=55 WT=400 IT=255 PF=39 CS=0 ext=259
+C ask="arial" h=-12 wt=400 it=0 textface="Liberation Sans" r=15 obj="arial" H=14 A=11 D=3 IL=2 EL=0 AW=7 MW=22 WT=400 IT=0 PF=39 CS=0 ext=118
+C ask="arial" h=-16 wt=400 it=0 textface="Liberation Sans" r=15 obj="arial" H=17 A=14 D=3 IL=1 EL=1 AW=9 MW=30 WT=400 IT=0 PF=39 CS=0 ext=149
+C ask="arial" h=20 wt=700 it=0 textface="Liberation Sans" r=15 obj="arial" H=20 A=16 D=4 IL=2 EL=1 AW=11 MW=32 WT=700 IT=0 PF=39 CS=0 ext=183
+C ask="arial" h=-27 wt=400 it=1 textface="Liberation Sans" r=15 obj="arial" H=30 A=24 D=6 IL=3 EL=1 AW=16 MW=55 WT=400 IT=255 PF=39 CS=0 ext=259
+C ask="Times New Roman" h=-12 wt=400 it=0 textface="Liberation Serif" r=16 obj="Times New Roman" H=14 A=11 D=3 IL=2 EL=1 AW=7 MW=22 WT=400 IT=0 PF=23 CS=0 ext=101
+C ask="Times New Roman" h=-16 wt=400 it=0 textface="Liberation Serif" r=16 obj="Times New Roman" H=17 A=14 D=3 IL=1 EL=1 AW=9 MW=29 WT=400 IT=0 PF=23 CS=0 ext=129
+C ask="Times New Roman" h=20 wt=700 it=0 textface="Liberation Serif" r=16 obj="Times New Roman" H=20 A=16 D=4 IL=2 EL=1 AW=10 MW=34 WT=700 IT=0 PF=23 CS=0 ext=163
+C ask="Times New Roman" h=-27 wt=400 it=1 textface="Liberation Serif" r=16 obj="Times New Roman" H=30 A=24 D=6 IL=3 EL=1 AW=14 MW=49 WT=400 IT=255 PF=23 CS=0 ext=240
+C ask="Courier New" h=-12 wt=400 it=0 textface="Liberation Mono" r=15 obj="Courier New" H=14 A=10 D=4 IL=2 EL=0 AW=7 MW=15 WT=400 IT=0 PF=54 CS=0 ext=140
+C ask="Courier New" h=-16 wt=400 it=0 textface="Liberation Mono" r=15 obj="Courier New" H=18 A=13 D=5 IL=2 EL=0 AW=10 MW=20 WT=400 IT=0 PF=54 CS=0 ext=200
+C ask="Courier New" h=20 wt=700 it=0 textface="Liberation Mono" r=15 obj="Courier New" H=20 A=15 D=5 IL=2 EL=0 AW=11 MW=21 WT=700 IT=0 PF=54 CS=0 ext=220
+C ask="Courier New" h=-27 wt=400 it=1 textface="Liberation Mono" r=15 obj="Courier New" H=30 A=22 D=8 IL=3 EL=0 AW=16 MW=35 WT=400 IT=255 PF=54 CS=0 ext=320
+C ask="Helvetica" h=-12 wt=400 it=0 textface="Liberation Sans" r=15 obj="Helvetica" H=14 A=11 D=3 IL=2 EL=0 AW=7 MW=22 WT=400 IT=0 PF=39 CS=0 ext=118
+C ask="Helvetica" h=-16 wt=400 it=0 textface="Liberation Sans" r=15 obj="Helvetica" H=17 A=14 D=3 IL=1 EL=1 AW=9 MW=30 WT=400 IT=0 PF=39 CS=0 ext=149
+C ask="Helvetica" h=20 wt=700 it=0 textface="Liberation Sans" r=15 obj="Helvetica" H=20 A=16 D=4 IL=2 EL=1 AW=11 MW=32 WT=700 IT=0 PF=39 CS=0 ext=183
+C ask="Helvetica" h=-27 wt=400 it=1 textface="Liberation Sans" r=15 obj="Helvetica" H=30 A=24 D=6 IL=3 EL=1 AW=16 MW=55 WT=400 IT=255 PF=39 CS=0 ext=259
+C ask="Times" h=-12 wt=400 it=0 textface="Liberation Serif" r=16 obj="Times" H=14 A=11 D=3 IL=2 EL=1 AW=7 MW=22 WT=400 IT=0 PF=23 CS=0 ext=101
+C ask="Times" h=-16 wt=400 it=0 textface="Liberation Serif" r=16 obj="Times" H=17 A=14 D=3 IL=1 EL=1 AW=9 MW=29 WT=400 IT=0 PF=23 CS=0 ext=129
+C ask="Times" h=20 wt=700 it=0 textface="Liberation Serif" r=16 obj="Times" H=20 A=16 D=4 IL=2 EL=1 AW=10 MW=34 WT=700 IT=0 PF=23 CS=0 ext=163
+C ask="Times" h=-27 wt=400 it=1 textface="Liberation Serif" r=16 obj="Times" H=30 A=24 D=6 IL=3 EL=1 AW=14 MW=49 WT=400 IT=255 PF=23 CS=0 ext=240
+C ask="Liberation Sans" h=-12 wt=400 it=0 textface="Liberation Sans" r=15 obj="Liberation Sans" H=14 A=11 D=3 IL=2 EL=0 AW=7 MW=22 WT=400 IT=0 PF=39 CS=0 ext=118
+C ask="Liberation Sans" h=-16 wt=400 it=0 textface="Liberation Sans" r=15 obj="Liberation Sans" H=17 A=14 D=3 IL=1 EL=1 AW=9 MW=30 WT=400 IT=0 PF=39 CS=0 ext=149
+C ask="Liberation Sans" h=20 wt=700 it=0 textface="Liberation Sans" r=15 obj="Liberation Sans" H=20 A=16 D=4 IL=2 EL=1 AW=11 MW=32 WT=700 IT=0 PF=39 CS=0 ext=183
+C ask="Liberation Sans" h=-27 wt=400 it=1 textface="Liberation Sans" r=15 obj="Liberation Sans" H=30 A=24 D=6 IL=3 EL=1 AW=16 MW=55 WT=400 IT=255 PF=39 CS=0 ext=259
+C ask="Liberation Mono" h=-12 wt=400 it=0 textface="Liberation Mono" r=15 obj="Liberation Mono" H=14 A=10 D=4 IL=2 EL=0 AW=7 MW=15 WT=400 IT=0 PF=54 CS=0 ext=140
+C ask="Liberation Mono" h=-16 wt=400 it=0 textface="Liberation Mono" r=15 obj="Liberation Mono" H=18 A=13 D=5 IL=2 EL=0 AW=10 MW=20 WT=400 IT=0 PF=54 CS=0 ext=200
+C ask="Liberation Mono" h=20 wt=700 it=0 textface="Liberation Mono" r=15 obj="Liberation Mono" H=20 A=15 D=5 IL=2 EL=0 AW=11 MW=21 WT=700 IT=0 PF=54 CS=0 ext=220
+C ask="Liberation Mono" h=-27 wt=400 it=1 textface="Liberation Mono" r=15 obj="Liberation Mono" H=30 A=22 D=8 IL=3 EL=0 AW=16 MW=35 WT=400 IT=255 PF=54 CS=0 ext=320
+C ask="Helv" h=-12 wt=400 it=0 textface="Helv" r=4 obj="Helv" H=13 A=11 D=2 IL=2 EL=0 AW=5 MW=11 WT=400 IT=0 PF=33 CS=0 ext=97
+C ask="Helv" h=-16 wt=400 it=0 textface="Helv" r=4 obj="Helv" H=20 A=16 D=4 IL=4 EL=0 AW=8 MW=16 WT=400 IT=0 PF=33 CS=0 ext=148
+C ask="Helv" h=20 wt=700 it=0 textface="Helv" r=4 obj="Helv" H=20 A=16 D=4 IL=4 EL=0 AW=9 MW=17 WT=700 IT=0 PF=33 CS=0 ext=169
+C ask="Helv" h=-27 wt=400 it=1 textface="Helv" r=4 obj="Helv" H=32 A=26 D=6 IL=6 EL=0 AW=14 MW=28 WT=400 IT=1 PF=33 CS=0 ext=265
+GD16 done

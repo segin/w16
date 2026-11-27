@@ -31,8 +31,13 @@
 ^GDI heap type (6|15)
 # ---- modules (section m) ----
 # the modules Windows loads, their usage counts, KERNEL's file name: 3.1
-# loads more fonts; the reference's KRNL286 is run as KRNL386.EXE
+# loads more fonts; the reference's KRNL286 is run as KRNL386.EXE. The
+# .FOT modules: w16's GDI keeps each loaded (w16's tree: the Liberation
+# fonts, LIBSANS ...), 3.1 lists none of its own (ARIAL ...): it does not
+# keep them (a difference of w16's GDI, ARCHITECTURE.md 11.12)
 ^module (KERNEL|SYSTEM|KEYBOARD|MOUSE|DISPLAY|SOUND|COMM|GDI|USER|FONTS|OEMFONTS|FIXFONTS|SSERIFE|COURE|SERIFE|SYMBOLE|ROMAN|SCRIPT|MODERN|SMALLE)
+^module LIB(SANS|SERF|MONO)[BIZ]?[ :]
+^ModuleNext after Find(Name|Handle)\(USER\): 1 (SSERIFE|LIBSANS)$
 ^Module(FindName|FindHandle)\(KERNEL\)
 # ---- classes (section c) ----
 # USER's classes: w16's USER registers its own set, in its own order, and

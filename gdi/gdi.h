@@ -633,6 +633,9 @@ void font_reap(void);                   /* removed fonts and scaled copies no DC
 void font_xform(LPDC dc, LPFONT f, TEXTXFORM __far *tx);
 int font_italic_overhang(LPFONTINFO fi, const TEXTXFORM __far *tx);
 extern XP fonts;
+extern char font_aliases[64];           /* SYSTEM.INI [w16] FontAliases */
+int font_alias(LPCSTR name, char *target);  /* an alias of a TrueType face (font.c) */
+LPCSTR font_text_face(LPDC dc);         /* GetTextFace's name (after font_realize) */
 BYTE __far *font_huge(BYTE __far *base, DWORD off);    /* a byte of a block over 64K */
 
 /* ttfont.c: TrueType fonts (.FOT pointing at a .TTF; gdi/ttf/ttfx.c) */

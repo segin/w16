@@ -56,8 +56,9 @@ should be picked up, and how to measure it.
 
 ## Later stages
 
-- Stage 3: metric-compatible free fonts in the install tree with
-  [FontSubstitutes] (the CC0 w16 Sans/Serif/Mono).
+- Stage 3 (done): the Liberation fonts (OFL) in the install tree with
+  [FontSubstitutes] and w16's font aliases (ARCHITECTURE.md 11.12,
+  probe GD16).
 - Stage 4: hinting by the fonts' own instructions (the bytecode
   interpreter). The autohinter (`gdi/ttf/ttfhint.c`) is on in GDI
   (SYSTEM.INI [w16] TrueTypeHinting, default 5: vertical and dropout);

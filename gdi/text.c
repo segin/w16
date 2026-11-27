@@ -427,12 +427,14 @@ void tm_logical(LPDC dc, TEXTMETRIC __far *tm)
 int GDIAPI GetTextFace(HDC hdc, int n, LPSTR buf)                  /* GDI.92 */
 {
     LPDC dc = dc_get(hdc);
+    LPCSTR face;
     int i;
     if (!dc || !buf || !font_realize(dc) || n <= 0)
         return 0;
     dc = dc_get(hdc);
-    for (i = 0; i < n - 1 && dc_font(dc)->face[i]; i++)
-        buf[i] = dc_font(dc)->face[i];
+    face = font_text_face(dc);
+    for (i = 0; i < n - 1 && face[i]; i++)
+        buf[i] = face[i];
     buf[i] = 0;
     return i;
 }
