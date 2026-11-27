@@ -336,6 +336,23 @@ static vu32 dos(vu32 ax, vu32 bx, vu32 cx, vu32 dx, vu32 *out_ax)
     return !cf;
 }
 
+/* bytes [off, off + n) of the open DOS handle h into linear address to */
+static void handle_read(vu32 h, vu32 off, vu32 n, vu32 to)
+{
+    vu32 xb = L->xbuf_lin(), xs = L->xbuf_size(), chunk, got;
+    if (xs < 0x400 || !dos(0x4200, h, off >> 16, off & 0xFFFF, NULL)) return;
+    chunk = (xs - 0x200) & ~0x1FFu;
+    if (chunk > 0x8000) chunk = 0x8000;
+    while (n) {
+        vu32 k = n < chunk ? n : chunk;
+        if (!dos(0x3F00, h, k, 0x200, &got)) break;
+        vcopy((void *)to, (const void *)(xb + 0x200), got);
+        to += got;
+        n -= got;
+        if (got < k) break;
+    }
+}
+
 /* file bytes [off, off + n) of path into linear address to: 1 if read
  * (a short file reads short; the rest stays as it was) */
 static int file_read(const char *path, vu32 off, vu32 n, vu32 to)
@@ -367,6 +384,24 @@ static int file_read(const char *path, vu32 off, vu32 n, vu32 to)
     }
     dos(0x3E00, h, 0, 0, NULL);
     return 1;
+}
+
+/* ---- file mappings (functions 0Dh, 11h, 13h, 12h, 0Fh) ----
+ * Windows 3.1's W32S.386 keeps a DOS handle of its own for a mapped file
+ * (a duplicate, held in WIN32S16's DOS block as PSP) and reads a view's
+ * pages from it when they are touched. w16's keeps the duplicate in the
+ * PSP DOS has when the mapping is made (the program's), keyed by the
+ * client's handle (ESI), and reads a view's bytes at once. */
+#define NFILE 32
+struct fobj { vu32 key, dos, size, view, vsize; };
+static struct fobj fobj[NFILE];
+static struct fobj *last_fobj;
+
+static struct fobj *fobj_of(vu32 key)
+{
+    vu32 i;
+    for (i = 0; i < NFILE; i++) if (fobj[i].key == key && fobj[i].dos) return &fobj[i];
+    return NULL;
 }
 
 /* ---- the client's state ---- */
@@ -437,7 +472,7 @@ void __cdecl w32s_api(struct vregs *r)
         c->eax = 0;
         break;
     case 0x08: {                        /* VirtualProtect: [1] address [2] size [3] protection
-                                           [4] where the old one goes (Win32), [5] the result */
+                                           [4] where the old one goes (linear), [5] the result */
         vu32 a, end, *p, old = 0, bits;
         int ok;
         b = BLK(c);
@@ -454,7 +489,7 @@ void __cdecl w32s_api(struct vregs *r)
                 *p = (*p & ~(PTE_P | PTE_W | PTE_U | W_EXEC)) | bits;
             }
             L->flush();
-            if (b[4]) *(vu32 *)W32LIN(b[4]) = old;
+            if (b[4]) *(vu32 *)b[4] = old;      /* (linear, as the block) */
         }
         b[5] = ok;
         c->eax = 0;
@@ -518,6 +553,79 @@ void __cdecl w32s_api(struct vregs *r)
         struct image *m = image_of(c->edx);
         if (m) m->size = 0;
         c->eax = 1;
+        break;
+    }
+    case 0x0D: {                        /* a file to map: ESI the client's handle for it,
+                                           [1] the DOS handle; [0] -> 1 (made) */
+        vu32 i, size = 0, dup = 0, ax;
+        b = BLK(c);
+        for (i = 0; i < NFILE && fobj[i].dos; i++) ;
+        if (i < NFILE && dos(0x4202, b[1], 0, 0, &ax)) {
+            vu32 hi = cur->edx & 0xFFFF;        /* (DX:AX after the call: restored above) */
+            size = ax;
+            (void)hi;
+            dos(0x4200, b[1], 0, 0, NULL);
+            if (dos(0x4500, b[1], 0, 0, &dup)) {
+                fobj[i].key = c->esi;
+                fobj[i].dos = dup;
+                fobj[i].size = size;
+                fobj[i].view = 0;
+                last_fobj = &fobj[i];
+            }
+        }
+        *(vu32 *)b[0] = dup != 0;
+        c->eax = 0;
+        break;
+    }
+    case 0x11: {                        /* a view of the file just made: [2] -> its address,
+                                           [5] -> [2] its size, [3] its address (linear) */
+        struct fobj *f = last_fobj;
+        vu32 n, a = 0;
+        b = BLK(c);
+        if (f) {
+            n = (f->size + PAGE - 1) & ~(PAGE - 1);
+            if (!n) n = PAGE;
+            a = virtual_alloc(0, n, 0x3000, 0x04);
+            f->view = a;
+            f->vsize = n;
+        }
+        *(vu32 *)b[2] = a;
+        if (b[5]) { ((vu32 *)b[5])[2] = f ? f->vsize : 0; ((vu32 *)b[5])[3] = a; }
+        c->eax = 0;
+        break;
+    }
+    case 0x13: {                        /* the view's bytes from the file: ESI the client's
+                                           handle, [14] the view (linear); [13] -> its size */
+        struct fobj *f = fobj_of(c->esi);
+        b = BLK(c);
+        if (!f) f = last_fobj;
+        if (f && f->view) {
+            handle_read(f->dos, 0, f->size, f->view);
+            b[13] = f->vsize;
+        }
+        c->eax = 0;
+        break;
+    }
+    case 0x12: {                        /* a view gone: [2] its address (linear) */
+        vu32 i;
+        b = BLK(c);
+        release(b[2]);
+        for (i = 0; i < NFILE; i++) if (fobj[i].view == b[2]) fobj[i].view = 0;
+        c->eax = 0;
+        break;
+    }
+    case 0x0F: {                        /* a file mapping closed: [1] -> its client's handle
+                                           (0 afterwards) */
+        struct fobj *f;
+        b = BLK(c);
+        f = fobj_of(*(vu32 *)b[1]);
+        if (f) {
+            dos(0x3E00, f->dos, 0, 0, NULL);
+            f->dos = 0;
+            if (last_fobj == f) last_fobj = NULL;
+        }
+        *(vu32 *)b[1] = 0;
+        c->eax = 0;
         break;
     }
     case 0x0B:                          /* (at a process's end: UNVERIFIED) */
