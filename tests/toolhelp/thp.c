@@ -927,7 +927,7 @@ static WORD own_blocks(WORD *n)
 
 static void t_grow(void)
 {
-    static HGLOBAL h[HGROW];
+    HGLOBAL FAR *h = (HGLOBAL FAR *)sbuf;   /* (not in DGROUP: its size is in section g) */
     WORD i, got = 0, n0, n1, n2, own0, own1, own2, found = 0;
     GLOBALENTRY ge;
     lg("== h the heap grown");
