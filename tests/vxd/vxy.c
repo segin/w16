@@ -429,7 +429,8 @@ static vu32 sldt_(void);
 static vu32 api_n, api_dump = 0x20, api_depth, api_id[16];
 #define NPTR 5
 #define NLIN 7
-#define NALL (NPTR + NLIN)
+#define NBLK 6                  /* pointers in EDX's block (VXYApiDeref) */
+#define NALL (NPTR + NLIN + NBLK)
 static vu8 api_save[16][NALL][256];
 static vu32 api_addr[16][NALL];
 static vu32 sc_sel[256], sc_d0[256], sc_d1[256], sc_n;
@@ -543,8 +544,10 @@ static void cregs(const struct client_regs *c)
 
 static const char *const pname[NALL] = {
     "ds:si", "es:di", "ds:bx", "es:bx", "ds:dx",
-    "lin di", "lin si", "lin bp", "lin bx", "lin dx", "lin cx", "lin ax"
+    "lin di", "lin si", "lin bp", "lin bx", "lin dx", "lin cx", "lin ax",
+    "blk0", "blk1", "blk2", "blk3", "blk4", "blk5"
 };
+static vu32 api_deref;                  /* [386Enh] VXYApiDeref=1 */
 static void api_ptrs(const struct client_regs *c, vu32 *a)
 {
     static const unsigned char ri[NLIN] = { 0, 1, 2, 4, 5, 6, 7 };   /* (not ESP) */
@@ -558,6 +561,13 @@ static void api_ptrs(const struct client_regs *c, vu32 *a)
     for (i = 0; i < NLIN; i++) {
         vu32 v = rv[ri[i]];
         a[NPTR + i] = (v >= 0x80000000u || (ri[i] == 5 && v >= 0x1000)) && v < 0xFFFFF000u ? v : 0;
+    }
+    /* VXYApiDeref=1: the first six dwords of EDX's block taken as linear
+     * addresses too (a 32-bit call's result pointer and arguments) */
+    for (i = 0; i < NBLK; i++) {
+        vu32 v = 0;
+        if (api_deref && c->edx >= 0x1000 && readable(c->edx, 4 * NBLK)) v = ((const vu32 *)c->edx)[i];
+        a[NPTR + NLIN + i] = v >= 0x1000 && v < 0xFFFFF000u ? v : 0;
     }
 }
 
@@ -809,6 +819,7 @@ static void api_hook(vu32 ddb)
     api_dump &= ~3u;
     pt_first = vmm_profile_hex(0, "VXYApiPte") & 0x3FF;
     cur_tdb_at = vmm_profile_hex(0, "VXYCurTdb");
+    api_deref = vmm_profile_hex(0, "VXYApiDeref");
     pte_scan("at the start");
     if (!api_dump) api_dump = 4;
     vxy_api_prev = vmm_hook_pm_api(d->device_id, (vu32)vxy_api_entry);

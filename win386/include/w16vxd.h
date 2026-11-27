@@ -174,7 +174,7 @@ struct w32s_link {
     vu32 window_end_pde;
     /* [w16] vmmtrace: the device traces every API call */
     vu32 trace;
-    /* the System VM's LDT made readable and writable from ring 3, as
+    /* the System VM's LDT and the GDT made readable and writable from ring 3, as
      * Windows 3.1's is (its system pages carry the user bit): Win32s's
      * WIN32S16.DLL reads descriptors there through its flat selector */
     void (*ldt_user)(void);

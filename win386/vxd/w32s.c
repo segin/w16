@@ -415,9 +415,10 @@ void __cdecl w32s_api(struct vregs *r)
         c->ecx = arena_pde << 22;
         c->edx = 0xFFFDFFFFu;
         break;
-    case 0x1D:                          /* VirtualAlloc from 16-bit code: EDX a far
-                                           pointer to address, size, type, protection */
-        b = (vu32 *)(sel_base(c->edx >> 16) + (c->edx & 0xFFFF));
+    case 0x1D:                          /* VirtualAlloc from 16-bit code: EDX SP:SS, a far
+                                           pointer (offset high) to address, size, type,
+                                           protection */
+        b = (vu32 *)(sel_base(c->edx & 0xFFFF) + (c->edx >> 16));
         c->edx = virtual_alloc(b[0], b[1], b[2], b[3]);
         c->eax = c->edx ? 0 : 8;        /* (UNVERIFIED: the error code) */
         break;
@@ -459,20 +460,97 @@ void __cdecl w32s_api(struct vregs *r)
         c->eax = 0;
         break;
     }
+    case 0x09: {                        /* VirtualQuery: [1] address [2] a MEMORY_BASIC_
+                                           INFORMATION (linear) [3] its size; the result
+                                           (bytes written) at [0]; Win32 addresses in it */
+        vu32 a, *mbi, e, st, pr, run;
+        struct region *g;
+        b = BLK(c);
+        a = b[1] & ~(PAGE - 1);
+        mbi = (vu32 *)b[2];
+        if (b[3] < 0x1C) { *(vu32 *)b[0] = 0; break; }
+        g = region_of(a);
+        if (!g) {
+            /* free: up to the next reservation */
+            vu32 i, next = 0xFFFF0000u;
+            for (i = 0; i < nreg; i++)
+                if (reg[i].base > a && reg[i].base < next) next = reg[i].base;
+            mbi[0] = a + 0x10000u;
+            mbi[1] = 0;
+            mbi[2] = 0;
+            mbi[3] = next - a;
+            mbi[4] = 0x10000;           /* MEM_FREE */
+            mbi[5] = 0x01;              /* PAGE_NOACCESS */
+            mbi[6] = 0;
+        } else {
+            vu32 *p = pte_of(a, 0);
+            e = p ? *p : 0;
+            st = e & W_COM ? 0x1000 : 0x2000;
+            pr = e & W_COM ? pte_prot(e) : 0;
+            for (run = a; run < g->base + g->size; run += PAGE) {
+                vu32 *q = pte_of(run, 0), f = q ? *q : 0;
+                if ((f & W_COM ? 0x1000u : 0x2000u) != st || (f & W_COM ? pte_prot(f) : 0) != pr) break;
+            }
+            mbi[0] = a + 0x10000u;
+            mbi[1] = g->base + 0x10000u;
+            mbi[2] = g->prot;
+            mbi[3] = run - a;
+            mbi[4] = st;
+            mbi[5] = pr;
+            mbi[6] = image_of(a) ? 0x1000000u : 0x20000u;  /* MEM_IMAGE, MEM_PRIVATE */
+        }
+        *(vu32 *)b[0] = 0x1C;
+        c->eax = 0;
+        break;
+    }
+    case 0x07: {                        /* VirtualFree: [1] address [2] size [3] type
+                                           (MEM_DECOMMIT 4000h, MEM_RELEASE 8000h); the
+                                           result at [0] */
+        vu32 ok = 0;
+        b = BLK(c);
+        if (b[3] & 0x8000) ok = release(b[1]);
+        else if ((b[3] & 0x4000) && region_of(b[1])) { decommit(b[1], b[2]); ok = 1; }
+        *(vu32 *)b[0] = ok;
+        c->eax = 0;
+        break;
+    }
+    case 0x05: {                        /* an image gone: EDX its linear base, EDI its number */
+        struct image *m = image_of(c->edx);
+        if (m) m->size = 0;
+        c->eax = 1;
+        break;
+    }
+    case 0x0B:                          /* (at a process's end: UNVERIFIED) */
+    case 0x14:                          /* an exception's context (UNVERIFIED: nothing given yet) */
+    case 0x15:
+    case 0x1F:                          /* (once at a process's start) */
+        c->eax = 0;
+        break;
     case 0x0A:                          /* (no effect seen) */
         break;
-    case 0x04: {                        /* an image: [11] its path, [13] its base (Win32),
-                                           EDI its PE header (Win32) */
+    case 0x04: {                        /* an image: ESI its record (Win32: [1] the PE
+                                           header, [3] the path, [5] the base, all Win32),
+                                           EDI the PE header, ECX its number; EDX the
+                                           process's record */
         vu32 i, j;
         const char *path;
-        b = BLK(c);
+        const vu32 *rec = (const vu32 *)W32LIN(c->esi);
         for (i = 0; i < NIMG && img[i].size; i++) ;
         if (i == NIMG) i = 0;
-        img[i].base = W32LIN(b[13]);
+        img[i].base = W32LIN(rec[5]);
         img[i].size = *(const vu32 *)(W32LIN(c->edi) + 0x50);     /* SizeOfImage */
-        path = (const char *)W32LIN(b[11]);
+        path = (const char *)W32LIN(rec[3]);
         for (j = 0; j < sizeof img[i].path - 1 && path[j]; j++) img[i].path[j] = path[j];
         img[i].path[j] = 0;
+        if (trace_on) {
+            tput("W32S: image ");
+            thex(img[i].base);
+            tput(" size ");
+            thex(img[i].size);
+            tput(" ");
+            tput(img[i].path);
+            tend();
+        }
         c->eax = i + 1;
         break;
     }
@@ -481,8 +559,14 @@ void __cdecl w32s_api(struct vregs *r)
         struct image *m = image_of(c->edx);
         const vu32 *sh = (const vu32 *)W32LIN(c->esi);
         vu32 raw = c->edi;
-        if (!m || !commit(c->edx, c->ecx > raw ? c->ecx : raw, 0x04)
-            || (raw && !file_read(m->path, sh[5], raw, c->edx))) {     /* PointerToRawData */
+        int why = !m ? 1 : !commit(c->edx, c->ecx > raw ? c->ecx : raw, 0x04) ? 2
+                  : raw && !file_read(m->path, sh[5], raw, c->edx) ? 3 : 0;  /* PointerToRawData */
+        if (why) {
+            if (trace_on) {
+                tput("W32S: section not loaded ");
+                thex(why);
+                tend();
+            }
             c->eax = 1;
             CF_SET(c);
             break;
@@ -500,9 +584,34 @@ void __cdecl w32s_api(struct vregs *r)
 }
 
 /* faults: none taken yet (carry: on to the previous handler) */
+/* Protected-mode faults (Hook_PM_Fault, w32sddb.asm's stubs: arg 0 the
+ * page fault): a page fault on a reserved page of a reservation whose
+ * next page up is committed commits it, with that page's protection, and
+ * the client goes on: a thread's stack growing down (Windows 3.1's W32S.386
+ * commits the reserved pages below a stack's committed top when they are
+ * touched; a reservation with nothing committed faults: W32M). Anything
+ * else goes on to the previous handler (carry). */
+static vu32 get_cr2(void);
+#pragma aux get_cr2 = "mov eax, cr2" value [eax] modify exact [eax];
+
 void __cdecl w32s_fault(struct vregs *r)
 {
+    vu32 a = get_cr2() & ~(PAGE - 1), *p, *up;
+    struct region *g;
     r->eflags |= VF_CF;
+    if (r->arg != 0) return;
+    g = region_of(a);
+    if (!g || a + PAGE >= g->base + g->size) return;
+    p = pte_of(a, 0);
+    up = pte_of(a + PAGE, 0);
+    if (!p || !up || (*p & W_COM) || !(*up & W_COM)) return;
+    if (!commit(a, PAGE, pte_prot(*up) == 0x01 ? 0x04 : pte_prot(*up))) return;
+    if (trace_on) {
+        tput("W32S: stack page committed at ");
+        thex(a);
+        tend();
+    }
+    r->eflags &= ~VF_CF;
 }
 
 void __cdecl w32s_service(struct vregs *r)
@@ -522,6 +631,14 @@ void __cdecl w32s_control(struct vregs *r)
         tput("W32S: w16's device, arena at ");
         thex(arena_pde << 22);
         tend();
+    }
+    if (r->eax == INIT_COMPLETE) {
+        struct vregs v;
+        vclear(&v, sizeof v);
+        v.eax = 0x0E;                   /* Hook_PM_Fault: page faults */
+        v.esi = w32s_pf_entry[0];
+        vmm_hook_pm_fault(&v);
+        w32s_pf_prev[0] = (v.eflags & VF_CF) ? 0 : v.esi;
     }
     r->eflags &= ~VF_CF;
 }

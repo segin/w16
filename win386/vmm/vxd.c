@@ -779,6 +779,7 @@ static void link_log(const char *s)
 static void link_ldt_user(void)
 {
     make_user((u32)ldt, ldt_limit + 1);
+    make_user((u32)gdt, GDT_ENTRIES * 8);
 }
 
 static u32 watch_on;                    /* [w16] vmmtrace=3: map_phys's watch (below) */
