@@ -26,12 +26,14 @@
 #          Setup said "Win32s requires Virtual Memory" and "Microsoft Win32s
 #          System Setup has failed." here, as Windows 3.1 does with
 #          Paging=no (ARCHITECTURE.md 12.17); then Windows did not come back
-#          with SYSTEM.INI's device= line for W32S.386
+#          with SYSTEM.INI's device= line for W32S.386 (Microsoft's file needs the
+#          internals of Microsoft's VMM, 12.18); now w16's WIN386 loads its own
+#          W32S device for that line (12.20) and Windows restarts: a check
 # Every part then starts Win32s's Freecell (a Win32 program) from File >
 # Run once Windows is back and reports whether its window came up (at
 # least 40,000 pixels of its green, 008000h, in the shot freecellrun):
-# "open" lines, not failures yet (w16's KERNEL did not start it, and the
-# tree part's restart stops at W32S.386: ARCHITECTURE.md 12.18).
+# "open" lines, not failures yet (on w16's KERNEL Win32s now starts and
+# loads the program, which then faults: ARCHITECTURE.md 12.20).
 # WIN32SINST_ARGS: more tests/dropin.sh options for every part (blanks
 # split them), e.g. "-p 386 -i w16:vmmtrace=1" with DROPIN_CONF's
 # serial1=file for the VMM's trace; WIN32SINST_SCRIPT: another input
@@ -134,7 +136,6 @@ for p in $parts; do
     tree)
         run tree -T "$root/build/w16" -3 "$@"
         r=$(installed tree W16)
-        case $r in "_MSSETUP.BAT left"*) echo "open tree: $r (W32S.386 under w16's WIN386, ARCHITECTURE.md 12.18)"; r=ok ;; esac
         freecell tree
         if [ "$r" = ok ]; then echo "ok   tree: Win32s installed on w16's tree alone"
         else echo "FAIL tree: $r ($out/tree)"; fails=$((fails + 1)); fi ;;
