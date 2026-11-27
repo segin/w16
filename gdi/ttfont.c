@@ -214,7 +214,9 @@ static HGLOBAL tt_bc_get(XP xt, WORD ppem, WORD xppem, ttfx_scale sy, ttfx_scale
     tt_bcs[old].age = ++tt_bcclock;
     tt_bcs[old].h = 0;
     bytes = ttfx_bcBytes(&ttf);
-    h = bytes ? GlobalAlloc(GMEM_MOVEABLE, bytes) : 0;
+    /* (GMEM_SHARE: GDI's, not the drawing task's: the cache outlives it;
+       a task's blocks go when it ends) */
+    h = bytes ? GlobalAlloc(GMEM_MOVEABLE | GMEM_SHARE, bytes) : 0;
     p = h ? GlobalLock(h) : 0;
     if (!p || !ttfx_bcPrepare(&ttf, p, bytes, sx, sy, xppem ? xppem : ppem, ppem)) {
         if (p)
@@ -326,6 +328,16 @@ static void tt_load(LPTTFILE t)
             t->winA = a;
             t->winD = -d;
         }
+        /* (a malformed font's usWin values that add to nothing: hhea's,
+           else the em, so that a size's height grows with it) */
+        if ((long)t->winA + t->winD <= 0) {
+            t->winA = a;
+            t->winD = -d;
+            if ((long)t->winA + t->winD <= 0) {
+                t->winA = t->upem;
+                t->winD = 0;
+            }
+        }
         /* the OpenType specification's external leading for Windows */
         t->gap = l - ((t->winA + t->winD) - (a - d));
         if (t->gap < 0)
@@ -417,6 +429,8 @@ int tt_ppem(XP xf, int h, int w, WORD __far *xppem)
         p = (long)h * t->upem / ((long)t->winA + t->winD + t->gap);
         if (p < 1)
             p = 1;
+        if (p > 0x7FFF)
+            p = 0x7FFF;                 /* (a malformed font's tiny height) */
         for (;;) {
             tt_vert(t, (WORD)p, &a, &d);
             if (p <= 1 || a + d <= h)
@@ -426,8 +440,8 @@ int tt_ppem(XP xf, int h, int w, WORD __far *xppem)
         for (;;) {
             tt_vert(t, (WORD)p, &a, &d);
             tt_vert(t, (WORD)p + 1, &a1, &d1);
-            if (a + d >= h || a1 + d1 > h)
-                break;
+            if (a + d >= h || a1 + d1 > h || p >= 0x7FFF)
+                break;                  /* (the last: a malformed font's) */
             p++;
         }
     }
@@ -709,7 +723,9 @@ drawn:
         }
 }
 
-void tt_glyphs(XP xs, LPCSTR str, int n)
+/* FALSE: no room for the bits (the table's offsets are past the
+   block's end: the text cannot be drawn) */
+BOOL tt_glyphs(XP xs, LPCSTR str, int n)
 {
     LPFONT s = xptr(xs), b;
     LPTTFILE t;
@@ -719,7 +735,7 @@ void tt_glyphs(XP xs, LPCSTR str, int n)
     ttfx_scale sc = 0, sx = 0;
     HGLOBAL bch = 0;
     if (!s->tt || !s->base || !s->fi || n <= 0 || !str)
-        return;
+        return TRUE;
     b = xptr(s->base);
     t = xptr(b->ttf);
     if (!s->bits) {                     /* the block grown to the bits */
@@ -731,10 +747,12 @@ void tt_glyphs(XP xs, LPCSTR str, int n)
         if (hn)
             s->hMem = hn;
         q = GlobalLock(s->hMem);
+        if (!q)
+            return FALSE;               /* (defensive: a moveable block's lock) */
         s->fi = fi = (LPFONTINFO)(q + 0x42);
         fi->dfBitsPointer = MAKELP(SELECTOROF(q), OFFSETOF(q) + (WORD)fi->dfBitsOffset);
         if (!hn)
-            return;                     /* no room: drawn blank */
+            return FALSE;               /* no room (tried again next time) */
         s->bits = 1;
     }
     fi = s->fi;
@@ -749,7 +767,7 @@ void tt_glyphs(XP xs, LPCSTR str, int n)
         if (!opened) {
             if (!tt_open(t) || !arena_get()) {
                 tt_close();
-                return;
+                return TRUE;            /* (the block whole and zeroed: drawn blank) */
             }
             sc = ttfx_ScaleForMappingEmToPixels(&ttf, s->ppem);
             sx = s->xppem ? ttfx_ScaleForMappingEmToPixels(&ttf, s->xppem) : sc;
@@ -769,6 +787,7 @@ void tt_glyphs(XP xs, LPCSTR str, int n)
         arena_put();
         tt_close();
     }
+    return TRUE;
 }
 
 LPFONT tt_dc_font(LPDC dc)
@@ -793,6 +812,24 @@ static LPFONT tt_hdc(HDC hdc, LPTTFILE __far *pt)
     b = xptr(s->base);
     *pt = xptr(b->ttf);
     return s;
+}
+
+/* the DC's x scale for a device width in logical units, its sign kept
+   (SDK: ABC widths and kerning amounts are logical units, as
+   GetCharWidth's: GD5 on 3.1); *num 0: MM_TEXT, as they are */
+static void tt_logx(HDC hdc, int *num, int *den)
+{
+    LPDC dc = dc_get(hdc);
+    *num = *den = 0;
+    if (dc && dc->mapMode != 1) {
+        *num = dc->wndExt.x < 0 ? -dc->wndExt.x : dc->wndExt.x;
+        *den = dc->vpExt.x < 0 ? -dc->vpExt.x : dc->vpExt.x;
+    }
+}
+
+static int tt_lx(int v, int num, int den)
+{
+    return num ? mul_div(v, num, den) : v;
 }
 
 /* GetFontData: bytes of the DC's TrueType font's file: of table t
@@ -834,8 +871,15 @@ DWORD GDIAPI GetFontData(HDC hdc, DWORD table, DWORD off, void __far *buf, DWORD
     if (n > len)
         n = len;
     while (done < n) {
-        WORD k = n - done > 0x8000UL ? 0x8000 : (WORD)(n - done);
-        ttfx_Read(&ttf, start + (ttfx_i32)(off + done), font_huge(buf, done), k);
+        /* each piece within one of the buffer's segments (a far pointer's
+           offset wraps) */
+        BYTE __far *d = font_huge(buf, done);
+        DWORD k = n - done, room = 0x10000UL - OFFSETOF(d);
+        if (k > 0x8000UL)
+            k = 0x8000UL;
+        if (k > room)
+            k = room;
+        ttfx_Read(&ttf, start + (ttfx_i32)(off + done), d, (WORD)k);
         done += k;
     }
     tt_close();
@@ -846,8 +890,9 @@ DWORD GDIAPI GetFontData(HDC hdc, DWORD table, DWORD off, void __far *buf, DWORD
    where the glyph's pixels start, B their width, C the rest of the
    advance; a blank glyph A 0, B 0, C the advance. The extents are the
    hinted outline's (with the font's instructions) as 3.1's are (GD13),
-   else the unhinted glyph's; UNVERIFIED: B for a blank glyph, and in
-   device units */
+   else the unhinted glyph's; in logical units (SDK), C the advance's
+   less A and B, so that the three add to GetCharWidth's. UNVERIFIED: B
+   for a blank glyph */
 BOOL GDIAPI GetCharABCWidths(HDC hdc, WORD first, WORD last, void __far *p) /* GDI.307 */
 {
     LPTTFILE t;
@@ -856,9 +901,10 @@ BOOL GDIAPI GetCharABCWidths(HDC hdc, WORD first, WORD last, void __far *p) /* G
     ttfx_scale sy, sx;
     WORD c;
     HGLOBAL bch = 0;
-    int arena = 0;
+    int arena = 0, num, den;
     if (!s || !p || last < first || !tt_open(t))
         return FALSE;
+    tt_logx(hdc, &num, &den);
     sy = ttfx_ScaleForMappingEmToPixels(&ttf, s->ppem);
     sx = s->xppem ? ttfx_ScaleForMappingEmToPixels(&ttf, s->xppem) : sy;
     if ((tt_hint & TTFX_HINT_BYTECODE) && s->sx != 2 && arena_get()) {
@@ -881,9 +927,9 @@ BOOL GDIAPI GetCharABCWidths(HDC hdc, WORD first, WORD last, void __far *p) /* G
             ttfx_GetGlyphBitmapBox(&ttf, g, sx, sy, 0, 0, &x0, &y0, &x1, &y1);
         if (x1 <= x0)
             x0 = x1 = 0;
-        abc[0] = x0;
-        abc[1] = x1 - x0;
-        abc[2] = w - x1;
+        abc[0] = tt_lx(x0, num, den);
+        abc[1] = tt_lx(x1 - x0, num, den);
+        abc[2] = tt_lx(w, num, den) - abc[0] - abc[1];
         abc += 3;
         if (c == 0xFFFF)
             break;
@@ -898,17 +944,18 @@ BOOL GDIAPI GetCharABCWidths(HDC hdc, WORD first, WORD last, void __far *p) /* G
 /* GetKerningPairs: every pair of the kern table (GD13 on 3.1: 908 for
    Liberation Sans, most of whose glyphs no ANSI character has), each
    glyph named by its last character, the amounts at the font's size,
-   rounded; 0 for other fonts */
+   rounded, in logical units (SDK); 0 for other fonts */
 int GDIAPI GetKerningPairs(HDC hdc, int n, void __far *p)          /* GDI.332 */
 {
     LPTTFILE t;
     LPFONT s = tt_hdc(hdc, &t);
     WORD __far *kp = p;
-    int k, nk, out = 0;
+    int k, nk, out = 0, num, den;
     WORD xp, c, first, last;
     WORD gl[256];                       /* each character's glyph */
     if (!s || !tt_open(t))
         return 0;
+    tt_logx(hdc, &num, &den);
     nk = ttfx_GetKerningTableLength(&ttf);
     if (!p) {
         tt_close();
@@ -938,7 +985,7 @@ int GDIAPI GetKerningPairs(HDC hdc, int n, void __far *p)          /* GDI.332 */
             continue;
         kp[0] = c1;
         kp[1] = c2;
-        kp[2] = (WORD)rnd(adv, xp, t->upem);
+        kp[2] = (WORD)tt_lx(rnd(adv, xp, t->upem), num, den);
         kp += 3;
         out++;
     }
@@ -1026,7 +1073,9 @@ BOOL GDIAPI CreateScalableFontResource(WORD hidden, LPCSTR fot, LPCSTR ttfile, L
     long o;
     LPCSTR base;
     (void)hidden;
-    if (!fot || !ttfile)
+    /* (a name of 128 characters or more is no path DOS can open, and the
+       .FOT's 600h bytes have no room for it) */
+    if (!fot || !ttfile || lstrlen(ttfile) >= 128)
         return FALSE;
     mem_set(&t, 0, sizeof t);
     k = 0;

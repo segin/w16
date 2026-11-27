@@ -99,7 +99,9 @@ DWORD GDIAPI GetTextExtent(HDC hdc, LPCSTR s, int n)               /* GDI.91 */
 BOOL GDIAPI GetTextExtentPoint(HDC hdc, LPCSTR s, int n, POINT __far *sz) /* GDI.471 */
 {
     DWORD e;
-    if (!sz)
+    /* (no DC, or a metafile's: SDK, zero when it fails; UNVERIFIED: 3.1's
+       for a count of 0, here TRUE and 0 by 0) */
+    if (!sz || !dc_get(hdc))
         return FALSE;
     e = GetTextExtent(hdc, s, n);
     sz->x = LOWORD(e);
@@ -221,12 +223,12 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     if (!font_realize(dc))
         return FALSE;
     dc = dc_get(hdc);
-    if (n > 0 && s)
-    {
-        if (dc_font(dc)->tt)            /* TrueType: the glyphs not drawn yet */
-            tt_glyphs(dc->xFont, s, n);
-        else
-            font_bits(dc_font(dc));     /* a scaled copy's bits, the first time */
+    if (n > 0 && s) {
+        /* TrueType: the glyphs not drawn yet; else a scaled copy's bits,
+           the first time (FALSE: no memory for them) */
+        if (!(dc_font(dc)->tt ? tt_glyphs(dc->xFont, s, n) : font_bits(dc_font(dc))))
+            return FALSE;
+        dc = dc_get(hdc);
     }
     fi = dc_font(dc)->fi;
     font_xform(dc, dc_font(dc), &tx);
@@ -452,15 +454,15 @@ BOOL GDIAPI GetCharWidth(HDC hdc, WORD first, WORD last, short __far *buf) /* GD
     {
         /* GD10 on 3.1: a simulated italic's widths have its overhang */
         int io = font_italic_overhang(dc_font(dc)->fi, &tx);
-        WORD i;
+        DWORD i, n = (DWORD)last - first + 1;      /* (0 to FFFFh: no wrap) */
         if (io)
-            for (i = 0; i <= last - first; i++)
+            for (i = 0; i < n; i++)
                 buf[i] += io;
     }
     if (dc->mapMode != 1) {             /* logical units (GD5 on 3.1) */
-        WORD i;
+        DWORD i, n = (DWORD)last - first + 1;
         dc = dc_get(hdc);
-        for (i = 0; i <= last - first; i++)
+        for (i = 0; i < n; i++)
             buf[i] = log_x(dc, buf[i]);
     }
     return TRUE;
