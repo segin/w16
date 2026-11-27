@@ -4509,7 +4509,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         rsys=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
         scr=$root/tests/scripts/input/swapesc.txt
         refrun swapesc-ref swapesc env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 300 "$scr" "$out/swapesc-ref" \
-            -3 -r -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+            -3 -r -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP' -i 'WIN.INI:windows:MouseSpeed=0'
         r=ok
         for k in ${part:-k386 k286 mswoa}; do
             case $k in
@@ -4518,7 +4518,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             *)     set -- ;;
             esac
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 300 "$scr" "$out/swapesc-$k" \
-                -T "$root/build/w16" -i 'NonWindowsApp:SwapDisk=C:\W16' "$@" \
+                -T "$root/build/w16" -i 'NonWindowsApp:SwapDisk=C:\W16' -i 'WIN.INI:windows:MouseSpeed=0' "$@" \
                 > "$out/swapesc-$k.txt" 2>&1 || true
             a=$out/swapesc-$k b=$out/swapesc-ref
             for s in 01-dos:640x400:- 02-ver:640x400:- 03-win:640x480:w 04-dos:640x400:02-ver \
