@@ -49,6 +49,8 @@ static u32 resident;                    /* those of them in physical memory */
 static u32 eager_min;                   /* free pages above which new ones are mapped at once */
 static u32 hand = CLIENT_LO;            /* the clock hand (a linear address) */
 static u32 page_ins, page_outs;
+#define WIN_MAX 4                       /* pages in one DOS call (swap_io) */
+static u32 win_lin, nwin;
 
 /* page locks: lin page -> count, for the pages a client locked */
 struct lock { struct lock *next; u32 page, count; };
@@ -76,8 +78,14 @@ void pager_init(void)
      * physical memory and a constant part. UNVERIFIED: what that
      * multiple is of; here of the free pages when the VMM starts */
     lin_total = (info->overcommit ? info->overcommit : 4) * f;
+    {
+        u32 b = (u32)info->xbuf_seg << 4, end = b + info->xbuf_size;
+        win_lin = (b + 4095) & ~4095u;
+        nwin = end > win_lin ? (end - win_lin) >> 12 : 0;
+        if (nwin > WIN_MAX) nwin = WIN_MAX;
+    }
     eager_min = f / 2 > 4 * RESERVE ? f / 2 : 4 * RESERVE;   /* (half the memory: the rest for pages touched later) */
-    if (!info->swap_pages || info->swap_handle == 0xFFFF) return;
+    if (!info->swap_pages || info->swap_handle == 0xFFFF || !nwin) return;
     nslots = info->swap_pages;
     /* (the file's size: never more than the linear address space; under
      * Windows 3.1 0500h's paging file size was the linear space's without
@@ -108,6 +116,7 @@ u32 pager_avail(void)
 static u32 slot_alloc(void)
 {
     u32 i, s;
+    if (slots_used >= nslots) return ~0u;
     for (i = 0; i < nslots; i++) {
         s = (slot_hint + i) % nslots;
         if (!(slotmap[s >> 3] & (1 << (s & 7)))) {
@@ -125,21 +134,39 @@ static void slot_free(u32 s)
     if (s >= nslots || !(slotmap[s >> 3] & (1 << (s & 7)))) return;
     slotmap[s >> 3] &= (u8)~(1 << (s & 7));
     slots_used--;
+    /* (the next search starts at a free slot: with the file full, a
+     * linear search from an old hint cost more than the DOS call) */
+    slot_hint = s;
 }
 
-/* one page of the file in or out, at the VMM's address buf */
-static int swap_io(u32 slot, u32 buf, int write)
+/* The window the file is read and written through: the page-aligned pages
+ * inside the loader's transfer buffer (info->xbuf_seg, 16 KB, in the
+ * loader's memory, which every VM maps to the same physical pages).
+ * For a transfer the current VM's page table entries of the window are
+ * pointed at the pages being read or written, so DOS reads and writes
+ * them where they are, and set back after: what the buffer holds (a DOS
+ * call from protected mode may be using it when a page fault comes) is
+ * never touched, and a DOS VM's own, smaller buffer is not used. Up to
+ * that many pages go in one DOS call (one page per call made paging a
+ * program larger than the memory too slow: bigmem e128) */
+
+/* n pages (phys[]) of the file from slot on, in or out */
+static int swap_io(u32 slot, const u32 *phys, u32 n, int write)
 {
-    u8 save[4096];
-    u8 *xb = (u8 *)xbuf_lin();
+    u32 *pt = (u32 *)phys_to_lin(cur_vm->ptab_phys) + (win_lin >> 12);
+    u32 old[WIN_MAX], i;
     struct cregs v;
     u16 *cur_psp = info->sda_lin ? (u16 *)(info->sda_lin + 0x10) : NULL;
     u16 oldpsp = 0;
     u32 off = slot << 12;
     int ok;
 
-    memcpy(save, xb, 4096);
-    if (write) memcpy(xb, (void *)buf, 4096);
+    if (!n || n > nwin) return 0;
+    for (i = 0; i < n; i++) {
+        old[i] = pt[i];
+        pt[i] = phys[i] | 7;
+    }
+    vmm_flush_tlb();
     if (cur_psp) { oldpsp = *cur_psp; *cur_psp = info->psp; }
     memset(&v, 0, sizeof(v));
     v.eax = 0x4200;
@@ -152,14 +179,14 @@ static int swap_io(u32 slot, u32 buf, int write)
         memset(&v, 0, sizeof(v));
         v.eax = write ? 0x4000 : 0x3F00;
         v.ebx = info->swap_handle;
-        v.ecx = 4096;
-        v.ds = info->xbuf_seg;
+        v.ecx = n << 12;
+        v.ds = win_lin >> 4;
         v86_int(&v, 0x21);
-        ok = !(v.eflags & EFL_CF) && (v.eax & 0xFFFF) == 4096;
+        ok = !(v.eflags & EFL_CF) && (v.eax & 0xFFFF) == (n << 12);
     }
     if (cur_psp) *cur_psp = oldpsp;
-    if (ok && !write) memcpy((void *)buf, xb, 4096);
-    memcpy(xb, save, 4096);
+    for (i = 0; i < n; i++) pt[i] = old[i];
+    vmm_flush_tlb();
     return ok;
 }
 
@@ -171,11 +198,71 @@ static struct lock *lock_find(u32 page)
     return NULL;
 }
 
-/* one pageable page out to the file: its physical page is free after */
-static int evict_one(void)
+/* n free slots in a row (~0: none) */
+static u32 slot_run(u32 n)
 {
-    u32 n, *pte, e, phys, slot, limit = 2 * ((CLIENT_HI - CLIENT_LO) >> 12);
-    for (n = 0; n < limit; n++, hand += 4096) {
+    u32 i, s, k;
+    if (n == 1) return slot_alloc();
+    if (nslots - slots_used < n) return ~0u;
+    /* (a short search only: the caller writes one page at a time
+     * without a run) */
+    for (i = 0; i < nslots && i < 64; i++) {
+        s = (slot_hint + i) % nslots;
+        if (s + n > nslots) continue;
+        for (k = 0; k < n && !(slotmap[(s + k) >> 3] & (1 << ((s + k) & 7))); k++)
+            ;
+        if (k < n) { i += k; continue; }
+        for (k = 0; k < n; k++) slotmap[(s + k) >> 3] |= (u8)(1 << ((s + k) & 7));
+        slots_used += n;
+        slot_hint = s + n;
+        return s;
+    }
+    return ~0u;
+}
+
+/* every 1024 pages in or out: the counts and the BIOS tick (the trace) */
+static void pager_progress(void)
+{
+    trace("VMM: paging: %x out, %x in, %x slots used, %x free, tick %x\n", page_outs, page_ins,
+          slots_used, pages_free(), *(u32 *)0x46C);
+}
+
+/* pages i .. i+n of an eviction written from slot on: those not taken
+ * back meanwhile are in the file now and their physical pages free; the
+ * rest go back as they were (the write failed) or keep what they have */
+struct victim { u32 *pte, orig, phys, tv; };
+
+static u32 evict_done(struct victim *v, u32 n, u32 slot, int ok)
+{
+    u32 i, got = 0;
+    for (i = 0; i < n; i++) {
+        if (*v[i].pte != v[i].tv) {     /* taken back while it was written */
+            slot_free(slot + i);
+            continue;
+        }
+        if (!ok) {
+            slot_free(slot + i);
+            *v[i].pte = v[i].orig;
+            continue;
+        }
+        *v[i].pte = ((slot + i) << 12) | PTE_SWAPPED | PTE_PAGEABLE | (v[i].orig & 6);
+        page_free(v[i].phys);
+        if ((++page_outs & 0x3FF) == 0) pager_progress();
+        if (resident) resident--;
+        got++;
+    }
+    return got;
+}
+
+/* pageable pages out to the file, up to the window's size in one DOS
+ * call (a run of free slots; one at a time without one): their physical
+ * pages are free after. The number written */
+static u32 evict(void)
+{
+    struct victim v[WIN_MAX];
+    u32 n, e, k = 0, i, slot, got = 0, limit = 2 * ((CLIENT_HI - CLIENT_LO) >> 12);
+    u32 phys[WIN_MAX], *pte;
+    for (n = 0; n < limit && k < nwin; n++, hand += 4096) {
         if (hand < CLIENT_LO || hand >= CLIENT_HI) hand = CLIENT_LO;
         pte = pte_of(hand);
         if (!pte) {                     /* no page table: the next 4 MB */
@@ -187,30 +274,32 @@ static int evict_one(void)
         if ((e & (1 | PTE_PAGEABLE)) != (1 | PTE_PAGEABLE)) continue;
         if (e & 0x20) { *pte = e & ~0x20u; continue; }      /* used: a second chance */
         if (lock_find(hand)) continue;
-        slot = slot_alloc();
-        if (slot == ~0u) return 0;
-        phys = e & ~0xFFFu;
-        *pte = phys | PTE_TRANSIT | PTE_PAGEABLE | (e & 6);
-        vmm_flush_tlb();
-        if (!swap_io(slot, phys_to_lin(phys), 1)) {
-            slot_free(slot);
-            if (*pte == (phys | PTE_TRANSIT | PTE_PAGEABLE | (e & 6))) *pte = e;
-            vmm_flush_tlb();
-            trace("VMM: the paging file could not be written (slot %x)\n", slot);
-            return 0;
-        }
-        if (*pte != (phys | PTE_TRANSIT | PTE_PAGEABLE | (e & 6))) {
-            slot_free(slot);            /* taken back while it was written */
-            continue;
-        }
-        *pte = (slot << 12) | PTE_SWAPPED | PTE_PAGEABLE | (e & 6);
-        page_free(phys);
-        page_outs++;
-        if (resident) resident--;
-        hand += 4096;
-        return 1;
+        v[k].pte = pte;
+        v[k].orig = e;
+        v[k].phys = phys[k] = e & ~0xFFFu;
+        v[k].tv = v[k].phys | PTE_TRANSIT | PTE_PAGEABLE | (e & 6);
+        *pte = v[k].tv;
+        k++;
     }
-    return 0;
+    if (!k) return 0;
+    vmm_flush_tlb();
+    slot = slot_run(k);
+    if (slot != ~0u) {
+        int ok = swap_io(slot, phys, k, 1);
+        got = evict_done(v, k, slot, ok);
+        if (!ok) trace("VMM: the paging file could not be written (slots %x-%x)\n", slot, slot + k - 1);
+    } else {
+        for (i = 0; i < k; i++) {
+            slot = slot_alloc();
+            if (slot == ~0u) {
+                if (*v[i].pte == v[i].tv) *v[i].pte = v[i].orig;
+                continue;
+            }
+            got += evict_done(&v[i], 1, slot, swap_io(slot, &phys[i], 1, 1));
+        }
+    }
+    vmm_flush_tlb();
+    return got;
 }
 
 /* a physical page for a client's pageable memory, paging another out if
@@ -218,7 +307,7 @@ static int evict_one(void)
 u32 pager_page(void)
 {
     if (nslots)
-        while (pages_free() <= RESERVE && evict_one())
+        while (pages_free() <= RESERVE && evict())
             ;
     return page_alloc();
 }
@@ -244,19 +333,48 @@ int pager_fault(u32 lin)
         resident++;
         return 1;
     }
-    if (!swap_io(e >> 12, phys_to_lin(phys), 0)) {
-        page_free(phys);
-        trace("VMM: the paging file could not be read (slot %x at %x)\n", e >> 12, lin);
-        return 0;
+    {
+        /* the pages after it that went out with it (the slots after its
+         * own) come back in the same DOS call */
+        u32 *ptes[WIN_MAX], ev[WIN_MAX], ph[WIN_MAX], k, n, i, slot = e >> 12;
+        ptes[0] = pte; ev[0] = e; ph[0] = phys;
+        for (n = 1; n < nwin; n++) {
+            u32 *q = pte_of(lin + n * 4096), f;
+            if (!q || ((lin + n * 4096) & ~0xFFFu) >= CLIENT_HI) break;
+            f = *q;
+            if ((f & (1 | PTE_SWAPPED | PTE_PAGEABLE | PTE_TRANSIT)) != (PTE_SWAPPED | PTE_PAGEABLE)
+                || (f >> 12) != slot + n) break;
+            ptes[n] = q; ev[n] = f;
+        }
+        for (k = 1; k < n; k++)
+            if ((ph[k] = page_alloc()) == 0) break;
+        n = k;
+        for (k = 1; k < n && *ptes[k] == ev[k]; k++)    /* (still out) */
+            ;
+        for (i = k; i < n; i++) page_free(ph[i]);
+        n = k;
+        if (*pte != e) {                /* read in meanwhile (a nested fault) */
+            for (i = 0; i < n; i++) page_free(ph[i]);
+            return 1;
+        }
+        if (!swap_io(slot, ph, n, 0)) {
+            for (i = 0; i < n; i++) page_free(ph[i]);
+            trace("VMM: the paging file could not be read (slot %x at %x)\n", slot, lin);
+            return 0;
+        }
+        for (i = n; i--; ) {             /* (the last first: the hint is the run's start) */
+            if (*ptes[i] != ev[i]) {    /* (in meanwhile) */
+                page_free(ph[i]);
+                continue;
+            }
+            /* the faulting page accessed, the others not: the clock takes
+             * those first if they are not used */
+            *ptes[i] = ph[i] | PTE_PAGEABLE | (ev[i] & 6) | 1 | (i ? 0 : 0x20);
+            slot_free(slot + i);
+            if ((++page_ins & 0x3FF) == 0) pager_progress();
+            resident++;
+        }
     }
-    if (*pte != e) {                    /* read in meanwhile (a nested fault) */
-        page_free(phys);
-        return 1;
-    }
-    *pte = phys | PTE_PAGEABLE | (e & 6) | 1;
-    slot_free(e >> 12);
-    page_ins++;
-    resident++;
     return 1;
 }
 
