@@ -17,3 +17,11 @@ Trace (boot the Win32s-installed tree with `tests/dropin.sh -p 386 -T TREE -3 -c
 ## Tests
 
 `win32s` part `tree` is strict (install, restart, Freecell) and fails until W32S.386 loads. Not added: a Virtual Memory dialog check (no existing case covers CPWIN386's 386 Enhanced dialog).
+
+## Test state (2026-11-27, HEAD of w16-vm)
+
+make test passes. Full boot test on w16-vm (before the last two pager commits): win32s, vmprobe, msvc, win386*, k386e, vsd, quicktime, sb16 ok. Failing on master too (not this branch's): cplclick co-tree, trails, lzexpand.
+
+Open regressions of this branch, still to fix:
+- **bigmem e128**: with new client pages mapped at once while half the memory is free (the last commit), TK63 (allocates until refused, past the memory) does not end: once memory is short every touch writes a page to the file through DOS. With every page coming on first touch instead (commit "0500h's unlocked pages..."), bigmem passed but holdbtn, taskman (tree 21-dosesc), vdmad and toolhelp (tree386 e) failed; with the current setting those pass in one run, taskman's tree part failed in another (974 pixels, also seen once before). Paging out is slow (one INT 21h write per 4 KB page through V86 DOS) and that is what makes TK63 too slow: write several pages per call, or have 0501h commit against the file without touching pages.
+- **holdbtn** failed in three runs here and passed on master, and passed in the last run here: timing; recheck.
