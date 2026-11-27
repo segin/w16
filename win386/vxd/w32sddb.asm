@@ -1,5 +1,5 @@
 ; w32sddb.asm - w16's W32S module, Win32s's device (ARCHITECTURE.md
-; 12.19): DDB, service table, entry points and dynamic links. DDB as
+; 12.20): DDB, service table, entry points and dynamic links. DDB as
 ; Win32s 1.30c's W32S.386's (readexe: "W32S", device 002Dh, 2.00, SDK
 ; 3.10, init order C0000000h, 2 services, a PM API procedure, no V86
 ; one), so that WIN32S16.DLL finds it by its ID.

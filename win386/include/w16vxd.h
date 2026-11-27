@@ -145,7 +145,7 @@ struct vdmad_link {
 };
 
 /* The VMM and w16's W32S (Win32s's device, 002Dh, win386/vxd/w32s.c;
- * ARCHITECTURE.md 12.19): the DDB's reference data points at a struct
+ * ARCHITECTURE.md 12.20): the DDB's reference data points at a struct
  * w32s_link, which the VMM fills in. What Microsoft's W32S.386 takes from
  * the VMM's internals (12.18) w16's device gets here instead: page tables
  * of its own in the page directory, physical pages for them and for the

@@ -777,7 +777,7 @@ u16 task_create(module FAR *m, u16 dg_sel, u16 dg_hnd, u16 hprev,
        Win32s's W32SYS.DLL starts WIN32S.EXE with a block of 2, nCmdShow
        and data of its own, which WIN32S.EXE's task finds in its PDB at
        60h-6Bh, and Win32s's 32-bit kernel loads the word at 62h as a
-       selector: ARCHITECTURE.md 12.19). Only as much as the block's
+       selector: ARCHITECTURE.md 12.20). Only as much as the block's
        selector reaches (WinExec's own block holds what DOS's child PSP
        has there after its two words). */
     if (show) {

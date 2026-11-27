@@ -154,6 +154,9 @@ struct vm {
     struct vm_cb *cb;       /* its control block: the handle */
     struct client_regs *client;
     u32 ptab_phys;          /* the page table of linear 0-4 MB (its first MB) */
+    u32 *own;               /* a DOS VM's private pages (physical, one per page of vm.c's private range): freed with it, whatever a device mapped there since */
+    u8 assigned[36];        /* memsvc.c: V86 pages assigned to a device in this VM only (_Assign_Device_V86_Pages) */
+    u8 pageable[32];        /* memsvc.c: _SetResetV86Pageable's pages */
     u32 kstack_top;         /* its ring-0 stack (the System VM: kstack) */
     u32 kjb[6];             /* its ring-0 context while another VM runs */
     int started;            /* has run (kjb holds its context) */
@@ -302,6 +305,8 @@ void vxd_exit(struct cregs *r);
 void vxd_link(struct tframe *f);
 int vxd_step(struct tframe *f);      /* [w16] vmmtrace=4 */
 void vxd_pm_fault(struct cregs *r, int vec, u32 err);
+int vxd_v86_fault(struct cregs *r, int vec, u32 err);  /* Hook_V86_Fault's chain: 1 if a device took it */
+int vxd_vmm_fault(void *frame, int vec);                 /* Hook_VMM_Fault's */
 int vxd_watch_fault(u32 vec, u32 *eflags, u32 eip);    /* [w16] vmmtrace=3 */   /* Hook_PM_Fault's chain, then DPMI */
 u32 vm_handle(void);
 u32 vxd_pm_api(u32 id);
@@ -418,6 +423,18 @@ void pager_meminfo(u32 *p);             /* DPMI 0500h */
 u32 pager_page(void);
 int pager_service(u32 dev, u32 svc, struct svcregs *s);
 void pager_stats(u32 *ins, u32 *outs, u32 *used);
+
+/* memsvc.c: the memory and page-hooking services (ARCHITECTURE.md 12.19) */
+int memsvc_service(u32 svc, struct svcregs *s);
+int memsvc_page_fault(u32 lin, u32 err, struct vm *in);   /* a hooked V86 page or a block's: 1 if mapped now */
+int memsvc_hooked(u32 page);                            /* a V86 page some device hooked */
+u32 vm_first_v86_page(void);                            /* vm.c */
+u32 vm_last_v86_page(void);
+u32 vm_global_v86_alloc(u32 n, u32 align, int inquire);
+u32 vm_temp_v86_area(u32 n);
+int vm_add_instance(u32 lin, u32 len);
+int vm_instance_range(u32 lin, u32 len);
+u32 dpmi_ldt_sel(u32 base, u32 limit);                  /* dpmi.c */                /* 1 if it holds instance data */
 
 /* io.c: I/O port trapping */
 void io_trap_bit(u32 port, int on);                 /* vmm.c: the TSS's I/O bitmap */

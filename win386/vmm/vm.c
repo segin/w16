@@ -148,6 +148,94 @@ void vm_sys_init(void)
     sysvm.slice = 2;
 }
 
+/* the first free arena from the free MCB the loader found (vm_snapshot
+ * takes it: the DOS VMs' private memory starts after it); 0 if none */
+static u32 free_arena(void)
+{
+    u32 mcb = (u32)info->free_mcb << 4, top = (u32)info->mem_top << 4;
+    while (mcb && mcb < top && *(u8 *)mcb == 'M' && *(u16 *)(mcb + 1))
+        mcb += ((u32)*(u16 *)(mcb + 3) + 1) << 4;
+    if (!mcb || mcb >= top || (*(u8 *)mcb != 'M' && *(u8 *)mcb != 'Z') || *(u16 *)(mcb + 1)) return 0;
+    return mcb;
+}
+
+/* _GetFirstV86Page, _GetLastV86Page (memsvc.c): the first page of a VM's
+ * own memory (during the devices' initialisation: where it will start),
+ * the last page of conventional memory */
+u32 vm_first_v86_page(void)
+{
+    u32 mcb;
+    if (priv_start) return priv_start >> 12;
+    mcb = free_arena();
+    return mcb ? (mcb + 0x10 + 0xFFF) >> 12 : 0;
+}
+
+u32 vm_last_v86_page(void)
+{
+    return (((u32)info->mem_top << 4) >> 12) - 1;
+}
+
+/* The global V86 data area (the DDK's _Allocate_Global_V86_Data_Area,
+ * during the devices' initialisation): n bytes at a multiple of align
+ * from the start of the free arena, which becomes a DOS memory block of
+ * the system's (owner 8, "SC") before a smaller free arena; the DOS VMs'
+ * own memory then starts later (the first V86 page moves, as the DDK
+ * says it may). Inquire: the most bytes that do not move the first V86
+ * page. The linear address (every VM sees it: below the first V86
+ * page), or 0 */
+u32 vm_global_v86_alloc(u32 n, u32 align, int inquire)
+{
+    u32 mcb = free_arena(), data, a, paras, left, first;
+    if (priv_start || !mcb || !align) return 0;
+    data = mcb + 0x10;
+    a = (data + align - 1) / align * align;
+    first = (data + 0xFFF) & ~0xFFFu;
+    if (inquire) return first >= a + 0x20 ? first - a - 0x20 : 0;
+    if (!n) return 0;
+    paras = (a + n - data + 15) >> 4;
+    left = *(u16 *)(mcb + 3);
+    if (left < paras + 1 + 0x200) return 0;     /* (DOS VMs need their memory) */
+    {
+        u8 *m = (u8 *)mcb, *f = (u8 *)(data + (paras << 4));
+        f[0] = m[0];
+        *(u16 *)(f + 1) = 0;
+        *(u16 *)(f + 3) = (u16)(left - paras - 1);
+        memset(f + 5, 0, 11);
+        m[0] = 'M';
+        *(u16 *)(m + 1) = 8;
+        *(u16 *)(m + 3) = (u16)paras;
+        memset(m + 5, 0, 11);
+        m[8] = 'S'; m[9] = 'C';
+    }
+    return a;
+}
+
+/* the temporary V86 data area (_Allocate_Temp_V86_Data_Area): the free
+ * arena's start, n bytes, zeroed; it stays the free arena's */
+u32 vm_temp_v86_area(u32 n)
+{
+    u32 mcb = free_arena();
+    if (priv_start || !mcb || ((u32)*(u16 *)(mcb + 3) << 4) < n) return 0;
+    memset((void *)(mcb + 0x10), 0, n);
+    return mcb + 0x10;
+}
+
+/* an instance data range before vm_snapshot (GVDAInstance); 0 after */
+int vm_add_instance(u32 lin, u32 len)
+{
+    if (inst_snap || n_irng == sizeof(irng) / sizeof(irng[0])) return 0;
+    add_range(lin, len);
+    return 1;
+}
+
+int vm_instance_range(u32 lin, u32 len)
+{
+    u32 i;
+    for (i = 0; i < n_irng; i++)
+        if (lin < irng[i].lin + irng[i].len && irng[i].lin < lin + len) return 1;
+    return 0;
+}
+
 /* the instance data new VMs start with: Windows' start (after the
  * devices' initialisation, before KRNL386 runs) */
 void vm_snapshot(void)
@@ -228,7 +316,7 @@ static u32 new_id(void)
 struct vm *vm_create(void)
 {
     struct vm *v, **pp;
-    u32 id = new_id(), *pt, *spt, a, p;
+    u32 id = new_id(), *pt, *spt, a, p, *own = NULL;
     u8 *cb, *inst, *kst;
     struct client_regs *cl;
 
@@ -276,11 +364,14 @@ struct vm *vm_create(void)
          * a box's buffer crosses a DMA page does not change with whatever
          * the VMM allocated before (it had, with the VMM's image size) */
         run = page_alloc_run_phase((priv_end - priv_start) >> 12, priv_start + 0xD000);
-        for (a = priv_start; a < priv_end; a += 4096) {
+        own = kmalloc(((priv_end - priv_start) >> 12) * 4 + 4);
+        for (a = priv_start; own && a < priv_end; a += 4096) {
             u32 pg = run ? run + (a - priv_start) : page_alloc();
             if (!pg) break;
             pt[a >> 12] = pg | 7;
+            own[(a - priv_start) >> 12] = pg;
         }
+        if (!own) a = priv_start;
     }
     if (!pt || a < priv_end) {
         if (pt) {
@@ -288,6 +379,7 @@ struct vm *vm_create(void)
             for (b = priv_start; b < a; b += 4096) page_free(pt[b >> 12] & ~0xFFFu);
             page_free(p);
         }
+        kfree(own);
         v->id = 0;
         v->cb = (struct vm_cb *)cb; v->client = cl; v->inst = inst;
         v->free_next = vm_pool;
@@ -299,6 +391,9 @@ struct vm *vm_create(void)
         v->gen = ++gens;
     }
     v->ptab_phys = p;
+    v->own = own;
+    /* every V86 page assigned in its own array (memsvc.c, as 3.1's) */
+    memset(v->assigned, 0xFF, 0x110 / 8);
     vmm_pdir_entry(HIGH_PDE(id), p | 7);
     v->cb->high_linear = HIGH_LIN(id);
     v->cb->client_pointer = (u32)cl;
@@ -415,16 +510,19 @@ void vm_set_message(struct vm *v, const char *msg, u32 n)
 void vm_destroy(struct vm *v)
 {
     struct vm **pp;
-    u32 *pt, a;
+    u32 a;
     if (v == &sysvm || v == cur_vm) return;
     for (pp = &vm_list; *pp && *pp != v; pp = &(*pp)->next)
         ;
     if (!*pp) return;
     *pp = v->next;
     dpmi_vm_destroy(v);                 /* (its host stack is in its page table) */
-    pt = (u32 *)phys_to_lin(v->ptab_phys);
+    /* its own pages: a page a device mapped over one of them since
+     * (_MapIntoV86) is the device's, and stays */
     for (a = priv_start; a < priv_end; a += 4096)
-        if (pt[a >> 12] & 1) page_free(pt[a >> 12] & ~0xFFFu);
+        page_free(v->own[(a - priv_start) >> 12]);
+    kfree(v->own);
+    v->own = NULL;
     vmm_pdir_entry(HIGH_PDE(v->id), 0);
     page_free(v->ptab_phys);
     io_vm_gone(v);

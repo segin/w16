@@ -58,7 +58,12 @@ static struct lock *locks[64];
 
 static u32 *pte_of(u32 lin)
 {
-    u32 pde = vmm_pdir_entry_get(lin >> 22);
+    u32 pde;
+    /* only the clients' memory is the pager's: a V86 page table's
+     * entries (a VM's first megabyte, its high linear window) keep the
+     * DDK's page type in the same three bits (memsvc.c) */
+    if (lin < CLIENT_LO || lin >= CLIENT_HI) return NULL;
+    pde = vmm_pdir_entry_get(lin >> 22);
     if (!(pde & 1)) return NULL;
     return (u32 *)phys_to_lin(pde & ~0xFFFu) + ((lin >> 12) & 0x3FF);
 }

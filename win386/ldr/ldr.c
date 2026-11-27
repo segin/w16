@@ -648,7 +648,7 @@ static void load_device(const char *name)
          * Setup writes the full path, C:\WINDOWS\SYSTEM\WIN32S\W32S.386)
          * loads w16's own W32S module from WIN386.EXE's W3 table instead
          * of Microsoft's file, which needs the internals of Microsoft's
-         * VMM (ARCHITECTURE.md 12.18, 12.19). [w16] W32SReplace=0 loads
+         * VMM (ARCHITECTURE.md 12.18, 12.20). [w16] W32SReplace=0 loads
          * the file as written. */
         unsigned n = strlen(name);
         if (n >= 8 && !stricmp(name + n - 8, "W32S.386")

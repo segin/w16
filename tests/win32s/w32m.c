@@ -1,7 +1,7 @@
 /*
  * W32M.EXE: a 32-bit (PE, Win32) probe of w16's own for Win32s's memory
  * and exception paths, the ones Win32s's 32-bit kernel serves through its
- * VxD (W32S.386, or w16's replacement: ARCHITECTURE.md 12.19). No C
+ * VxD (W32S.386, or w16's replacement: ARCHITECTURE.md 12.20). No C
  * runtime; only documented Win32 calls that Win32s provides (Win32 SDK,
  * "Win32s Programmer's Reference").
  *

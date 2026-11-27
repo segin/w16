@@ -1422,42 +1422,9 @@ static int sim_service(u32 svc, struct svcregs *s)
     return 1;
 }
 
-/* ---- the page services a third-party device needs (the DDK's
- * _PageAllocate, _PageFree, _PageGetSizeAddr, _PageLock, _PageUnLock,
- * _MapPhysToLinear; C convention: the arguments on the stack after the
- * return address). Every block is physically contiguous memory of the
- * VMM's window, present and zeroed, whatever the flags ask (the DDK lets
- * an unlocked block's pages come at first touch; its contents are
- * undefined without PageZeroInit); a handle is the VMM's record of it.
- * UNVERIFIED: Windows 3.1's handles and addresses, PG_VM and PG_HOOKED
- * pages mapped into a VM (here: the VMM's window, valid in every VM) ---- */
-#define PGH_MAGIC 0x48475057u           /* "WPGH" */
-#define PageUseAlign 0x00000002u
-struct pgh { u32 magic, lin, phys, n; };
-
-static u32 page_block_alloc(u32 n, u32 align, u32 max_phys, u32 *phys)
-{
-    struct pgh *h;
-    u32 p;
-    if (!n || n > 0x40000) return 0;
-    p = page_alloc_run(n, align, max_phys);
-    if (!p) return 0;
-    h = kmalloc(sizeof(*h));
-    if (!h) { u32 i; for (i = 0; i < n; i++) page_free(p + i * 4096); return 0; }
-    h->magic = PGH_MAGIC;
-    h->phys = p;
-    h->lin = phys_to_lin(p);
-    h->n = n;
-    if (phys) *phys = p;
-    return (u32)h;
-}
-
-static struct pgh *pgh_of(u32 h)
-{
-    struct pgh *p = (struct pgh *)h;
-    return h && p->magic == PGH_MAGIC ? p : NULL;
-}
-
+/* ---- _MapPhysToLinear here (the device-memory area after the window,
+ * which memsvc.c's blocks share: vmm_lin_reserve); the rest of the
+ * memory services are memsvc.c's ---- */
 /* physical memory outside the window (device memory) mapped for
  * _MapPhysToLinear, after the window's last page, each range once */
 static u32 physmap_next;
@@ -1499,9 +1466,23 @@ int vxd_watch_fault(u32 vec, u32 *eflags, u32 eip)
     return 0;
 }
 
+/* n pages of linear space in the device-memory area, for memsvc.c's
+ * blocks (their page tables made as their pages come); 0 if none left */
+u32 vmm_lin_reserve(u32 n)
+{
+    u32 lin;
+    if (!physmap_next) physmap_next = W386_VMM_LIN + ((info->xms_size + 0x3FFFFFu) & ~0x3FFFFFu);
+    lin = physmap_next;
+    if (!n || n > 0x40000 || lin + n * 4096 > W386_VMM_LIN + W386_WINDOW_MAX - ((info->xms_size + 0x3FFFFFu) & ~0x3FFFFFu)
+        || lin + n * 4096 < lin) return 0;
+    physmap_next += n * 4096;
+    return lin;
+}
+
 static u32 map_phys(u32 phys, u32 bytes)
 {
     u32 first = phys & ~0xFFFu, n = ((phys & 0xFFF) + bytes + 0xFFF) >> 12, i, lin;
+    if (bytes && phys + bytes - 1 < phys) return 0xFFFFFFFFu;   /* past 4 GB (3.1: -1, VXH) */
     if (!bytes) n = 1;
     if (watch_on && !watch_lin && first >= info->xms_phys
         && phys + bytes <= info->xms_phys + info->xms_size) {
@@ -1533,23 +1514,6 @@ static u32 map_phys(u32 phys, u32 bytes)
     physmaps[nphysmaps++].lin = lin;
     physmap_next += n * 4096;
     return lin + (phys & 0xFFF);
-}
-
-/* the system nul page (_GetNulPageHandle): one zeroed page, mapped for
- * every page of a range a device gives back. Its handle is no block's
- * (_PageFree refuses it) */
-static struct pgh nul_pgh;
-
-static u32 nul_page(void)
-{
-    if (!nul_pgh.phys) nul_pgh.phys = page_alloc();
-    return nul_pgh.phys;
-}
-
-static struct pgh *nul_handle(void)
-{
-    nul_page();
-    return &nul_pgh;
 }
 
 /* the heap (the DDK's _HeapAllocate, _HeapReAllocate, _HeapFree,
@@ -1598,79 +1562,9 @@ static int heap_service(u32 svc, struct svcregs *s)
 static int page_service(u32 svc, struct svcregs *s)
 {
     u32 *arg = (u32 *)(s + 1) + 1;      /* after the return address */
-    struct pgh *h;
     if (heap_service(svc, s)) return 1;
-    switch (svc) {
-    case 0x53: {                        /* _PageAllocate(nPages, pType, VM, AlignMask, minPhys, maxPhys, PhysAddr, flags) */
-        u32 flags = arg[7], align = 1, maxp = 0, phys = 0, hh;
-        if (flags & PageUseAlign) {
-            align = arg[3] + 1;
-            maxp = arg[5] ? arg[5] << 12 : 0;
-        }
-        hh = page_block_alloc(arg[0], align, maxp, &phys);
-        if (hh && (flags & PageUseAlign) && arg[4] && phys < arg[4] << 12) {
-            /* below minPhys: the window starts above it in practice */
-            h = pgh_of(hh);
-            { u32 i; for (i = 0; i < h->n; i++) page_free(h->phys + i * 4096); }
-            kfree(h);
-            hh = 0;
-        }
-        if (hh && (flags & PageUseAlign) && arg[6]) *(u32 *)arg[6] = phys;
-        s->eax = hh;
-        s->edx = hh ? pgh_of(hh)->lin : 0;
-        if (info->trace == 1)
-            trace("VMM: _PageAllocate(%x, %x, %x, %x, %x, %x, %x, %x) by %s: %x %x\n", arg[0], arg[1], arg[2],
-                  arg[3], arg[4], arg[5], arg[6], arg[7], vxd_owner(*(u32 *)(s + 1)), s->eax, s->edx);
-        return 1;
-    }
-    case 0x55:                          /* _PageFree(hMem, flags) */
-        h = pgh_of(arg[0]);
-        if (!h) { s->eax = 0; return 1; }
-        { u32 i; for (i = 0; i < h->n; i++) page_free(h->phys + i * 4096); }
-        h->magic = 0;
-        kfree(h);
-        s->eax = 1;
-        return 1;
-    case 0x58:                          /* _PageGetSizeAddr(hMem, flags) -> EAX pages, EDX address */
-        h = pgh_of(arg[0]);
-        s->eax = h ? h->n : 0;
-        s->edx = h ? h->lin : 0;
-        return 1;
-    case 0x56:                          /* _PageLock(hMem, nPages, PageOff, flags) */
-    case 0x57:                          /* _PageUnLock: always present here */
-        h = pgh_of(arg[0]);
-        s->eax = h && arg[2] + arg[1] <= h->n;
-        return 1;
-    case 0x5D:                          /* _MapIntoV86(hMem, VM, VMLinPgNum, nPages, PageOff, flags) */
-    case 0x5E: {                        /* _PhysIntoV86(PhysPage, VM, VMLinPgNum, nPages, flags) */
-        /* the pages into the VM's first megabyte (its page table, which
-         * its high linear window shares): pages 10h-10Fh, the DDK's range.
-         * CVW1.386 maps a 2-page block of its own at B8h in the System VM
-         * when CVW starts (its text screen). UNVERIFIED: what Windows
-         * 3.1's VDD does with such pages when the display changes hands */
-        struct vm *v = vm_of(arg[1]);
-        u32 pg = arg[2], n = arg[3], first, i, *pt;
-        if (svc == 0x5D) {
-            h = arg[0] == (u32)nul_handle() ? NULL : pgh_of(arg[0]);
-            if (arg[0] != (u32)nul_handle() && (!h || arg[4] + n > h->n)) { s->eax = 0; return 1; }
-            first = h ? h->phys + arg[4] * 4096 : 0;
-        } else
-            first = arg[0] << 12;
-        if (!v || pg < 0x10 || pg + n > 0x110 || pg + n < pg) { s->eax = 0; return 1; }
-        pt = (u32 *)phys_to_lin(v->ptab_phys);
-        for (i = 0; i < n; i++)
-            pt[pg + i] = (first ? first + i * 4096 : nul_page()) | 7;
-        set_cr3(get_cr3());
-        if (info->trace == 1)
-            trace("VMM: %s(%x, VM %d, %x, %x) by %s\n", svc == 0x5D ? "_MapIntoV86" : "_PhysIntoV86",
-                  arg[0], v->id, pg, n, vxd_owner(*(u32 *)(s + 1)));
-        s->eax = 1;
-        return 1;
-    }
-    case 0x6A:                          /* _GetNulPageHandle -> EAX */
-        s->eax = (u32)nul_handle();
-        return 1;
-    case 0x6C:                          /* _MapPhysToLinear(PhysAddr, nBytes, flags) */
+    if (memsvc_service(svc, s)) return 1;
+    if (svc == 0x6C) {                  /* _MapPhysToLinear(PhysAddr, nBytes, flags) */
         s->eax = map_phys(arg[0], arg[1]);
         if (info->trace == 1)
             trace("VMM: _MapPhysToLinear(%x, %x, %x) by %s: %x\n", arg[0], arg[1], arg[2],
@@ -1740,12 +1634,19 @@ static int v86hook_service(u32 svc, struct svcregs *s)
  * W32S.386 (Win32s 1.30c) hooks protected-mode faults at
  * Sys_Critical_Init. UNVERIFIED: whether Windows 3.1 hands a device
  * hooking at Sys_Critical_Init a previous handler (the DDK says its
- * handlers are installed later); V86 and VMM faults' hooks are kept and
- * handed back, but w16 does not call them yet (traced once) ---- */
-#define NFAULTS 0x50
-#define FAULT_DEV 0x7F16                /* w16's own: the default handlers' slots */
+ * handlers are installed later). V86 faults go the same way (vxd_v86_fault:
+ * after the breakpoints, INT n, HLT and I/O trapping; its chain's end
+ * reflects the fault or ends the VM as before), and the VMM's own faults
+ * (vxd_vmm_fault: after the pager and the hooked pages, before w16 stops
+ * with "exception ...") ---- */
+#define NFAULTS 0x60                    /* 3.1 took 50h too (VXH), past the DDK's 4Fh */
+#define FAULT_DEV 0x7F16                /* w16's own: the default handlers' slots (PM) */
+#define FAULT_DEV_V86 0x7F17            /* (V86) */
+#define FAULT_DEV_VMM 0x7F18            /* (the VMM's own faults) */
 static u32 pm_fault_hook[NFAULTS], v86_fault_hook[NFAULTS], vmm_fault_hook[NFAULTS];
 static u32 *fault_default;              /* FAULT_DEV's slots: the default per fault */
+static u32 *fault_default_v86, *fault_default_vmm;
+static int fault_reached_default;       /* a V86 or VMM chain ended at w16's own handling */
 static u32 fault_err;                   /* the error code of the fault going down the chain */
 
 static int fault_service(u32 svc, struct svcregs *s)
@@ -1758,13 +1659,21 @@ static int fault_service(u32 svc, struct svcregs *s)
     default: return 0;
     }
     if (s->eax == 2 || s->eax >= NFAULTS || !s->esi) { s->eflags |= EFL_CF; return 1; }
-    if (!fault_default) fault_default = make_slots(FAULT_DEV, NFAULTS);
+    if (!fault_default) {
+        fault_default = make_slots(FAULT_DEV, NFAULTS);
+        fault_default_v86 = make_slots(FAULT_DEV_V86, NFAULTS);
+        fault_default_vmm = make_slots(FAULT_DEV_VMM, NFAULTS);
+    }
     if (info->trace == 1)
         trace("VMM: %s fault %x hooked by %s: %x\n", svc == 0x7F ? "V86" : svc == 0x80 ? "PM" : "VMM",
               s->eax, vxd_owner(s->esi), s->esi);
     {
         u32 prev = t[s->eax];
-        if (!prev && svc == 0x80) prev = fault_default[s->eax];
+        /* the first one hooked gets w16's own handling as its previous
+         * (3.1 handed a device hooking V86 fault 06h at Device_Init a
+         * previous handler, VXH) */
+        if (!prev) prev = svc == 0x80 ? fault_default[s->eax]
+                        : svc == 0x7F ? fault_default_v86[s->eax] : fault_default_vmm[s->eax];
         t[s->eax] = s->esi;
         s->esi = prev;
     }
@@ -1803,6 +1712,56 @@ static void fault_default_call(u32 vec, struct svcregs *s)
     client_store(&t, c);
     dpmi_exception(&t, vec, fault_err);
     client_fill(c, &t);
+}
+
+/* a V86 fault w16's own handling did not take (an invalid opcode that is
+ * no breakpoint, a #GP or page fault that would end the VM, ...): the
+ * devices' handlers (Hook_V86_Fault), EBX the VM, EBP its client
+ * registers. 1 if one of them took it (r has what it left); 0 if the
+ * chain ended at w16's own handling (fault_reached_default) or there is
+ * none: the caller does what it did without hooks */
+int vxd_v86_fault(struct cregs *r, int vec, u32 err)
+{
+    struct client_regs *c, outer;
+    struct svcregs s;
+    u32 saved_err = fault_err;
+    int saved = fault_reached_default, took;
+    if (vec >= NFAULTS || !v86_fault_hook[vec]) return 0;
+    c = cur_vm->client;
+    outer = *c;
+    client_fill(c, r);
+    memset(&s, 0, sizeof(s));
+    s.ebx = VMH(cur_vm);
+    s.ebp = (u32)c;
+    fault_err = err;
+    fault_reached_default = 0;
+    vmm_call_proc(v86_fault_hook[vec], &s);
+    took = !fault_reached_default;
+    fault_reached_default = saved;
+    fault_err = saved_err;
+    if (took) client_store(r, c);
+    *c = outer;
+    return took;
+}
+
+/* a fault in the VMM's or a device's own code that w16 did not take (a
+ * page fault not the pager's or a hooked page's): the devices' handlers
+ * (Hook_VMM_Fault), EBX the current VM, EBP the trap frame (w16's, not
+ * 3.1's re-entrant frame: UNVERIFIED that a device reads it). 1 if one
+ * took it: the instruction runs again */
+int vxd_vmm_fault(void *frame, int vec)
+{
+    struct svcregs s;
+    int saved = fault_reached_default, took;
+    if (vec >= NFAULTS || !vmm_fault_hook[vec]) return 0;
+    memset(&s, 0, sizeof(s));
+    s.ebx = VMH(cur_vm);
+    s.ebp = (u32)frame;
+    fault_reached_default = 0;
+    vmm_call_proc(vmm_fault_hook[vec], &s);
+    took = !fault_reached_default;
+    fault_reached_default = saved;
+    return took;
 }
 
 /* ---- the profile services (SYSTEM.INI): Get_Profile_String (B3h),
@@ -1970,6 +1929,7 @@ void __cdecl svc_dispatch(struct svcregs *s)
     if (dev == 1 && v86hook_service(svc, s)) return;
     if (dev == 1 && fault_service(svc, s)) return;
     if (dev == FAULT_DEV && svc < NFAULTS) { fault_default_call(svc, s); return; }
+    if ((dev == FAULT_DEV_V86 || dev == FAULT_DEV_VMM) && svc < NFAULTS) { fault_reached_default = 1; return; }
     if (dev == 5) { vtd_service(svc, s); return; }
     if (dev == 0x06) { v86mm_service(svc, s); return; }
     if (dev == 0x17) {

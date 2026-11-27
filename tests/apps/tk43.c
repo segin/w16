@@ -129,7 +129,7 @@ int __cdecl tmain(void)
     {
         /* GetExePtr (KERNEL.133): Win32s's WIN32S16.DLL takes the TDB of
            a program's task from its DX after GetExePtr(hInstance) and
-           reads the module name there (TDB F2h); ARCHITECTURE.md 12.19 */
+           reads the module name there (TDB F2h); ARCHITECTURE.md 12.20 */
         HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, 100);
         task = (WORD)GetCurrentTask();
         hmod = (WORD)GetModuleHandle("TK43");

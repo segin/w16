@@ -1429,7 +1429,7 @@ FARSETOWNERX:
 ; (an hModule), DX and BX kept; for a task handle AX and CX 0, DX and ES
 ; the task (TK43 on 3.1's KRNL386). Win32s's WIN32S16.DLL takes ES after
 ; GetExePtr(hInstance) as the program's TDB and reads its module name
-; at F2h (ARCHITECTURE.md 12.19).
+; at F2h (ARCHITECTURE.md 12.20).
 extern GETEXEPTRC
 extern _task_of_handle          ; u16 __cdecl task_of_handle(u16)
 global GETEXEPTR

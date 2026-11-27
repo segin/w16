@@ -2,7 +2,7 @@
 
 Branch: the agent worktree branched from `w16-w32s2` with master merged.
 Spec: ARCHITECTURE.md 12.18 (Microsoft's W32S.386 on w16's VMM: stopped),
-12.19 (W32S.386's device API, observed, and w16's replacement).
+12.20 (W32S.386's device API, observed, and w16's replacement).
 
 ## Roadmap (the user's)
 
@@ -30,7 +30,7 @@ Spec: ARCHITECTURE.md 12.18 (Microsoft's W32S.386 on w16's VMM: stopped),
 Done:
 - VXY's API/fault/PTE/service logging (committed). Logs of Freecell on 3.1
   (all Microsoft) and on 3.1 with w16's KRNL386 were the basis of the API
-  map (12.19).
+  map (12.20).
 - KERNEL fixes found that way (committed, "KERNEL: the PDB's first FCB
   ..."): the PDB's 5Ch-6Bh is LoadModule's 16-byte lpCmdShow block (W32SKRNL
   loads PDB 62h as a selector); GetExePtr's registers as 3.1's (ES the

@@ -1,6 +1,6 @@
 /* w32s.c - w16's W32S, Win32s's device (002Dh): a replacement for Win32s
  * 1.30c's W32S.386 on w16's WIN386, a module of WIN386.EXE's W3 table
- * (ARCHITECTURE.md 12.19). The loader loads it for a SYSTEM.INI device=
+ * (ARCHITECTURE.md 12.20). The loader loads it for a SYSTEM.INI device=
  * line naming W32S.386 ([w16] W32SReplace=0: Microsoft's file instead).
  *
  * Win32s's 16-bit side (WIN32S16.DLL) and its 32-bit kernel (W32SKRNL.DLL,
@@ -9,7 +9,7 @@
  * takes and gives was observed under Windows 3.1 with Microsoft's
  * W32S.386 (VXY.386's API, page table, service and fault logs; black box:
  * registers, memory and the VMM-visible effects, never its code) and is
- * listed in ARCHITECTURE.md 12.19. This file answers that contract with
+ * listed in ARCHITECTURE.md 12.20. This file answers that contract with
  * w16's own memory management:
  *   - Win32 memory lives in page tables of the device's own, in page
  *     directory entries past the VMM's window (the VMM's link, w16vxd.h),

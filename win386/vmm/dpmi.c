@@ -156,6 +156,18 @@ static u32 ldt_alloc(u32 n)
     }
 }
 
+/* a data selector of the current VM's LDT for base and limit (memsvc.c's
+ * Map_Lin_To_VM_Addr); 0 if none is free */
+u32 dpmi_ldt_sel(u32 base, u32 limit)
+{
+    u32 sel = ldt_alloc(1);
+    if (sel) {
+        if (limit > 0xFFFFF) set_desc(ldt_desc(sel), base, limit >> 12, 0xF2, 0x8);
+        else set_desc(ldt_desc(sel), base, limit, 0xF2, 0);
+    }
+    return sel;
+}
+
 static void ldt_free(u32 sel)
 {
     memset(ldt + (sel >> 3) * 8, 0, 8);
