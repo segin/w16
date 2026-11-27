@@ -411,6 +411,7 @@ void vm_destroy(struct vm *v)
         ;
     if (!*pp) return;
     *pp = v->next;
+    dpmi_vm_destroy(v);                 /* (its host stack is in its page table) */
     pt = (u32 *)phys_to_lin(v->ptab_phys);
     for (a = priv_start; a < priv_end; a += 4096)
         if (pt[a >> 12] & 1) page_free(pt[a >> 12] & ~0xFFFu);
@@ -499,7 +500,7 @@ static void status_of(struct vm *v)
     if (v->background || v == &sysvm) st |= VMSTAT_BACKGROUND;
     if (v->suspended || v->susp_count) st |= VMSTAT_SUSPENDED;
     if (v->ended) st |= VMSTAT_NOT_EXEC;
-    if (v == &sysvm && sysvm.pm) {
+    if (v->pm) {
         st |= VMSTAT_PM_APP;
         if (v == cur_vm ? !(cur_vm->r.eflags & EFL_VM) : !(v->r.eflags & EFL_VM)) st |= VMSTAT_PM_EXEC;
     }
@@ -716,7 +717,13 @@ static void close_step(struct cregs *r)
 {
     struct vm *v = cur_vm;
     u16 psp;
-    if (v->ended || !(r->eflags & EFL_VM)) return;
+    if (v->ended) return;
+    if (!(r->eflags & EFL_VM)) {
+        /* a DPMI client in protected mode, not inside a call to V86 code:
+         * its INT 21h 4CFFh from there (dpmi.c), then on in V86 mode */
+        if (v->pm && !exec_depth()) dpmi_close(r);
+        return;
+    }
     if (info->sda_lin) psp = *(u16 *)(info->sda_lin + 0x10);
     else {                                  /* (a DOS without 5D06h: INT 21h 51h, in the VM) */
         struct cregs t;

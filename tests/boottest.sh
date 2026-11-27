@@ -216,6 +216,11 @@
 #              and DOSBox's own DOS, w16's WIN386 on 3.1 and the tree alone
 #              against Microsoft's WIN386 (w16 lost the 9FFFh MCB and
 #              DOSBox-X stopped with "Corrupt MCB chain")
+#   win386dpmi DPMI in DOS boxes (DPMIPRB, tests/dpmirun.sh; ARCHITECTURE.md
+#              12.16): a raw 16- and 32-bit client's every answer, a
+#              nested client, two boxes' clients at once and the end of a
+#              box on a fault no handler takes, under w16's WIN386 as under
+#              Microsoft's; the probe's lines on the tree alone as well
 #   win386pifwin  plain DOSBox, the tree alone, WIN /3: a PIF that starts
 #              its program windowed (made at run time with tools/mkpif.py),
 #              then VER typed: the window shows the text (not black), as
@@ -1062,7 +1067,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad win386vxc msvc bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb win386dpmi vsd vdmad win386vxc msvc bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2200,6 +2205,25 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   win386mcb: the MCB chain, UMB link and strategies in a DOS box as under Microsoft's WIN386 (DOSBox-X, DOSBox, the tree)"
         else echo "FAIL win386mcb: $r"; fails=$((fails + 1)); fi ;;
+    win386dpmi)
+        # the user's report (2026-11-26): Visual C++ 1.52's CL.EXE stopped
+        # in a w16 box with "Phar Lap err 35": w16's boxes had no DPMI
+        # host. DPMIPRB's logs (tests/dos/dpmiprb.asm) under w16's WIN386,
+        # and on the tree alone, as under Microsoft's (tools/dpmicmp.sh)
+        for k in p g c; do
+            refrun win386dpmi-ref$k win386dpmi \
+                sh "$root/tests/dpmirun.sh" "$out/win386dpmi-ref$k" $k ms x "$root/build/dos/DPMIPRB.COM" "$root/tests/dpmirun.sh" &
+            sh "$root/tests/dpmirun.sh" "$out/win386dpmi-w16$k" $k w16 > "$out/win386dpmi-w16$k.txt" 2>&1 &
+        done
+        sh "$root/tests/dpmirun.sh" "$out/win386dpmi-treep" p tree > "$out/win386dpmi-treep.txt" 2>&1 &
+        wait
+        r=ok
+        for k in w16p:refp w16g:refg w16c:refc treep:refp; do
+            m=$(sh "$root/tools/dpmicmp.sh" "$(printf '%s' "${k%:*}" | sed 's/^.*\(.\)$/\1/')" \
+                "$out/win386dpmi-${k#*:}" "$out/win386dpmi-${k%:*}") || { r="${k%:*}: ${m#FAIL }"; break; }
+        done
+        if [ "$r" = ok ]; then echo "ok   win386dpmi: DPMI clients in DOS boxes (16- and 32-bit, nested, two boxes, a fault) as under Microsoft's WIN386; the tree too"
+        else echo "FAIL win386dpmi: $r"; fails=$((fails + 1)); fi ;;
     cmdprompt)
         # Main's first item runs CMD.PIF (assets/CMD.PIF: COMMAND.COM,
         # windowed in 386 Enhanced mode; Standard mode's WINOLDAP reads its

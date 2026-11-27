@@ -39,6 +39,12 @@ typedef unsigned long  w_u32;
 #define W386_NV86API    16
 #define W386_BP_XMS     24      /* the DOS VMs' XMS driver entry (INT 2Fh 4310h: v86mmgr.c) */
 #define W386_BP_NOEMS   25      /* a DOS VM's INT 67h when it has no EMS: an IRET (v86mmgr.c) */
+/* the DPMI host's real-mode entries besides the mode switch, one byte for
+ * all: which is reached tells the segment, info->ldr_cs - 1 - n (dpmi.c) */
+#define W386_BP_DPMIRM  26
+#define W386_DPMIRM_RAW  0      /* 0306h: real to protected mode */
+#define W386_DPMIRM_SAVE 1      /* 0305h: save/restore state (a far return) */
+#define W386_DPMIRM_CB   2      /* 2..: the real-mode callbacks (0303h) */
 
 /* pm_go returns this when the VMM ended Windows before the System VM ran,
  * with its message (CR LF lines) in the fatal_lin buffer */

@@ -16,11 +16,12 @@
 
 extern int dpmi_verbose;
 
-static u32 dta_sel, dta_off;            /* the program's DTA (1Ah) */
-static int dta_set;
+#define dta_sel (cur_vm->dp.dta_sel)    /* the program's DTA (1Ah) */
+#define dta_off (cur_vm->dp.dta_off)
+#define dta_set (cur_vm->dp.dta_set)
 
 #define XB      (xbuf_lin())
-#define XSEG    (info->xbuf_seg)
+#define XSEG    (xbuf_seg())
 
 /* Can V86 DOS address sel:off as it is? (conventional memory) */
 static int direct(u32 sel)
@@ -73,7 +74,7 @@ static int copy_in_str(u32 sel, u32 off, u32 at)
     for (;;) {
         u8 c;
         if (n > 0) {
-            if (!sysvm.client32 && ((off + n) & 0xFFFF) == 0) {
+            if (!cur_vm->client32 && ((off + n) & 0xFFFF) == 0) {
                 s = cl_ptr(sel, 0, 1, 0);
                 if (!s) return -1;
                 lin = (u32)s;
@@ -96,7 +97,7 @@ static int copy_in_str(u32 sel, u32 off, u32 at)
 static u8 *cptr(struct cregs *r, u32 sel, u32 off, u32 n, int write)
 {
     (void)r;
-    if (!sysvm.client32 && (off & 0xFFFF) + n > 0x10000) return NULL;
+    if (!cur_vm->client32 && (off & 0xFFFF) + n > 0x10000) return NULL;
     return cl_ptr(sel, off, n, write);
 }
 
@@ -130,23 +131,34 @@ void dos_pm(struct cregs *r)
 
     switch (ah) {
     case 0x25:                          /* set the protected-mode vector */
-        sysvm.pmvec_sel[al] = r->ds;
-        sysvm.pmvec_off[al] = sysvm.client32 ? r->edx : DX(r);
+        cur_vm->pmvec_sel[al] = r->ds;
+        cur_vm->pmvec_off[al] = cur_vm->client32 ? r->edx : DX(r);
         return;
     case 0x35:                          /* get it */
-        r->es = sysvm.pmvec_sel[al];
-        if (sysvm.client32) r->ebx = sysvm.pmvec_off[al];
-        else SETW(r->ebx, sysvm.pmvec_off[al]);
+        r->es = cur_vm->pmvec_sel[al];
+        if (cur_vm->client32) r->ebx = cur_vm->pmvec_off[al];
+        else SETW(r->ebx, cur_vm->pmvec_off[al]);
         return;
     case 0x1A:                          /* set DTA: the program's, kept here */
         dta_sel = r->ds;
-        dta_off = sysvm.client32 ? r->edx : DX(r);
+        dta_off = cur_vm->client32 ? r->edx : DX(r);
         dta_set = 1;
         return;
     case 0x2F:
-        if (!dta_set) break;            /* DOS's own (the PSP's) until set */
+        if (!dta_set) {                 /* DOS's own (the PSP's) until set */
+            /* in a DOS box as a selector (Windows 3.1, DPMIPRB: the PSP's,
+             * 9Fh, though the caller's ES mapped the same segment) */
+            u32 seg, off, sel;
+            if (cur_vm == &sysvm) break;
+            dos_dta(&seg, &off);
+            sel = seg_to_sel(seg, 0xF2);
+            if (!sel) break;
+            r->es = sel;
+            if (cur_vm->client32) r->ebx = off; else SETW(r->ebx, off);
+            return;
+        }
         r->es = dta_sel;
-        if (sysvm.client32) r->ebx = dta_off;
+        if (cur_vm->client32) r->ebx = dta_off;
         else SETW(r->ebx, dta_off);
         return;
     case 0x09: {                        /* print a $-terminated string */
