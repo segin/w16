@@ -1,0 +1,3 @@
+# TK76.EXE (tests/apps/tk76.c): KERNEL's SETERRORMODE imported by name
+@tests/apps/app.lnk
+import TK76SEM KERNEL.SETERRORMODE

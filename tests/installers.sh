@@ -19,16 +19,19 @@
 #   W4              Entertainment Pack 4: W4\DISK1, W4\DISK2
 #   JOHNNY          Screen Antics (Johnny Castaway): Sierra's SETUP.EXE,
 #                   INSTALL.EX$, INSTALL.INS ...
-# (WinPlay3 2.3 beta 5's WP3V23B5.EXE, a self-loading program, has no
-# script yet: Blinker's loader still stops on w16, ARCHITECTURE.md 9.12.)
+#   WP3             WinPlay3 2.3 beta 5's self-extracting installer,
+#                   WP3V23B5.EXE (a self-loading program: Blinker's loader)
+#   MP52            an MPEG player beta's, MP52BETA.EXE (the same loader)
 # What each fixed (ARCHITECTURE.md 9.12): WEP1-3 zero bytes free
 # (FindResource through a name table), WEP2-3 hanging at 0% (GetMessage
 # with a filter), BW and W4 deaf to Return (a dialog's focus; W4 also
-# COMMDLG.DLL's version), JOHNNY's cancel loop (the name table too).
+# COMMDLG.DLL's version), JOHNNY's cancel loop (the name table too), WP3
+# and MP52 not starting (self-loading programs; EntryAddrProc's registers).
 #
 # Each script's "; dest DIR" line names the directory the installer
 # fills and "; expect FILE ..." files that must be there afterwards
-# (paths under C:\). PASS/FAIL per installer and per check; with the
+# (paths under C:\); "; anysize NAME ..." files under DIR compared by name
+# only (a log that holds paths of the Windows directory). PASS/FAIL per installer and per check; with the
 # reference (.tools/ref/win31/cdrive), also the list of files (names and
 # sizes) under DIR on w16 against 3.1's. Results in OUTDIR/NAME-w16 and
 # NAME-ref (inputrun.sh's: shots, the scratch drive).
@@ -37,7 +40,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 src=${W16_INSTDIR:-$HOME/Downloads/w16-installers}
 [ $# -ge 1 ] || { sed -n '2,/^set -u/p' "$0" | sed '$d'; exit 2; }
 out=$1; shift
-names=${*:-WEP1 WEP2 WEP3 BW W4 JOHNNY}
+names=${*:-WEP1 WEP2 WEP3 BW W4 JOHNNY WP3 MP52}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 ref=
@@ -64,11 +67,14 @@ EOF
         "$root/tests/scripts/installers/$n.txt" "$d" -c 'WIN /3' "$@" > "$d.txt" 2>&1
 }
 
-# NAME SIDE DIR: "size name" lines of the files under DIR on that side's drive
+# NAME SIDE DIR [ANYSIZE...]: "size name" lines of the files under DIR on
+# that side's drive (size "*" for the ANYSIZE names)
 listing() {
-    c=$out/$1-$2/work/c
-    [ -d "$c/$3" ] || return 0
-    (cd "$c/$3" && find . -type f -printf '%s %p\n' | tr 'a-z' 'A-Z' | sort -k2)
+    c=$out/$1-$2/work/c d=$3
+    shift 3
+    [ -d "$c/$d" ] || return 0
+    (cd "$c/$d" && find . -type f -printf '%s %p\n' | tr 'a-z' 'A-Z' | sort -k2) |
+        awk -v any=" $* " '{ n = $2; sub(/.*\//, "", n); if (index(any, " " n " ")) $1 = "*"; print }'
 }
 
 for n in $names; do
@@ -76,6 +82,7 @@ for n in $names; do
     [ -f "$s" ] || { echo "FAIL $n: no script $s"; fails=$((fails + 1)); continue; }
     [ -d "$src/$n" ] || { echo "skip $n: no $src/$n"; continue; }
     dest=$(sed -n 's/^; dest //p' "$s" | tr '\\' /)
+    anysize=$(sed -n 's/^; anysize //p' "$s" | tr 'a-z' 'A-Z')
     run_one "$n" w16 &
     [ -n "$ref" ] && run_one "$n" ref &
     wait
@@ -84,8 +91,10 @@ for n in $names; do
         [ -f "$out/$n-w16/work/c/$f" ] || { r="$f missing"; break; }
     done
     if [ "$r" = ok ] && [ -n "$ref" ]; then
-        listing "$n" ref "$dest" > "$out/$n-ref.files"
-        listing "$n" w16 "$dest" > "$out/$n-w16.files"
+        # shellcheck disable=SC2086
+        listing "$n" ref "$dest" $anysize > "$out/$n-ref.files"
+        # shellcheck disable=SC2086
+        listing "$n" w16 "$dest" $anysize > "$out/$n-w16.files"
         if [ ! -s "$out/$n-ref.files" ]; then
             r="3.1 installed nothing under $dest ($out/$n-ref)"
         elif ! diff "$out/$n-ref.files" "$out/$n-w16.files" > "$out/$n.diff"; then

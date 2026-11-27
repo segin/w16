@@ -441,7 +441,24 @@ int mod_find_name(module FAR *m, const u8 FAR *pname, u16 *ordinal)
     }
     if (find_in_table(MK_FP(m->ne_sel, NE_HDR(m)->resname_off), fo_name, ordinal))
         return 1;
-    return m->nonres_sel && find_in_table(MK_FP(m->nonres_sel, 0), fo_name, ordinal);
+    if (m->nonres_sel)
+        return find_in_table(MK_FP(m->nonres_sel, 0), fo_name, ordinal);
+    /* KERNEL's own non-resident names (SetErrorMode, 107; GetModuleUsage,
+       48 ...), which its module table, built by the bootstrap, does not
+       hold: read from KRNL286.EXE or KRNL386.EXE for the lookup. Observed
+       on Windows 3.1 (tests/apps/tk76.c): GetProcAddress finds them by
+       name, and a module imports them by name. w16 found none: Win32s
+       1.30c's Setup (Microsoft Test Driver) stopped at once with
+       "Bindtime error: 'SETERRORMODE' not found in specified library". */
+    {
+        u16 sel = loader_read_nonres(m);
+        int r;
+        if (!sel)
+            return 0;
+        r = find_in_table(MK_FP(sel, 0), fo_name, ordinal);
+        GlobalFree(sel);
+        return r;
+    }
 }
 
 /* The module name a file name stands for: the part after the last path

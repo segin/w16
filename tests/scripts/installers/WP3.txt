@@ -1,0 +1,39 @@
+; WinPlay3 2.3 beta 5 (tests/installers.sh): WP3V23B5.EXE, a self-extracting
+; program whose segments Blinker's self-loader loads (InstallShield): Yes to
+; "install WinPlay3?", a pause while it prepares its wizard, then Next on
+; Welcome, Yes to the licence, Next on the destination and the program
+; folder, Next to start copying, Finish. Its uninstall log (DEISL1.ISU,
+; encoded) is 8 bytes shorter on w16's tree, probably the Windows
+; directory's path twice (C:\W16 against C:\WINDOWS): its size is not
+; compared
+; dest PROGRAMF\WIN16\WINPLAY3
+; anysize DEISL1.ISU
+key alt+f
+sleep 1
+key r
+sleep 2
+type C:\INST\WP3\WP3V23B5.EXE
+key Return
+settle 60 5
+shot start
+key Return
+settle 240 15
+shot s1
+key Return
+settle 180 10
+shot s2
+key Return
+settle 180 10
+shot s3
+key Return
+settle 180 10
+shot s4
+key Return
+settle 180 10
+shot s5
+key Return
+settle 180 10
+shot s6
+key Return
+settle 180 10
+shot done
