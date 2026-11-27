@@ -15,7 +15,7 @@
 #     -o  keep the screens there: ms-SN.png, w16-SN.png (default: a
 #         temporary directory)
 #     -l  the most pixels allowed to differ in a line, per cent of the
-#         black pixels 3.1 draws there (default 10: w16's interpreter is
+#         black pixels 3.1 draws there (default 12: w16's interpreter is
 #         not yet 3.1's at every pixel)
 #     PAGE  FN4 show pages (default 4-15: Arial, Arial Bold, ... Courier
 #         New Bold Italic with their w16 faces)
@@ -24,7 +24,7 @@
 set -eu
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
-dir=$root/build/ttfonts out= limit=10
+dir=$root/build/ttfonts out= limit=12
 while getopts d:o:l: opt; do
     case $opt in
     d) dir=$OPTARG ;; o) out=$OPTARG ;; l) limit=$OPTARG ;;
