@@ -45,6 +45,7 @@
 static u8 *slotmap;                     /* a bit per page of the file: in use */
 static u32 nslots, slots_used, slot_hint;
 static u32 committed;                   /* pageable pages the clients have */
+static u32 resident;                    /* those of them in physical memory */
 static u32 hand = CLIENT_LO;            /* the clock hand (a linear address) */
 static u32 page_ins, page_outs;
 
@@ -203,6 +204,7 @@ static int evict_one(void)
         *pte = (slot << 12) | PTE_SWAPPED | PTE_PAGEABLE | (e & 6);
         page_free(phys);
         page_outs++;
+        if (resident) resident--;
         hand += 4096;
         return 1;
     }
@@ -237,6 +239,7 @@ int pager_fault(u32 lin)
     if (!(e & PTE_SWAPPED)) {           /* not used yet: a zeroed page */
         if (*pte != e) { page_free(phys); return 1; }
         *pte = phys | PTE_PAGEABLE | (e & 6) | 1;
+        resident++;
         return 1;
     }
     if (!swap_io(e >> 12, phys_to_lin(phys), 0)) {
@@ -251,6 +254,7 @@ int pager_fault(u32 lin)
     *pte = phys | PTE_PAGEABLE | (e & 6) | 1;
     slot_free(e >> 12);
     page_ins++;
+    resident++;
     return 1;
 }
 
@@ -279,6 +283,7 @@ int pager_drop(u32 lin)
         *pte = 0;
         return 1;
     }
+    if (resident) resident--;           /* present: the caller frees it */
     return 0;
 }
 
@@ -356,7 +361,7 @@ void pager_meminfo(u32 *p)
     u32 f = pages_free(), i, unlocked, linfree;
     for (i = 0; i < 12; i++) p[i] = 0xFFFFFFFF;
     linfree = lin_total > committed ? lin_total - committed : 0;
-    unlocked = f + (committed > slots_used ? committed - slots_used : 0);
+    unlocked = f + resident;
     if (nslots) {
         /* the free linear space less one, but no more than the memory and
          * the file can hold: 3.1 gave 258,964 KB with 128 MB (ARCHITECTURE.md
