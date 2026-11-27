@@ -24,8 +24,13 @@
  * - tmAveCharWidth: OS/2 xAvgCharWidth scaled, rounded; tmMaxCharWidth:
  *   head's xMax - xMin scaled, rounded;
  * - advance widths: hdmx's at that ppem, else the advance scaled and
- *   rounded. 3.1's hinting moves some widths off that (Arial's W is 79
- *   at 79 ppem, not 75): w16 does not hint yet (stage 4).
+ *   rounded where the LTSH table says the width is linear, else the
+ *   hinted advance (the phantom points' after the glyph's program: 3.1's
+ *   Arial W is 79 at 79 ppem, not 75), as TT_HINT_WIDTHS asks.
+ *
+ * Glyphs are grid-fitted by the font's own instructions (gdi/ttf/ttfbc.c,
+ * TTFX_HINT_BYTECODE: fpgm and prep run once a size, the state kept for
+ * the four most recent sizes), else by w16's autohinter.
  */
 #include "gdi.h"
 #include "ttf/ttfx.h"
@@ -50,6 +55,7 @@ typedef struct {
     DWORD hdmx;                         /* the hdmx table, 0: none */
     WORD hdmxn;
     DWORD hdmxsize;
+    DWORD ltsh;                         /* the LTSH table, 0: none */
     BYTE symbol;                        /* a Microsoft Symbol cmap */
 } TTFILE;
 typedef TTFILE __far *LPTTFILE;
@@ -75,6 +81,8 @@ static unsigned tt_read(void *user, ttfx_u32 off, void TTFX_FAR *dst, unsigned l
     n = _lread(tt_fh, dst, len);
     return n == 0xFFFF ? 0 : n;
 }
+
+static void tt_bc_put(HGLOBAL h);
 
 static void tt_close(void)
 {
@@ -158,6 +166,89 @@ static void arena_put(void)
     tt_arena = 0;
 }
 
+/* ---- the bytecode's sizes: fpgm and prep run once for a size, the
+   state kept (ttfx_bcPrepare's block) for its glyphs; the four sizes
+   used most recently ---- */
+
+#define TT_BCSIZES 4
+static struct {
+    XP ttf;                             /* the base entry's TTFILE */
+    WORD ppem, xppem, age;
+    HGLOBAL h;                          /* 0: the size has no bytecode state */
+} tt_bcs[TT_BCSIZES];
+static WORD tt_bcclock;
+
+/* the size's state attached to ttf (made now if new: the file open, the
+   arena got), locked; 0: none (the autohinter then) */
+static HGLOBAL tt_bc_get(XP xt, WORD ppem, WORD xppem, ttfx_scale sy, ttfx_scale sx)
+{
+    int i, old = 0;
+    ttfx_u32 bytes;
+    HGLOBAL h;
+    void __far *p;
+    ttf.bc = 0;
+    if (!(tt_hint & TTFX_HINT_BYTECODE))
+        return 0;
+    for (i = 0; i < TT_BCSIZES; i++) {
+        if (tt_bcs[i].ttf == xt && tt_bcs[i].ppem == ppem && tt_bcs[i].xppem == xppem) {
+            tt_bcs[i].age = ++tt_bcclock;
+            h = tt_bcs[i].h;
+            p = h ? GlobalLock(h) : 0;
+            if (!p)
+                return 0;
+            ttfx_bcUse(&ttf, p);
+            if (!ttf.bc) {
+                GlobalUnlock(h);
+                return 0;
+            }
+            return h;
+        }
+        if (tt_bcs[i].age < tt_bcs[old].age)
+            old = i;
+    }
+    if (tt_bcs[old].h)
+        GlobalFree(tt_bcs[old].h);
+    tt_bcs[old].ttf = xt;
+    tt_bcs[old].ppem = ppem;
+    tt_bcs[old].xppem = xppem;
+    tt_bcs[old].age = ++tt_bcclock;
+    tt_bcs[old].h = 0;
+    bytes = ttfx_bcBytes(&ttf);
+    h = bytes ? GlobalAlloc(GMEM_MOVEABLE, bytes) : 0;
+    p = h ? GlobalLock(h) : 0;
+    if (!p || !ttfx_bcPrepare(&ttf, p, bytes, sx, sy, xppem ? xppem : ppem, ppem)) {
+        if (p)
+            GlobalUnlock(h);
+        if (h)
+            GlobalFree(h);
+        ttf.bc = 0;
+        return 0;                       /* (remembered: not tried again) */
+    }
+    tt_bcs[old].h = h;
+    return h;
+}
+
+static void tt_bc_put(HGLOBAL h)
+{
+    ttf.bc = 0;
+    if (h)
+        GlobalUnlock(h);
+}
+
+/* a TTFILE goes: its sizes' states too */
+static void tt_bc_forget(XP xt)
+{
+    int i;
+    for (i = 0; i < TT_BCSIZES; i++)
+        if (tt_bcs[i].ttf == xt) {
+            if (tt_bcs[i].h)
+                GlobalFree(tt_bcs[i].h);
+            tt_bcs[i].h = 0;
+            tt_bcs[i].ttf = 0;
+            tt_bcs[i].age = 0;
+        }
+}
+
 /* ---- the font table ---- */
 
 /* a .FOT's FONTDIR entry: TrueType if the module has the resource naming
@@ -207,8 +298,10 @@ int tt_usable(LPFONT f)
 
 void tt_free(LPFONT f)
 {
-    if (f->tt && !f->base && f->ttf)
+    if (f->tt && !f->base && f->ttf) {
+        tt_bc_forget(f->ttf);
         xfree(f->ttf);
+    }
 }
 
 /* the tables' values, the first time (the file open) */
@@ -256,6 +349,7 @@ static void tt_load(LPTTFILE t)
             }
         }
     }
+    t->ltsh = ttfx_FindTable(&ttf, "LTSH", &len);
     o = ttfx_FindTable(&ttf, "hdmx", &len);
     t->hdmx = o;
     if (o) {
@@ -366,7 +460,10 @@ static WORD tt_glyph(LPTTFILE t, BYTE c)
     return ttfx_FindGlyphIndex(&ttf, u);
 }
 
-static int tt_width(LPTTFILE t, WORD g, WORD ppem, int square)
+/* a glyph's advance width at a size: hdmx's; else with the size's
+   bytecode state attached (TT_HINT_WIDTHS) the hinted advance, unless
+   LTSH says the width is linear at that size; else scaled, rounded */
+static int tt_width(LPTTFILE t, WORD g, WORD ppem, int square, ttfx_scale sx, ttfx_scale sy)
 {
     ttfx_u16 adv;
     int lsb;
@@ -376,6 +473,16 @@ static int tt_width(LPTTFILE t, WORD g, WORD ppem, int square)
             ttfx_i32 r = t->hdmx + 8 + (ttfx_i32)i * t->hdmxsize;
             if (ttfx_Byte(&ttf, r) == ppem)
                 return ttfx_Byte(&ttf, r + 2 + g);
+        }
+    }
+    if (ttf.bc) {
+        BYTE lin = t->ltsh && g < ttfx_U16(&ttf, t->ltsh + 2) ? ttfx_Byte(&ttf, t->ltsh + 4 + g) : 0;
+        ttfx_outline o;
+        tt_used = 0;
+        if ((!lin || ppem < lin) && ttfx_LoadOutline(&ttf, g, sx, sy, &o)) {
+            int w = (int)((o.adv + 32) >> 6);
+            ttfx_FreeOutline(&ttf, &o);
+            return w;
         }
     }
     ttfx_GetGlyphHMetrics(&ttf, g, &adv, &lsb);
@@ -400,9 +507,23 @@ LPFONTINFO tt_info(XP xs)
     BYTE __far *q;
     LPFONTINFO fi;
     BYTE dfbreak;
+    HGLOBAL bch = 0;
+    int arena = 0;
+    ttfx_scale sy = 0, sx = 0;
     if (!tt_open(t))
         return 0;
     tt_load(t);
+    /* hinted widths: the size's bytecode state (made now: fpgm, prep) */
+    if ((tt_hint & (TT_HINT_WIDTHS | TTFX_HINT_BYTECODE)) == (TT_HINT_WIDTHS | TTFX_HINT_BYTECODE) &&
+        s->sx != 2 && arena_get()) {
+        arena = 1;
+        sy = ttfx_ScaleForMappingEmToPixels(&ttf, ppem);
+        sx = s->xppem ? ttfx_ScaleForMappingEmToPixels(&ttf, s->xppem) : sy;
+        bch = tt_bc_get(b->ttf, ppem, s->xppem, sy, sx);
+        s = xptr(xs);
+        b = xptr(s->base);
+        t = xptr(b->ttf);
+    }
     tt_vert(t, ppem, &a, &d);
     first = s->first;
     last = s->last;
@@ -417,6 +538,9 @@ LPFONTINFO tt_info(XP xs)
         if (s->hMem)
             GlobalFree(s->hMem);
         s->hMem = 0;
+        tt_bc_put(bch);
+        if (arena)
+            arena_put();
         tt_close();
         return 0;
     }
@@ -445,7 +569,7 @@ LPFONTINFO tt_info(XP xs)
     size = off = bits;
     for (i = 0; i < n; i++) {
         WORD c = i < n - 1 ? first + i : first + dfbreak;      /* (the last: the break) */
-        int w = tt_width(t, tt_glyph(t, (BYTE)c), xp, xp == ppem);
+        int w = tt_width(t, tt_glyph(t, (BYTE)c), xp, xp == ppem, sx, sy);
         if (w < 0)
             w = 0;
         *(WORD __far *)(q + 0x94 + i * 6) = (WORD)w;
@@ -456,6 +580,9 @@ LPFONTINFO tt_info(XP xs)
     *(DWORD __far *)(q + 2) = size;
     fi->dfBitsOffset = bits;
     fi->dfBitsPointer = MAKELP(SELECTOROF(q), OFFSETOF(q) + (WORD)bits);
+    tt_bc_put(bch);
+    if (arena)
+        arena_put();
     tt_close();
     s = xptr(xs);
     s->bits = 0;
@@ -548,6 +675,15 @@ static void tt_draw(LPFONT s, LPTTFILE t, WORD i, ttfx_scale sc, ttfx_scale sx)
     bm.w = w;
     bm.h = h;
     bm.stride = stride;
+    if (ttf.bc && s->sx != 2) {
+        /* grid-fitted by the font's instructions */
+        ttfx_outline o;
+        if (ttfx_LoadOutline(&ttf, tt_glyph(t, c8), sx, sc, &o)) {
+            ttfx_RenderOutline(&ttf, &bm, &o, 0, -s->fi->dfAscent);
+            ttfx_FreeOutline(&ttf, &o);
+            goto drawn;
+        }
+    }
     nv = ttfx_GetGlyphShape(&ttf, tt_glyph(t, c8), &v);
     if (nv && s->sx == 2) {
         /* simulated italic: slanted by a quarter of the height (in font
@@ -564,6 +700,7 @@ static void tt_draw(LPFONT s, LPTTFILE t, WORD i, ttfx_scale sc, ttfx_scale sx)
         ttfx_Rasterize(&ttf, &bm, v, nv, sx, sc, 0, 0, 0, -s->fi->dfAscent);
         ttfx_FreeShape(&ttf, v);
     }
+drawn:
     for (c = 0; c < stride; c++)
         for (r = 0; r < h; r++) {
             BYTE v8 = bm.pixels[r * stride + c];
@@ -580,6 +717,7 @@ void tt_glyphs(XP xs, LPCSTR str, int n)
     WORD k, nc;
     int opened = 0;
     ttfx_scale sc = 0, sx = 0;
+    HGLOBAL bch = 0;
     if (!s->tt || !s->base || !s->fi || n <= 0 || !str)
         return;
     b = xptr(s->base);
@@ -615,12 +753,19 @@ void tt_glyphs(XP xs, LPCSTR str, int n)
             }
             sc = ttfx_ScaleForMappingEmToPixels(&ttf, s->ppem);
             sx = s->xppem ? ttfx_ScaleForMappingEmToPixels(&ttf, s->xppem) : sc;
+            if (s->sx != 2)
+                bch = tt_bc_get(b->ttf, s->ppem, s->xppem, sc, sx);
+            s = xptr(xs);
+            b = xptr(s->base);
+            t = xptr(b->ttf);
+            fi = s->fi;
             opened = 1;
         }
         tt_draw(s, t, i, sc, sx);
         s->done[i >> 3] |= (BYTE)(1 << (i & 7));
     }
     if (opened) {
+        tt_bc_put(bch);
         arena_put();
         tt_close();
     }
@@ -699,24 +844,41 @@ DWORD GDIAPI GetFontData(HDC hdc, DWORD table, DWORD off, void __far *buf, DWORD
 
 /* GetCharABCWidths: TrueType only (SDK; FALSE for other fonts). A is
    where the glyph's pixels start, B their width, C the rest of the
-   advance; a blank glyph A 0, B 0, C the advance. UNVERIFIED against
-   3.1 (hinted extents; B for a blank glyph), and in device units */
+   advance; a blank glyph A 0, B 0, C the advance. The extents are the
+   hinted outline's (with the font's instructions) as 3.1's are (GD13),
+   else the unhinted glyph's; UNVERIFIED: B for a blank glyph, and in
+   device units */
 BOOL GDIAPI GetCharABCWidths(HDC hdc, WORD first, WORD last, void __far *p) /* GDI.307 */
 {
     LPTTFILE t;
-    LPFONT s = tt_hdc(hdc, &t);
+    LPFONT s = tt_hdc(hdc, &t), b;
     short __far *abc = p;
     ttfx_scale sy, sx;
     WORD c;
+    HGLOBAL bch = 0;
+    int arena = 0;
     if (!s || !p || last < first || !tt_open(t))
         return FALSE;
     sy = ttfx_ScaleForMappingEmToPixels(&ttf, s->ppem);
     sx = s->xppem ? ttfx_ScaleForMappingEmToPixels(&ttf, s->xppem) : sy;
+    if ((tt_hint & TTFX_HINT_BYTECODE) && s->sx != 2 && arena_get()) {
+        arena = 1;
+        b = xptr(s->base);
+        bch = tt_bc_get(b->ttf, s->ppem, s->xppem, sy, sx);
+    }
     for (c = first; c <= last; c++) {
         LPFONTINFO fi = s->fi;
         WORD i = c >= fi->dfFirstChar && c <= fi->dfLastChar ? c - fi->dfFirstChar : fi->dfDefaultChar;
         int w = *(WORD __far *)((BYTE __far *)fi - 0x42 + 0x94 + i * 6), x0, y0, x1, y1;
-        ttfx_GetGlyphBitmapBox(&ttf, tt_glyph(t, (BYTE)(fi->dfFirstChar + i)), sx, sy, 0, 0, &x0, &y0, &x1, &y1);
+        ttfx_u16 g = tt_glyph(t, (BYTE)(fi->dfFirstChar + i));
+        ttfx_outline o;
+        tt_used = 0;
+        if (ttf.bc && ttfx_LoadOutline(&ttf, g, sx, sy, &o)) {
+            o.dropout = TTFX_DROP_NONE;         /* (the outline's own box) */
+            ttfx_OutlineBox(&o, &x0, &y0, &x1, &y1);
+            ttfx_FreeOutline(&ttf, &o);
+        } else
+            ttfx_GetGlyphBitmapBox(&ttf, g, sx, sy, 0, 0, &x0, &y0, &x1, &y1);
         if (x1 <= x0)
             x0 = x1 = 0;
         abc[0] = x0;
@@ -726,6 +888,9 @@ BOOL GDIAPI GetCharABCWidths(HDC hdc, WORD first, WORD last, void __far *p) /* G
         if (c == 0xFFFF)
             break;
     }
+    tt_bc_put(bch);
+    if (arena)
+        arena_put();
     tt_close();
     return TRUE;
 }

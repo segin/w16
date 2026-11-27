@@ -65,6 +65,8 @@ typedef unsigned (*ttfx_readfn)(void *user, ttfx_u32 off, void TTFX_FAR *dst, un
 #define TTFX_HINT_X 2                   /* horizontal: vertical stems */
 #define TTFX_HINT_DROPOUT 4             /* the scan converter's rule 3, along rows */
 #define TTFX_HINT_DEFAULT (TTFX_HINT_Y | TTFX_HINT_X | TTFX_HINT_DROPOUT)
+#define TTFX_HINT_BYTECODE 8            /* the font's own instructions (ttfbc.c), where it has them */
+#define TTFX_HINT_ALL (TTFX_HINT_DEFAULT | TTFX_HINT_BYTECODE)
 #define TTFX_HINT_ZONES 5
 
 typedef struct ttfx_font {
@@ -93,6 +95,10 @@ typedef struct ttfx_font {
     ttfx_u8 hint_done, nzones, hint_up;  /* hint_up: a stem is rounded up from it (1/64 px) */
     ttfx_i16 zone[TTFX_HINT_ZONES][3];  /* reference, overshoot, 1 top 0 bottom */
     ttfx_i16 stdw[2];                   /* standard stem widths across x, y (0: none) */
+
+    /* the bytecode interpreter (ttfbc.c): the size ttfx_bcPrepare made
+       ready, 0: none */
+    void TTFX_FAR *bc;
 } ttfx_font;
 
 /* 8.24 fixed-point scale: pixels per font unit */
@@ -201,6 +207,52 @@ int ttfx_Flatten(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv, ttfx
    fitted as f->hint asks. Allocated (TTFX_malloc); 0 if out of memory */
 ttfx_point TTFX_FAR *ttfx__HintPoints(const ttfx_font *f, const ttfx_vertex TTFX_FAR *v, int nv,
                                       ttfx_scale sx, ttfx_scale sy, ttfx_i32 ox, ttfx_i32 oy);
+
+/* ---- the bytecode interpreter (ttfbc.c) ----
+   A size's state: the font program and the control value program run,
+   the CVT scaled, the functions defined. ttfx_bcBytes gives the memory a
+   size needs (0: the font has no maxp 1.0 or needs over 64K);
+   ttfx_bcPrepare fills mem with it for the scales sx, sy (ppem_x, ppem_y
+   pixels to the em) and attaches it to f (f->bc), returning 0 if fpgm or
+   prep fails (f->bc 0: the autohinter then). The block holds no pointers
+   to itself: a program may move it between uses and re-attach it with
+   ttfx_bcUse (0 detaches). */
+ttfx_u32 ttfx_bcBytes(const ttfx_font *f);
+int ttfx_bcPrepare(ttfx_font *f, void TTFX_FAR *mem, ttfx_u32 bytes, ttfx_scale sx, ttfx_scale sy,
+                   int ppem_x, int ppem_y);
+void ttfx_bcUse(ttfx_font *f, void TTFX_FAR *mem);
+
+/* a glyph grid-fitted by its instructions: the outline's TrueType points
+   (26.6, y down, the origin at the first phantom point), on-curve flags
+   (bit 0), each contour's last point; the hinted advance (26.6, the
+   phantom points' distance); the scan converter's rules its scan control
+   asks for (TTFX_DROP_*). ttfx_LoadOutline returns 0 when the bytecode is
+   not used for it (TTFX_HINT_BYTECODE off, no size prepared at sx, sy,
+   an error in the glyph's program, no memory): the caller then draws it
+   as before (the autohinter, ttfx_RenderGlyph). */
+#define TTFX_DROP_NONE 0                /* rules 1 and 2 */
+#define TTFX_DROP_SIMPLE 1              /* and rule 3: dropouts, stubs included (SCANTYPE 0) */
+#define TTFX_DROP_NOSTUBS 2             /* and rule 4: dropouts but not stubs (SCANTYPE 1) */
+typedef struct {
+    ttfx_point TTFX_FAR *p;
+    ttfx_u8 TTFX_FAR *on;
+    ttfx_u16 TTFX_FAR *ends;
+    unsigned n, nc;
+    ttfx_i32 adv;
+    int dropout;
+    void TTFX_FAR *mem;
+} ttfx_outline;
+int ttfx_LoadOutline(const ttfx_font *f, ttfx_u16 glyph, ttfx_scale sx, ttfx_scale sy, ttfx_outline *o);
+void ttfx_FreeOutline(const ttfx_font *f, ttfx_outline *o);
+/* the pixel box the outline (and its dropout pixels) can touch, y down */
+void ttfx_OutlineBox(const ttfx_outline *o, int *x0, int *y0, int *x1, int *y1);
+/* scan-convert it: the outline's pixel (x, y) to bm's (x - off_x, y -
+   off_y), with the rules o->dropout names. 0: out of memory */
+int ttfx_RenderOutline(const ttfx_font *f, ttfx_bitmap *bm, const ttfx_outline *o, int off_x, int off_y);
+/* (ttfx.c, for ttfbc.c) a * b / c, truncated (round 0) or to nearest */
+ttfx_i32 ttfx__MulDiv(ttfx_i32 a, ttfx_i32 b, ttfx_i32 c, int round);
+/* (ttfx.c, for ttfbc.c) a glyph's data in the glyf table, -1 if none */
+ttfx_i32 ttfx__GlyfOffset(const ttfx_font *f, ttfx_u16 glyph, ttfx_u32 *len);
 
 /* a name record (name table): copies at most size bytes of the string
    (UTF-16BE for platform 3 and 0) to buf; returns its whole length, -1 if

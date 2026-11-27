@@ -97,6 +97,27 @@ static ttfx_i32 ttfx__muldiv(ttfx_i32 a, ttfx_i32 b, ttfx_i32 c, ttfx_i32 *prem)
     return neg ? -(ttfx_i32)q : (ttfx_i32)q;
 }
 
+/* a * b / c, any signs (c != 0): truncated toward zero, or (round) to
+   nearest with a half away from zero; for ttfbc.c */
+ttfx_i32 ttfx__MulDiv(ttfx_i32 a, ttfx_i32 b, ttfx_i32 c, int round)
+{
+    ttfx_u32 ua = (ttfx_u32)ttfx__abs(a), ub = (ttfx_u32)ttfx__abs(b), uc = (ttfx_u32)ttfx__abs(c), hi, lo, q, r;
+    int neg = ((a < 0) != (b < 0)) != (c < 0);
+    if (!uc)
+        return 0;
+    if (ua < 0x8000L && ub < 0x10000L) {
+        lo = ua * ub;
+        hi = 0;
+    } else
+        ttfx__mul64(ua, ub, &hi, &lo);
+    if (hi >= uc)
+        return neg ? -0x7FFFFFFFL : 0x7FFFFFFFL;
+    q = ttfx__div64(hi, lo, uc, &r);
+    if (round && r >= uc - r)
+        q++;
+    return neg ? -(ttfx_i32)q : (ttfx_i32)q;
+}
+
 /* the integer square root of v */
 static ttfx_u32 ttfx__isqrt(ttfx_u32 v)
 {
@@ -327,12 +348,13 @@ int ttfx_InitFont(ttfx_font *f, ttfx_readfn read, void *user, void *alloc,
         return 0;
     f->hint = TTFX_HINT_DEFAULT;
     f->hint_done = 0;
+    f->bc = 0;
     return 1;
 }
 
 void ttfx_SetHinting(ttfx_font *f, int flags)
 {
-    f->hint = flags & TTFX_HINT_DEFAULT;
+    f->hint = flags & TTFX_HINT_ALL;
 }
 
 /* ---- characters to glyphs ---- */
@@ -429,6 +451,11 @@ static ttfx_i32 ttfx__glyf_offset(const ttfx_font *f, ttfx_u16 glyph, ttfx_u32 *
     if (len)
         *len = g2 > g1 ? (ttfx_u32)(g2 - g1) : 0;
     return g1 == g2 ? -1 : g1;
+}
+
+ttfx_i32 ttfx__GlyfOffset(const ttfx_font *f, ttfx_u16 glyph, ttfx_u32 *len)
+{
+    return ttfx__glyf_offset(f, glyph, len);
 }
 
 int ttfx_GetGlyphBox(const ttfx_font *f, ttfx_u16 glyph, int *x0, int *y0, int *x1, int *y1)
@@ -1287,13 +1314,466 @@ int ttfx_RenderGlyph(const ttfx_font *f, ttfx_bitmap *bm, ttfx_u16 glyph, ttfx_s
                      ttfx_i32 shift_x, ttfx_i32 shift_y, int ix0, int iy0)
 {
     ttfx_vertex TTFX_FAR *v;
-    int nv = ttfx_GetGlyphShape(f, glyph, &v), ok;
+    int nv, ok;
+    if ((f->hint & TTFX_HINT_BYTECODE) && f->bc && !shift_x && !shift_y) {
+        /* grid-fitted by the font's own instructions, if it can be */
+        ttfx_outline o;
+        if (ttfx_LoadOutline(f, glyph, sx, sy, &o)) {
+            ok = ttfx_RenderOutline(f, bm, &o, ix0, iy0);
+            ttfx_FreeOutline(f, &o);
+            return ok;
+        }
+    }
+    nv = ttfx_GetGlyphShape(f, glyph, &v);
     if (!nv)
         return 1;                       /* (empty, e.g. the space) */
     ok = ttfx_Rasterize(f, bm, v, nv, sx, sy, shift_x, shift_y, ix0, iy0);
     ttfx_FreeShape(f, v);
     return ok;
 }
+
+/* ---- outlines grid-fitted by their instructions (ttfbc.c) ---- */
+
+/* the flatness for these outlines: a curve is split while its middle is
+   more than 3/64 pixel from its chord's across x or y (16.16; fitted to
+   Windows 3.1's pixels, ARCHITECTURE.md 11.11.2: stb's 0.35 pixel left
+   half the glyphs a pixel off, exact curves a few more than this) */
+#define TTFX_TT_FLAT 3072L
+static ttfx_u32 ttfx__ttflat = TTFX_TT_FLAT;    /* (coarser for a glyph too big for it) */
+
+static void ttfx__tess_tt(ttfx__flat *fl, ttfx_i32 x0, ttfx_i32 y0, ttfx_i32 x1, ttfx_i32 y1,
+                          ttfx_i32 x2, ttfx_i32 y2, int n)
+{
+    ttfx_i32 mx = (x0 + 2 * x1 + x2) >> 2, my = (y0 + 2 * y1 + y2) >> 2;
+    ttfx_i32 dx = ((x0 + x2) >> 1) - mx, dy = ((y0 + y2) >> 1) - my;
+    ttfx_u32 adx = (ttfx_u32)ttfx__abs(dx), ady = (ttfx_u32)ttfx__abs(dy);
+    if (n > 16)
+        return;
+    if (adx > ttfx__ttflat || ady > ttfx__ttflat) {
+        ttfx__tess_tt(fl, x0, y0, (x0 + x1) >> 1, (y0 + y1) >> 1, mx, my, n + 1);
+        ttfx__tess_tt(fl, mx, my, (x1 + x2) >> 1, (y1 + y2) >> 1, x2, y2, n + 1);
+    } else
+        ttfx__add_point(fl, (x2 + 512) >> 10, (y2 + 512) >> 10);
+}
+
+/* the contours of o flattened to 26.6 points, moved by (ox, oy): each
+   contour from its first point on the curve (or, with none, from the
+   middle of its last and first), an on-curve point implied between two
+   off-curve ones; curves split as ttfx_Flatten splits them */
+static int ttfx__flatten_tt(const ttfx_font *f, const ttfx_outline *o, ttfx_i32 ox, ttfx_i32 oy,
+                            ttfx_point TTFX_FAR **pts, int TTFX_FAR **counts)
+{
+    ttfx__flat fl;
+    unsigned c, s, pass;
+    *pts = 0;
+    *counts = (int TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)o->nc * sizeof(int) + 1);
+    if (!*counts)
+        return 0;
+    fl.points = 0;
+    for (pass = 0; pass < 2; pass++) {
+        if (pass == 1) {
+            fl.points = (ttfx_point TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)fl.n * sizeof(ttfx_point) + 1);
+            if (!fl.points)
+                goto error;
+        }
+        fl.n = 0;
+        fl.overflow = 0;
+        for (c = s = 0; c < o->nc; c++) {
+            unsigned e = o->ends[c], n = e - s + 1, k0, j, start = fl.n;
+            ttfx_i32 px, py, cx = 0, cy = 0, sx0, sy0;   /* (26.6 << 10) */
+            int ctrl = 0;
+            if (e < s || e >= o->n)
+                goto error;
+            for (k0 = 0; k0 < n && !(o->on[s + k0] & 1); k0++)
+                ;
+            if (k0 < n) {
+                sx0 = (o->p[s + k0].x + ox) << 10;
+                sy0 = (o->p[s + k0].y + oy) << 10;
+            } else {
+                k0 = n - 1;
+                sx0 = (((o->p[e].x + ox) << 10) + ((o->p[s].x + ox) << 10)) >> 1;
+                sy0 = (((o->p[e].y + oy) << 10) + ((o->p[s].y + oy) << 10)) >> 1;
+            }
+            px = sx0;
+            py = sy0;
+            ttfx__add_point(&fl, (px + 512) >> 10, (py + 512) >> 10);
+            for (j = 1; j <= n; j++) {
+                unsigned i = s + (k0 + j) % n;
+                ttfx_i32 qx = (o->p[i].x + ox) << 10, qy = (o->p[i].y + oy) << 10;
+                int last = j == n && (o->on[i] & 1);
+                if (o->on[i] & 1) {
+                    if (ctrl)
+                        ttfx__tess_tt(&fl, px, py, cx, cy, qx, qy, 0);
+                    else if (!last)
+                        ttfx__add_point(&fl, qx >> 10, qy >> 10);
+                    px = qx;
+                    py = qy;
+                    ctrl = 0;
+                } else {
+                    if (ctrl) {
+                        ttfx_i32 mx = (cx + qx) >> 1, my = (cy + qy) >> 1;
+                        ttfx__tess_tt(&fl, px, py, cx, cy, mx, my, 0);
+                        px = mx;
+                        py = my;
+                    }
+                    cx = qx;
+                    cy = qy;
+                    ctrl = 1;
+                }
+            }
+            if (ctrl)
+                ttfx__tess_tt(&fl, px, py, cx, cy, sx0, sy0, 0);
+            if (pass)
+                (*counts)[c] = (int)(fl.n - start);
+            s = e + 1;
+        }
+        if (fl.overflow)
+            goto error;
+    }
+    *pts = fl.points;
+    return 1;
+error:
+    if (fl.points)
+        ttfx_free(f->alloc, fl.points);
+    ttfx_free(f->alloc, *counts);
+    *counts = 0;
+    return 0;
+}
+
+void ttfx_OutlineBox(const ttfx_outline *o, int *x0, int *y0, int *x1, int *y1)
+{
+    ttfx_i32 lx = 0, ly = 0, hx = 0, hy = 0;
+    unsigned i;
+    for (i = 0; i < o->n; i++) {
+        ttfx_i32 x = o->p[i].x, y = o->p[i].y;
+        if (!i || x < lx) lx = x;
+        if (!i || x > hx) hx = x;
+        if (!i || y < ly) ly = y;
+        if (!i || y > hy) hy = y;
+    }
+    if (!o->n) {
+        *x0 = *y0 = *x1 = *y1 = 0;
+        return;
+    }
+    /* a dropout pixel may lie one left of the outline's (rule 3 turns
+       on the left one of two) or one below */
+    *x0 = ttfx__floor6(lx) - (o->dropout != TTFX_DROP_NONE);
+    *y0 = ttfx__floor6(ly);
+    *x1 = ttfx__ceil6(hx);
+    *y1 = ttfx__ceil6(hy) + (o->dropout != TTFX_DROP_NONE);
+}
+
+/* the scan converter for these outlines: rules 1 and 2 into a bitmap of
+   the glyph's own (r), then, with dropout control, rule 3 or 4 along
+   rows and columns into another (d): a run of a scan line between two
+   adjacent pixel centres, inside the outline, turns on the left pixel
+   (along a row) or the lower (along a column) if neither was on by rules
+   1 and 2; rule 4 not for a stub, a run whose contours do not go on
+   across the scan lines next to it on both sides. Then both are ORed
+   into bm. */
+typedef struct {
+    ttfx_u8 TTFX_FAR *r, TTFX_FAR *d;
+    unsigned rs;                        /* bytes a row of r and d */
+    int w, h, mode;
+    const ttfx_point TTFX_FAR *p;       /* the outline in r's coordinates */
+    const int TTFX_FAR *counts;
+    int nc;
+    int cand[64], ncand;                /* a row's dropout runs (their left pixels) */
+} ttfx__tt;
+
+#define TT_BIT(b, x, y) ((b)[(ttfx_u32)(y) * rs_ + ((x) >> 3)] & (0x80 >> ((x) & 7)))
+#define TT_SET(b, x, y) ((b)[(ttfx_u32)(y) * rs_ + ((x) >> 3)] |= (ttfx_u8)(0x80 >> ((x) & 7)))
+
+/* the crossings of the outline with the segment from (a0, k) to (a1, k)
+   (tr: x and y swapped), all 26.6 */
+static int ttfx__tt_cross(const ttfx__tt *t, ttfx_i32 k, ttfx_i32 a0, ttfx_i32 a1, int tr)
+{
+    int c, n = 0;
+    unsigned m = 0;
+    for (c = 0; c < t->nc; c++) {
+        const ttfx_point TTFX_FAR *q = t->p + m;
+        unsigned cnt = t->counts[c], i, j = cnt - 1;
+        m += cnt;
+        for (i = 0; i < cnt; j = i++) {
+            ttfx_i32 y0 = tr ? q[j].x : q[j].y, y1 = tr ? q[i].x : q[i].y;
+            ttfx_i32 x0 = tr ? q[j].y : q[j].x, x1 = tr ? q[i].y : q[i].x, x;
+            if ((y0 <= k) == (y1 <= k))
+                continue;
+            if (y1 > y0)
+                x = x0 + ttfx__muldiv(k - y0, x1 - x0, y1 - y0, 0);
+            else
+                x = x0 + ttfx__muldiv(y0 - k, x1 - x0, y0 - y1, 0);
+            if (x >= a0 && x <= a1)
+                n++;
+        }
+    }
+    return n;
+}
+
+/* a stub? (rule 4) the run of line l between pixels a and a + 1: the
+   squares it is a side of, on both sides, must be crossed elsewhere */
+static int ttfx__tt_stub(const ttfx__tt *t, int l, int a, int tr)
+{
+    ttfx_i32 k = (ttfx_i32)l * 64 + 32, a0 = (ttfx_i32)a * 64 + 32, a1 = a0 + 64;
+    int side;
+    for (side = -64; side <= 64; side += 128) {
+        ttfx_i32 k2 = k + side, lo = side < 0 ? k2 : k, hi = side < 0 ? k : k2;
+        if (!ttfx__tt_cross(t, k2, a0, a1, tr) && !ttfx__tt_cross(t, a0, lo, hi, !tr) &&
+            !ttfx__tt_cross(t, a1, lo, hi, !tr))
+            return 1;
+    }
+    return 0;
+}
+
+/* a run of line l from crossing xa to xb (26.6 floors, ra and rb set
+   if the crossing is past them) */
+static void ttfx__tt_run(ttfx__tt *t, int l, ttfx_i32 xa, int ra, ttfx_i32 xb, int rb, int tr)
+{
+    int xs = ttfx__ceil6(xa + ra - 32), xe = ttfx__floor6(xb - 32);
+    unsigned rs_ = t->rs;
+    if (xs <= xe) {
+        if (!tr) {
+            if (xs < 0)
+                xs = 0;
+            if (xe >= t->w)
+                xe = t->w - 1;
+            if (xs <= xe)
+                ttfx__span(t->r + (ttfx_u32)l * t->rs, xs, xe);
+        }
+        return;
+    }
+    if (t->mode == TTFX_DROP_NONE || (xa == xb && !ra && !rb))
+        return;
+    if (!tr) {
+        if (t->ncand < 64)
+            t->cand[t->ncand++] = xe;
+    } else {
+        /* along column l, between rows xe and xe + 1: the lower */
+        int up = xe, dn = xe + 1;
+        if (l < 0 || l >= t->w || dn < 0 || up >= t->h)
+            return;
+        if ((up >= 0 && TT_BIT(t->r, l, up)) || (dn < t->h && TT_BIT(t->r, l, dn)))
+            return;
+        if (t->mode == TTFX_DROP_NOSTUBS && ttfx__tt_stub(t, l, up, 1))
+            return;
+        if (dn < t->h)
+            TT_SET(t->d, l, dn);
+    }
+}
+
+/* a row's dropout runs, now that rules 1 and 2 have filled it */
+static void ttfx__tt_endrow(ttfx__tt *t, int l)
+{
+    int i;
+    unsigned rs_ = t->rs;
+    for (i = 0; i < t->ncand; i++) {
+        int x = t->cand[i];
+        if (x + 1 < 0 || x >= t->w)
+            continue;
+        if ((x >= 0 && TT_BIT(t->r, x, l)) || (x + 1 < t->w && TT_BIT(t->r, x + 1, l)))
+            continue;
+        if (t->mode == TTFX_DROP_NOSTUBS && ttfx__tt_stub(t, l, x, 0))
+            continue;
+        if (x >= 0)
+            TT_SET(t->d, x, l);
+    }
+    t->ncand = 0;
+}
+
+/* scan lines 0..nl-1 of the outline (tr: columns, x and y swapped),
+   ttfx__scan's edge stepping */
+static int ttfx__tt_sweep(const ttfx_font *f, ttfx__tt *t, int nl, int tr)
+{
+    ttfx__edge TTFX_FAR *e;
+    ttfx_u16 TTFX_FAR *idx, TTFX_FAR *act;
+    unsigned ne = 0, i, k, nact = 0, next = 0, m = 0;
+    int c, l;
+    for (c = 0; c < t->nc; c++)
+        ne += t->counts[c];
+    if (ne > TTFX_MAXEDGES)
+        return 0;
+    if (!ne)
+        return 1;
+    e = (ttfx__edge TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)ne * sizeof(ttfx__edge));
+    idx = (ttfx_u16 TTFX_FAR *)ttfx_alloc(f->alloc, (ttfx_u32)ne * 4);
+    if (!e || !idx) {
+        if (idx) ttfx_free(f->alloc, idx);
+        if (e) ttfx_free(f->alloc, e);
+        return 0;
+    }
+    act = idx + ne;
+    ne = 0;
+    for (c = 0; c < t->nc; c++) {
+        const ttfx_point TTFX_FAR *q = t->p + m;
+        unsigned cnt = t->counts[c], j = cnt - 1;
+        m += cnt;
+        for (k = 0; k < cnt; j = k++) {
+            ttfx__edge TTFX_FAR *d = &e[ne];
+            ttfx_i32 jx = tr ? q[j].y : q[j].x, jy = tr ? q[j].x : q[j].y;
+            ttfx_i32 kx = tr ? q[k].y : q[k].x, ky = tr ? q[k].x : q[k].y;
+            if (jy == ky)
+                continue;
+            if (jy < ky) {
+                d->x0 = jx; d->y0 = jy; d->x1 = kx; d->y1 = ky; d->dir = 1;
+            } else {
+                d->x0 = kx; d->y0 = ky; d->x1 = jx; d->y1 = jy; d->dir = -1;
+            }
+            idx[ne] = (ttfx_u16)ne;
+            ne++;
+        }
+    }
+    ttfx__sort_by_top(idx, ne, e);
+    for (l = 0; l < nl; l++) {
+        ttfx_i32 ys = (ttfx_i32)l * 64 + 32, xa = 0;
+        int w, ra = 0;
+        for (i = k = 0; i < nact; i++) {
+            ttfx__edge TTFX_FAR *d = &e[act[i]];
+            if (d->y1 <= ys)
+                continue;
+            d->x += d->q;
+            d->rem += d->r;
+            if (d->rem >= d->y1 - d->y0) {
+                d->rem -= d->y1 - d->y0;
+                d->x++;
+            }
+            act[k++] = act[i];
+        }
+        nact = k;
+        while (next < ne && e[idx[next]].y0 <= ys) {
+            ttfx__edge TTFX_FAR *d = &e[idx[next]];
+            if (d->y1 > ys) {
+                ttfx_i32 den = d->y1 - d->y0, num = d->x1 - d->x0, tt = ys - d->y0, rem, r;
+                if (tt < 0x8000L && ttfx__abs(num) < 0x10000L)
+                    d->x = d->x0 + ttfx__fdiv(tt * num, den, &rem);
+                else
+                    d->x = d->x0 + ttfx__muldiv(tt, num, den, &rem);
+                if (ttfx__abs(num) < 0x1000000L)
+                    d->q = ttfx__fdiv(num * 64, den, &r);
+                else
+                    d->q = ttfx__muldiv(num, 64, den, &r);
+                d->rem = rem;
+                d->r = r;
+                act[nact++] = idx[next];
+            }
+            next++;
+        }
+        if (nact) {
+            for (i = 1; i < nact; i++) {
+                ttfx_u16 tt = act[i];
+                ttfx_i32 tx = e[tt].x;
+                int tr2 = e[tt].rem != 0;
+                for (k = i; k > 0; k--) {
+                    ttfx__edge TTFX_FAR *d = &e[act[k - 1]];
+                    if (d->x < tx || (d->x == tx && (d->rem != 0) < tr2))
+                        break;
+                    if (d->x == tx && (d->rem != 0) == tr2) {
+                        ttfx_u32 ah, al, bh, bl;
+                        if (!tr2)
+                            break;
+                        ttfx__mul64((ttfx_u32)d->rem, (ttfx_u32)(e[tt].y1 - e[tt].y0), &ah, &al);
+                        ttfx__mul64((ttfx_u32)e[tt].rem, (ttfx_u32)(d->y1 - d->y0), &bh, &bl);
+                        if (ah < bh || (ah == bh && al <= bl))
+                            break;
+                    }
+                    act[k] = act[k - 1];
+                }
+                act[k] = tt;
+            }
+            /* non-zero winding: runs from where it leaves 0 to where it
+               comes back */
+            w = 0;
+            for (i = 0; i < nact; i++) {
+                ttfx__edge TTFX_FAR *d = &e[act[i]];
+                if (!w) {
+                    xa = d->x;
+                    ra = d->rem != 0;
+                }
+                w += d->dir;
+                if (!w)
+                    ttfx__tt_run(t, l, xa, ra, d->x, d->rem != 0, tr);
+            }
+        }
+        if (!tr)
+            ttfx__tt_endrow(t, l);
+    }
+    ttfx_free(f->alloc, idx);
+    ttfx_free(f->alloc, e);
+    return 1;
+}
+
+/* one try at it: 0 if out of memory or past the edges a scan holds */
+static int ttfx__render_tt(const ttfx_font *f, ttfx_bitmap *bm, const ttfx_outline *o, int off_x, int off_y)
+{
+    ttfx_point TTFX_FAR *pts;
+    int TTFX_FAR *counts;
+    ttfx__tt t;
+    int x0, y0, x1, y1, ok, x, y;
+    unsigned i, rs_;
+    ttfx_u32 bytes;
+    ttfx_OutlineBox(o, &x0, &y0, &x1, &y1);
+    x0--, y0--, x1++, y1++;
+    /* r's pixel (0, 0) is the outline's (x0, y0) */
+    if (!ttfx__flatten_tt(f, o, -(ttfx_i32)x0 * 64, -(ttfx_i32)y0 * 64, &pts, &counts))
+        return 0;
+    t.w = x1 - x0;
+    t.h = y1 - y0;
+    t.rs = rs_ = (unsigned)(t.w + 7) >> 3;
+    t.mode = o->dropout;
+    t.p = pts;
+    t.counts = counts;
+    t.nc = (int)o->nc;
+    t.ncand = 0;
+    bytes = (ttfx_u32)t.rs * t.h;
+    t.r = bytes * 2 < 64000UL ? (ttfx_u8 TTFX_FAR *)ttfx_alloc(f->alloc, bytes * 2 + 1) : 0;
+    if (!t.r) {
+        ttfx_free(f->alloc, pts);
+        ttfx_free(f->alloc, counts);
+        return 0;
+    }
+    t.d = t.r + (unsigned)bytes;
+    for (i = 0; i < (unsigned)bytes * 2; i++)
+        t.r[i] = 0;
+    ok = ttfx__tt_sweep(f, &t, t.h, 0);
+    if (ok && t.mode != TTFX_DROP_NONE)
+        ok = ttfx__tt_sweep(f, &t, t.w, 1);
+    /* into bm: r's (x, y) is the outline's (x0 + x, y0 + y), bm's that
+       less (off_x, off_y) */
+    if (ok)
+        for (y = 0; y < t.h; y++) {
+            int by = y + y0 - off_y;
+            if (by < 0 || by >= bm->h)
+                continue;
+            for (x = 0; x < t.w; x++) {
+                int bx = x + x0 - off_x;
+                if (bx < 0 || bx >= bm->w)
+                    continue;
+                if (TT_BIT(t.r, x, y) || TT_BIT(t.d, x, y))
+                    bm->pixels[(ttfx_u32)by * bm->stride + (bx >> 3)] |= (ttfx_u8)(0x80 >> (bx & 7));
+            }
+        }
+    ttfx_free(f->alloc, t.r);
+    ttfx_free(f->alloc, pts);
+    ttfx_free(f->alloc, counts);
+    return ok;
+}
+
+int ttfx_RenderOutline(const ttfx_font *f, ttfx_bitmap *bm, const ttfx_outline *o, int off_x, int off_y)
+{
+    int tries, ok = 0;
+    if (!o->n || !o->nc)
+        return 1;
+    /* a glyph whose curves split this finely pass the memory or the
+       edges a scan holds (a large size): split less */
+    for (tries = 0; tries < 4 && !ok; tries++) {
+        ttfx__ttflat = TTFX_TT_FLAT << (2 * tries);
+        ok = ttfx__render_tt(f, bm, o, off_x, off_y);
+    }
+    ttfx__ttflat = TTFX_TT_FLAT;
+    return ok;
+}
+
+#undef TT_BIT
+#undef TT_SET
 
 /* ---- names ---- */
 
