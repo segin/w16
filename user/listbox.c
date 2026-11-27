@@ -57,7 +57,7 @@ typedef struct LB {
     WORD   focus;
     WORD   anchor;
     HWND   owner;               /* parent, or the combo box */
-    WORD   nredraw;
+    WORD   nredraw;             /* WM_SETREDRAW FALSE: no drawing */
     int    colw;                /* LBS_MULTICOLUMN: a column's width */
     DWORD  bars;                /* WS_VSCROLL/WS_HSCROLL it was made with */
     int    hext;                /* LB_SETHORIZONTALEXTENT */
@@ -77,6 +77,8 @@ static PLB lb_of(HWND h)
 {
     return (PLB)GetWindowWord(h, 0);
 }
+
+static BOOL lb_shown(HWND h);
 
 static PLBITEM item(PLB lb, int i)
 {
@@ -227,6 +229,10 @@ static void notify(HWND h, PLB lb, WORD code)
 
 static void update_scroll(HWND h, PLB lb)
 {
+    /* not while its redraw is off (US33 rd on 3.1: 37 items added, the
+       bar not shown; WM_SETREDRAW TRUE shows it) */
+    if (lb->nredraw)
+        return;
     if (multicol(h)) {
         int rows = visible_rows(h, lb), cols, max;
         if (!(lb->bars & WS_HSCROLL))
@@ -464,7 +470,7 @@ static void caret_draw(HWND h, PLB lb, BOOL on)
    caret until it next gets the focus: US32, US33) */
 static void caret_on(HWND h, PLB lb)
 {
-    if (!valid_wnd(h) || lb_of(h) != lb || !lb->focus || lb->caretOn || !IsWindowVisible(h))
+    if (!valid_wnd(h) || lb_of(h) != lb || !lb->focus || lb->caretOn || !lb_shown(h))
         return;
     lb->caretOn = 1;
     caret_draw(h, lb, TRUE);
@@ -477,7 +483,7 @@ static void caret_off(HWND h, PLB lb)
     lb->caretOn = 0;
     /* (not while hidden: a dialog destroyed with its list box focused
        draws nothing, US32) */
-    if (IsWindowVisible(h))
+    if (lb_shown(h))
         caret_draw(h, lb, FALSE);
 }
 
@@ -494,7 +500,7 @@ static void sel_draw(HWND h, PLB lb, int i)
 {
     HFONT old;
     HDC hdc;
-    if (!shows(h, lb, i) || !IsWindowVisible(h))
+    if (!shows(h, lb, i) || !lb_shown(h))
         return;
     hdc = draw_dc(h, lb, &old);
     draw_one(h, lb, hdc, i, ODA_SELECT, item_state(lb, i) |
@@ -518,6 +524,8 @@ static void set_sel(HWND h, PLB lb, int i, BOOL on, BOOL draw_always)
 static void invalidate_item(HWND h, PLB lb, int i, BOOL erase)
 {
     RECT r;
+    if (lb->nredraw)
+        return;
     item_rect(h, lb, i, &r);
     InvalidateRect(h, &r, erase);
 }
@@ -591,7 +599,17 @@ static void paint(HWND h, PLB lb, HDC hdc, RECT *upd)
 
 static void redraw(HWND h)
 {
+    PLB lb = lb_of(h);
+    if (lb && lb->nredraw)
+        return;
     InvalidateRect(h, NULL, FALSE);
+}
+
+/* drawn now: visible, and its redraw not turned off */
+static BOOL lb_shown(HWND h)
+{
+    PLB lb = lb_of(h);
+    return IsWindowVisible(h) && !(lb && lb->nredraw);
 }
 
 /* the client area's pixels moved by dx, dy, what comes in invalidated
@@ -637,7 +655,7 @@ static void scroll_to(HWND h, PLB lb, int t)
             rows = 1;
         lb->top = t;
         update_scroll(h, lb);
-        if (IsWindowVisible(h))
+        if (lb_shown(h))
             scroll_bits(h, (old - t) / rows * col_width(lb), 0);
     } else {
         if (varh(h)) {
@@ -652,7 +670,7 @@ static void scroll_to(HWND h, PLB lb, int t)
             d = (old - t) * lb->itemh;
         lb->top = t;
         update_scroll(h, lb);
-        if (IsWindowVisible(h)) {
+        if (lb_shown(h)) {
             if (d == 0x7FFF || d == -0x7FFF)
                 InvalidateRect(h, NULL, TRUE);
             else
@@ -817,7 +835,7 @@ static void bring(HWND h, PLB lb, int i)
    on a hidden window; the state alone, then a paint */
 static BOOL quiet(HWND h)
 {
-    return !IsWindowVisible(h);
+    return !lb_shown(h);
 }
 
 /* LB_SETCURSEL, a single-selection box (US33 on 3.1): the caret away, the
@@ -992,6 +1010,8 @@ static int hit(HWND h, PLB lb, int x, int y)
    one shown draws nothing; in columns the whole box is painted) */
 static void changed_from(HWND h, PLB lb, int i)
 {
+    if (lb->nredraw)                    /* (US33 rd: nothing invalidated) */
+        return;
     if (multicol(h) || i <= lb->top + visible_rows(h, lb))
         InvalidateRect(h, NULL, TRUE);
 }
@@ -1560,7 +1580,25 @@ LRESULT WINAPI __loadds ListBoxWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         lb->cur = -1;
         lb->caret = 0;
         update_scroll(h, lb);
-        redraw(h);
+        /* invalidated even with its redraw off (US33 rd on 3.1), the
+           scroll bar left as it was then */
+        InvalidateRect(h, NULL, FALSE);
+        return 0;
+    case WM_SETREDRAW:
+        /* its own: WS_VISIBLE kept (US33 rd on 3.1); off, nothing drawn,
+           invalidated or scrolled; on again, the scroll bar brought up
+           to date and the whole box invalidated */
+        if (!wp)
+            lb->nredraw = 1;
+        else if (lb->nredraw) {
+            lb->nredraw = 0;
+            update_scroll(h, lb);
+            /* UNVERIFIED: the pixels before the next paint (3.1 has
+               drawn something of the frame by then; US33 rd logs them
+               as ~rd.lb.on.pixels, not compared) */
+            if (valid_wnd(h) && lb_of(h) == lb)
+                InvalidateRect(h, NULL, TRUE);
+        }
         return 0;
     case LB_GETCOUNT:
         return lb->count;

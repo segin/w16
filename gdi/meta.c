@@ -249,6 +249,13 @@ static void __far *hp(void __far *base, DWORD off)
     return MAKELP(SELECTOROF(base) + (WORD)(off >> 16) * gdi_ahincr, (WORD)off);
 }
 
+/* the DWORD at an even offset (at 0FFFEh its two words are in two
+   selectors) */
+static DWORD hp_dword(void __far *base, DWORD off)
+{
+    return MAKELONG(*(WORD __far *)hp(base, off), *(WORD __far *)hp(base, off + 2));
+}
+
 /* n bytes from s to d, either of which may cross 64K boundaries (each
    given as a block's base and an offset) */
 static void huge_copy(void __far *db, DWORD doff, void __far *sb, DWORD soff, DWORD n)
@@ -284,8 +291,8 @@ static WORD __far *mf_begin(HDC h, WORD fn, DWORD n)
     DWORD need, sz;
     WORD __far *p;
     HGLOBAL g;
-    if (!m || m->failed)
-        return 0;
+    if (!m || m->failed || n > 0xFFF0L / 2 - 3)
+        return 0;                       /* UNVERIFIED: a record over 64K */
     need = m->used + (n + 3) * 2;
     sz = GlobalSize(m->hMem);
     if (need > sz) {
@@ -297,13 +304,14 @@ static WORD __far *mf_begin(HDC h, WORD fn, DWORD n)
         }
         m->hMem = g;
     }
-    if ((n + 3) * 2 > 0xFFF0L)
-        return 0;                       /* UNVERIFIED: a record over 64K */
     if (!scratch || GlobalSize(scratch) < (n + 3) * 2) {
         HGLOBAL t = scratch ? GlobalReAlloc(scratch, (n + 3) * 2, GMEM_MOVEABLE)
                             : GlobalAlloc(GMEM_MOVEABLE, (n + 3) * 2);
-        if (!t)
+        if (!t) {                       /* no room: the metafile fails, */
+            m = mf_get(h);              /* as for its own block */
+            m->failed = 1;
             return 0;
+        }
         scratch = t;
         gdi_owns(scratch);
     }
@@ -875,11 +883,12 @@ BOOL mf_text(HDC h, int x, int y, LPCSTR s, int n)
 BOOL mf_exttext(HDC h, int x, int y, WORD opt, const RECT __far *rc, LPCSTR s, int n,
                 const short __far *dx)
 {
-    WORD k = n > 0 ? (n + 1) / 2 : 0, at, words;
+    WORD k = n > 0 ? (WORD)(((DWORD)n + 1) / 2) : 0, at;
+    DWORD words;
     WORD __far *p;
     if (n < 0)
         n = 0;
-    words = 4 + (opt ? 4 : 0) + k + (dx ? n : 0);
+    words = 4 + (opt ? 4 : 0) + (DWORD)k + (dx ? (DWORD)n : 0);
     p = mf_begin(h, META_EXTTEXTOUT, words);
     if (!p)
         return FALSE;
@@ -912,7 +921,7 @@ BOOL mf_poly(HDC h, WORD fn, const POINT __far *pts, int n)
     WORD __far *p;
     if (n < 0)
         return FALSE;
-    p = mf_begin(h, fn, 1 + 2 * n);
+    p = mf_begin(h, fn, 1 + 2 * (DWORD)n);
     if (!p)
         return FALSE;
     p[0] = n;
@@ -926,9 +935,14 @@ BOOL mf_polypoly(HDC h, const POINT __far *pts, const int __far *counts, int n)
     WORD __far *p;
     DWORD total = 0;
     int i;
-    for (i = 0; i < n; i++)
+    if (n < 0)
+        return FALSE;
+    for (i = 0; i < n; i++) {
+        if (counts[i] < 0)
+            return FALSE;
         total += counts[i];
-    p = mf_begin(h, META_POLYPOLYGON, 1 + n + 2 * total);
+    }
+    p = mf_begin(h, META_POLYPOLYGON, 1 + (DWORD)n + 2 * total);
     if (!p)
         return FALSE;
     p[0] = n;
@@ -1003,21 +1017,35 @@ BOOL mf_blt(HDC h, int x, int y, int w, int hh, HDC hsrc, int xs, int ys, int ws
     return TRUE;
 }
 
+/* a DIB's bits (a huge pointer: they may cross 64K, KERNEL's __AHINCR
+   between selectors) to the record mf_begin gave, at byte `at` of its
+   parameters (the record itself is under 64K, its block at offset 0) */
+static void dib_bits_copy(WORD __far *p, WORD at, const void __far *bits, DWORD nb)
+{
+    huge_copy(MAKELP(SELECTOROF(p), 0), OFFSETOF(p) + at,
+              MAKELP(SELECTOROF(bits), 0), OFFSETOF(bits), nb);
+}
+
 /* SetDIBitsToDevice (GD9): usage, the scans, the first scan, the source's
    y, x, height and width, the destination's y and x, then the
    BITMAPINFO and the scans given */
 BOOL mf_dibtodev(HDC h, int x, int y, int cx, int cy, int xs, int ys, WORD start, WORD n,
                  const void __far *bits, const void __far *bmi, WORD usage)
 {
-    WORD hd = dib_head(bmi, usage);
-    DWORD nb = dib_lines(bmi, n);
-    WORD __far *p = mf_begin(h, META_SETDIBTODEV, 9 + (hd + nb + 1) / 2);
+    WORD hd;
+    DWORD nb;
+    WORD __far *p;
+    if (!bmi || !bits)
+        return FALSE;
+    hd = dib_head(bmi, usage);
+    nb = dib_lines(bmi, n);
+    p = mf_begin(h, META_SETDIBTODEV, 9 + (hd + nb + 1) / 2);
     if (!p)
         return FALSE;
     p[0] = usage; p[1] = n; p[2] = start; p[3] = ys; p[4] = xs;
     p[5] = cy; p[6] = cx; p[7] = y; p[8] = x;
     mem_copy(p + 9, bmi, hd);
-    mem_copy((BYTE __far *)(p + 9) + hd, bits, (WORD)nb);
+    dib_bits_copy(p, 9 * 2 + hd, bits, nb);
     mf_end(h);
     return TRUE;
 }
@@ -1028,16 +1056,21 @@ BOOL mf_dibtodev(HDC h, int x, int y, int cx, int cy, int xs, int ys, WORD start
 BOOL mf_stretchdib(HDC h, int xd, int yd, int wd, int hd, int xs, int ys, int ws, int hs,
                    const void __far *bits, const void __far *bmi, WORD usage, DWORD rop)
 {
-    WORD head = dib_head(bmi, usage);
-    DWORD nb = dib_lines(bmi, dib_height(bmi));
-    WORD __far *p = mf_begin(h, META_STRETCHDIB, 11 + (head + nb + 1) / 2);
+    WORD head;
+    DWORD nb;
+    WORD __far *p;
+    if (!bmi || !bits)
+        return FALSE;
+    head = dib_head(bmi, usage);
+    nb = dib_lines(bmi, dib_height(bmi));
+    p = mf_begin(h, META_STRETCHDIB, 11 + (head + nb + 1) / 2);
     if (!p)
         return FALSE;
     p[0] = LOWORD(rop); p[1] = HIWORD(rop); p[2] = usage;
     p[3] = hs; p[4] = ws; p[5] = ys; p[6] = xs;
     p[7] = hd; p[8] = wd; p[9] = yd; p[10] = xd;
     mem_copy(p + 11, bmi, head);
-    mem_copy((BYTE __far *)(p + 11) + head, bits, (WORD)nb);
+    dib_bits_copy(p, 11 * 2 + head, bits, nb);
     mf_end(h);
     return TRUE;
 }
@@ -1170,14 +1203,17 @@ HANDLE GDIAPI CloseMetaFile(HDC h)                                 /* GDI.126 */
 static BOOL write_file(LPCSTR name, const void __far *p, DWORD n)
 {
     int fh = _lcreat(name, 0);
+    DWORD at = 0;
     BOOL ok;
     if (fh == -1)
         return FALSE;
     ok = TRUE;
+    /* in pieces of 32K from the block's start (p at offset 0): none
+       crosses 64K */
     while (n && ok) {
         WORD k = n > 0x8000L ? 0x8000 : (WORD)n;
-        ok = _lwrite(fh, p, k) == k;
-        p = hp((void __far *)p, k);
+        ok = _lwrite(fh, hp((void __far *)p, at), k) == k;
+        at += k;
         n -= k;
     }
     _lclose(fh);
@@ -1314,7 +1350,7 @@ static DWORD words_to_eof(LPMH mh, DWORD size)
 {
     DWORD at = mh->mtHeaderSize;
     while (at + 3 <= size) {
-        DWORD rs = *(DWORD __far *)hp(mh, at * 2);
+        DWORD rs = hp_dword(mh, at * 2);
         WORD fn = *(WORD __far *)hp(mh, at * 2 + 4);
         if (!fn || rs < 3)
             return at + 3;
@@ -1338,7 +1374,7 @@ HANDLE GDIAPI CopyMetaFile(HANDLE h, LPCSTR name)                  /* GDI.151 */
         return 0;
     mh = GlobalLock(src);
     words = mh->mtSize;
-    if (words * 2 > GlobalSize(src))
+    if (words > GlobalSize(src) / 2)    /* (not words * 2: it wraps) */
         words = GlobalSize(src) / 2;
     if (name) {
         WORD t = mh->mtType;
@@ -1475,7 +1511,7 @@ static HRGN region_of(const WORD __far *p, WORD words)
     t = CreateRectRgn(0, 0, 0, 0);
     for (s = 0; s < scans && at + 3 <= words; s++) {
         WORD cnt = p[at], top = p[at + 1], bottom = p[at + 2], j;
-        if (at + 3 + cnt + 1 > words)
+        if ((DWORD)at + 3 + cnt + 1 > words)
             break;
         for (j = 0; j + 1 < cnt; j += 2) {
             rgn_set_rect(t, p[at + 3 + j], top, p[at + 4 + j], bottom);
@@ -1487,11 +1523,108 @@ static HRGN region_of(const WORD __far *p, WORD words)
     return r;
 }
 
+/* the fewest parameter words playing a record reads */
+static const struct { WORD fn; BYTE min; } rec_min[] = {
+    { META_SETBKCOLOR, 2 }, { META_SETBKMODE, 1 }, { META_SETMAPMODE, 1 },
+    { META_SETROP2, 1 }, { META_SETRELABS, 1 }, { META_SETPOLYFILLMODE, 1 },
+    { META_SETSTRETCHBLTMODE, 1 }, { META_SETTEXTCHAREXTRA, 1 },
+    { META_SETTEXTCOLOR, 2 }, { META_SETTEXTJUSTIFICATION, 2 },
+    { META_SETWINDOWORG, 2 }, { META_SETWINDOWEXT, 2 }, { META_SETVIEWPORTORG, 2 },
+    { META_SETVIEWPORTEXT, 2 }, { META_OFFSETWINDOWORG, 2 }, { META_SCALEWINDOWEXT, 4 },
+    { META_OFFSETVIEWPORTORG, 2 }, { META_SCALEVIEWPORTEXT, 4 }, { META_LINETO, 2 },
+    { META_MOVETO, 2 }, { META_EXCLUDECLIPRECT, 4 }, { META_INTERSECTCLIPRECT, 4 },
+    { META_ARC, 8 }, { META_ELLIPSE, 4 }, { META_FLOODFILL, 4 }, { META_EXTFLOODFILL, 5 },
+    { META_PIE, 8 }, { META_CHORD, 8 }, { META_RECTANGLE, 4 }, { META_ROUNDRECT, 6 },
+    { META_PATBLT, 6 }, { META_RESTOREDC, 1 }, { META_SETPIXEL, 4 },
+    { META_OFFSETCLIPRGN, 2 }, { META_TEXTOUT, 1 }, { META_EXTTEXTOUT, 4 },
+    { META_POLYGON, 1 }, { META_POLYLINE, 1 }, { META_POLYPOLYGON, 1 }, { META_ESCAPE, 2 },
+    { META_SETTEXTALIGN, 1 }, { META_SETMAPPERFLAGS, 2 }, { META_SELECTOBJECT, 1 },
+    { META_SELECTCLIPREGION, 1 }, { META_SELECTPALETTE, 1 }, { META_FILLREGION, 2 },
+    { META_FRAMEREGION, 4 }, { META_INVERTREGION, 1 }, { META_PAINTREGION, 1 },
+    { META_DELETEOBJECT, 1 }, { META_CREATEPENINDIRECT, 5 }, { META_CREATEBRUSHINDIRECT, 4 },
+    { META_CREATEPALETTE, 2 }, { META_DIBCREATEPATTERNBRUSH, 2 }, { META_DIBBITBLT, 9 },
+    { META_DIBSTRETCHBLT, 10 }, { META_SETDIBTODEV, 9 }, { META_STRETCHDIB, 11 },
+    { META_ANIMATEPALETTE, 2 }, { META_SETPALENTRIES, 2 }, { META_RESIZEPALETTE, 1 }
+};
+
+/* does a packed DIB's header and colour table fit in its record's
+   `words` from bmi (counted without wrapping) */
+static BOOL dib_fits(const void __far *bmi, WORD words, WORD usage)
+{
+    const BMIH __far *bi = bmi;
+    DWORD bytes = (DWORD)words * 2, sz, n;
+    if (bytes < 4)
+        return FALSE;
+    sz = bi->biSize;
+    if (sz == 12)
+        return bytes >= 12 && dib_head(bmi, usage) <= bytes;
+    if (bytes < sizeof(BMIH) || sz > bytes)
+        return FALSE;
+    n = bi->biClrUsed;
+    if (!n && bi->biBitCount <= 8)
+        n = 1 << bi->biBitCount;
+    return n <= bytes && sz + n * (usage == 1 ? 2 : 4) <= bytes;
+}
+
+/* does a record hold what playing it reads: its function's fixed words,
+   and the counts and DIB headers it carries (a damaged metafile's or a
+   program's own record that does not is passed over, as an unknown one) */
+static BOOL rec_fits(WORD fn, const WORD __far *p, WORD words)
+{
+    WORD i;
+    DWORD need;
+    for (i = 0; i < sizeof rec_min / sizeof rec_min[0]; i++)
+        if (rec_min[i].fn == fn) {
+            if (words < rec_min[i].min)
+                return FALSE;
+            break;
+        }
+    switch (fn) {
+    case META_TEXTOUT:
+        return 3 + ((DWORD)p[0] + 1) / 2 <= words;
+    case META_EXTTEXTOUT:
+        return (p[3] ? 8 : 4) + ((DWORD)p[2] + 1) / 2 <= words;
+    case META_POLYGON:
+    case META_POLYLINE:
+        return 1 + 2 * (DWORD)p[0] <= words;
+    case META_POLYPOLYGON:
+        need = 1 + (DWORD)p[0];
+        if (need > words)
+            return FALSE;
+        for (i = 0; i < p[0]; i++)
+            need += 2 * (DWORD)p[1 + i];
+        return need <= words;
+    case META_ESCAPE:
+        return 2 + ((DWORD)p[1] + 1) / 2 <= words;
+    case META_CREATEPALETTE:
+    case META_ANIMATEPALETTE:
+    case META_SETPALENTRIES:
+        return 2 + 2 * (DWORD)p[1] <= words;
+    case META_DIBCREATEPATTERNBRUSH:
+        return p[0] != 3 || dib_fits(p + 2, words - 2, 0);
+    case META_DIBBITBLT:
+        return words == 9 || dib_fits(p + 8, words - 8, 0);
+    case META_DIBSTRETCHBLT:
+        return words == 10 || dib_fits(p + 10, words - 10, 0);
+    case META_SETDIBTODEV:
+        return dib_fits(p + 9, words - 9, p[0]);
+    case META_STRETCHDIB:
+        return dib_fits(p + 11, words - 11, p[2]);
+    }
+    return TRUE;
+}
+
 /* one record (also for PlayMetaFile and EnumMetaFile) */
 void GDIAPI PlayMetaFileRecord(HDC h, HANDLE __far *ht, METARECORD __far *mr, WORD n) /* GDI.176 */
 {
-    const WORD __far *p = mr->rdParm;
-    WORD words = mr->rdSize > 3 ? (WORD)(mr->rdSize - 3) : 0;
+    const WORD __far *p;
+    WORD words;
+    if (!mr)
+        return;
+    p = mr->rdParm;
+    words = mr->rdSize > 3 ? (mr->rdSize > 0xFFFFL ? 0xFFFF : (WORD)(mr->rdSize - 3)) : 0;
+    if (!rec_fits(mr->rdFunction, p, words))
+        return;
     switch (mr->rdFunction) {
     case META_SETBKCOLOR: SetBkColor(h, MAKELONG(p[0], p[1])); break;
     case META_SETBKMODE: SetBkMode(h, p[0]); break;
@@ -1533,14 +1666,14 @@ void GDIAPI PlayMetaFileRecord(HDC h, HANDLE __far *ht, METARECORD __far *mr, WO
     case META_SETPIXEL: SetPixel(h, p[3], p[2], MAKELONG(p[0], p[1])); break;
     case META_OFFSETCLIPRGN: OffsetClipRgn(h, p[1], p[0]); break;
     case META_TEXTOUT: {
-        WORD k = (p[0] + 1) / 2;
-        if (words >= 3 + k)
+        WORD k = (WORD)(((DWORD)p[0] + 1) / 2);
+        if (words >= 3 + (DWORD)k)
             TextOut(h, p[2 + k], p[1 + k], (LPCSTR)(p + 1), p[0]);
         break;
     }
     case META_EXTTEXTOUT: {
-        WORD cnt = p[2], opt = p[3], at = opt ? 8 : 4, k = (cnt + 1) / 2;
-        const short __far *dx = words >= at + k + cnt && cnt ? (const short __far *)(p + at + k) : 0;
+        WORD cnt = p[2], opt = p[3], at = opt ? 8 : 4, k = (WORD)(((DWORD)cnt + 1) / 2);
+        const short __far *dx = words >= (DWORD)at + k + cnt && cnt ? (const short __far *)(p + at + k) : 0;
         ExtTextOut(h, p[1], p[0], opt, opt ? (const RECT __far *)(p + 4) : 0,
                    (LPCSTR)(p + at), cnt, dx);
         break;
@@ -1723,7 +1856,7 @@ static BOOL play(HDC h, HANDLE hmf, MFENUMPROC proc, DWORD lp)
     mh = GlobalLock(bits);
     n = mh->mtNoObjects;
     size = mh->mtSize;
-    if (size * 2 > GlobalSize(bits))
+    if (size > GlobalSize(bits) / 2)    /* (not size * 2: it wraps) */
         size = GlobalSize(bits) / 2;
     hht = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, (n ? n : 1) * sizeof(HANDLE));
     if (!hht) {
@@ -1753,10 +1886,10 @@ static BOOL play(HDC h, HANDLE hmf, MFENUMPROC proc, DWORD lp)
     while (at + 3 <= size) {
         /* each record as a copy (it may cross 64K; GD9: EnumMetaFile's
            callback gets a copy, not the metafile's memory) */
-        DWORD rs = *(DWORD __far *)hp(mh, at * 2);
+        DWORD rs = hp_dword(mh, at * 2);
         WORD fn = *(WORD __far *)hp(mh, at * 2 + 4);
         LPMR c;
-        if (!fn || rs < 3 || at + rs > size || rs * 2 > 0xFFF0L)
+        if (!fn || rs < 3 || at + rs > size || rs > 0xFFF0L / 2)
             break;
         if (!hrec || GlobalSize(hrec) < rs * 2) {
             if (hrec)

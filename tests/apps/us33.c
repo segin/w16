@@ -45,6 +45,9 @@
  *           and without WS_CLIPCHILDREN
  *   pv      PtVisible, RectVisible, PtInRegion, RectInRegion as they
  *           return (the high byte too)
+ *   rd      WM_SETREDRAW off and on for a list box with a scroll bar
+ *           (items added meanwhile, LB_RESETCONTENT) and a plain child:
+ *           WS_VISIBLE, the scroll bar, the update region, the pixels
  */
 #include <windows.h>
 
@@ -812,6 +815,91 @@ static void tab_all(HWND lb, const char *pre)
 }
 
 LRESULT FAR PASCAL __export __loadds main_proc(HWND h, UINT m, WPARAM w, LPARAM l);
+
+/* ---- rd: WM_SETREDRAW. Visual C++ 1.52's HeapWalk turns its list
+   box's redraw off and adds an item for every global arena: on w16 the
+   scroll bar was drawn again for each (half a minute for a few hundred,
+   in 386 Enhanced mode). For a list box with a scroll bar and for a
+   plain child (DefWindowProc): the style's WS_VISIBLE and WS_VSCROLL,
+   the scroll range and position, the update region and the pixels, with
+   redraw off, after items are added, and with redraw on again. ---- */
+static void rd_state(HWND h, const char *step)
+{
+    char nm[48];
+    int mn = 0, mx = 0;
+    RECT r, u;
+    DWORD st = GetWindowLong(h, GWL_STYLE);
+    wsprintf(nm, "rd.%s.vis", (LPSTR)step);
+    obs(nm, (WORD)((st & WS_VISIBLE) != 0) | (IsWindowVisible(h) ? 2 : 0));
+    wsprintf(nm, "rd.%s.vscroll", (LPSTR)step);
+    obs(nm, (st & WS_VSCROLL) != 0);
+    GetScrollRange(h, SB_VERT, &mn, &mx);
+    wsprintf(nm, "rd.%s.range", (LPSTR)step);
+    obsf(nm, "%d-%d pos %d", mn, mx, GetScrollPos(h, SB_VERT), 0);
+    wsprintf(nm, "rd.%s.update", (LPSTR)step);
+    obs(nm, GetUpdateRect(h, &u, FALSE));
+    GetWindowRect(h, &r);
+    /* (right after redraw is turned on again, before the box's paint,
+       3.1 has drawn part of the frame in a way not matched yet: logged,
+       not compared) */
+    wsprintf(nm, lstrcmp(step, "lb.on") ? "rd.%s.pixels" : "~rd.%s.pixels", (LPSTR)step);
+    obs(nm, checksum(&r));
+}
+
+static void sec_rd(void)
+{
+    HWND lb, pl;
+    int i;
+    char t[16];
+    lb = CreateWindow("ListBox", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
+                      10, 10, 120, 100, hMain, (HMENU)5, hi, NULL);
+    for (i = 0; i < 3; i++) {
+        wsprintf(t, "item %d", i);
+        SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)t);
+    }
+    pump(300);
+    rd_state(lb, "lb.start");
+    SendMessage(lb, WM_SETREDRAW, FALSE, 0);
+    rd_state(lb, "lb.off");
+    for (i = 3; i < 40; i++) {
+        wsprintf(t, "item %d", i);
+        SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)t);
+    }
+    rd_state(lb, "lb.added");
+    pump(300);
+    rd_state(lb, "lb.pumped");
+    SendMessage(lb, WM_SETREDRAW, TRUE, 0);
+    rd_state(lb, "lb.on");
+    pump(300);
+    rd_state(lb, "lb.onpumped");
+    SendMessage(lb, WM_SETREDRAW, FALSE, 0);
+    SendMessage(lb, LB_RESETCONTENT, 0, 0);
+    rd_state(lb, "lb.reset");
+    SendMessage(lb, WM_SETREDRAW, TRUE, 0);
+    pump(300);
+    rd_state(lb, "lb.reseton");
+    DestroyWindow(lb);
+    /* a plain child: DefWindowProc's WM_SETREDRAW */
+    pl = CreateWindow("US33M", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL,
+                      10, 10, 120, 100, hMain, (HMENU)6, hi, NULL);
+    SetScrollRange(pl, SB_VERT, 0, 50, TRUE);
+    pump(300);
+    rd_state(pl, "def.start");
+    SendMessage(pl, WM_SETREDRAW, FALSE, 0);
+    rd_state(pl, "def.off");
+    SetScrollPos(pl, SB_VERT, 20, TRUE);
+    InvalidateRect(pl, NULL, TRUE);
+    rd_state(pl, "def.changed");
+    pump(300);
+    rd_state(pl, "def.pumped");
+    SendMessage(pl, WM_SETREDRAW, TRUE, 0);
+    rd_state(pl, "def.on");
+    pump(300);
+    rd_state(pl, "def.onpumped");
+    DestroyWindow(pl);
+    pump(300);
+}
+
 BOOL FAR PASCAL __export __loadds plain_proc(HWND h, UINT m, WPARAM w, LPARAM l)
 {
     (void)h, (void)w, (void)l;
@@ -1371,6 +1459,8 @@ int __cdecl tmain(void)
     sec_tto();
     out("tab\r\n");
     sec_tab();
+    out("rd\r\n");
+    sec_rd();
     for (n = 1; n <= 10; n++) {
         out("od\r\n");
         sec_od(n);

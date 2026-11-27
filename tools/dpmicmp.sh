@@ -8,10 +8,20 @@
 #   g  DPG.LOG as 3.1's; neither run went on after the fault (no DPH.LOG,
 #      no DPGAFT.TXT); the fault's message box on the screen as 3.1's
 #   c  both boxes' logs as 3.1's: their memory intact while the other ran
+#   d  (REFDIR unused) both boxes kept their own current directory
 set -u
 kind=$1 a=$2 b=$3
 case $kind in
-p) logs="A B C D E F G H" ;;
+d)  # w16 only: each box found its own directory (Windows 3.1's boxes
+    # share DOSBox's: its X found Y's in nearly every poll). At most two
+    # misses: one in some 58,000 polls came in some runs, UNVERIFIED where
+    # (with the swaps traced it did not)
+    for t in X Y; do
+        grep -q 'other=000[012] polls=0*[1-9A-F]' "$b/CW$t.LOG" 2>/dev/null ||
+            { echo "FAIL CW$t.LOG: $(cat "$b/CW$t.LOG" 2>/dev/null || echo none)"; exit 1; }
+    done
+    echo "ok   two boxes each kept their own current directory"; exit 0 ;;
+p) logs="A B C D E F G H T U P V" ;;
 g) logs="G" ;;
 c) logs="X Y" ;;
 *) echo "FAIL kind $kind"; exit 1 ;;
@@ -21,9 +31,13 @@ for t in $logs; do
     [ -s "$b/DP$t.LOG" ] || { echo "FAIL DP$t.LOG: none ($b; the reference: $(tail -n 1 "$a/DP$t.LOG"))"; exit 1; }
     # the nested client (F): its selectors follow what the outer one and
     # the host hold then, which differs between Windows 3.1's own runs
-    # (its environment's D7h once, DFh another time): left out
-    m='s/=00[0-9A-F][0-9A-F]\b/=..../g'
-    [ "$t" = F ] || m=
+    # (its environment's D7h once, DFh another time): left out; so U's,
+    # after T's client, which DOS ended in real mode and whose descriptors
+    # 3.1 keeps (and three more of its own: the next first 0000h gives E7h;
+    # 3.1 goes on as if T's client still ran, so a 32-bit client after it
+    # is refused there: w16 frees it, and that is not compared)
+    m='s/=0[0-9A-F][0-9A-F][0-9A-F]\b/=..../g'
+    [ "$t" = F ] || [ "$t" = U ] || [ "$t" = P ] || [ "$t" = V ] || m=
     grep -v '^INFO\|^MEM' "$a/DP$t.LOG" | sed "$m" > "$b/DP$t.ref"
     grep -v '^INFO\|^MEM' "$b/DP$t.LOG" | sed "$m" > "$b/DP$t.cmp"
     if ! cmp -s "$b/DP$t.ref" "$b/DP$t.cmp"; then

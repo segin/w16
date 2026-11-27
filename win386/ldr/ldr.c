@@ -1069,6 +1069,31 @@ int main(int argc, char **argv)
             unsigned long p = *(unsigned long far *)(lol + 0x16);
             info.cds_lin = ((p >> 16) << 4) + (p & 0xFFFF);
             info.cds_size = (unsigned long)lol[0x21] * (major >= 4 ? 0x58 : 0x51);
+            {   /* does DOS keep the current directory there? Its entry
+                 * for the current drive says "W16Q" for a moment: DOS's
+                 * INT 21h 47h answers from it if so (MS-DOS); DOSBox's
+                 * own DOS keeps it elsewhere (the VMM then keeps each VM's
+                 * itself: vm.c vm_dos_cwd) */
+                unsigned d, sz = major >= 4 ? 0x58 : 0x51, i;
+                unsigned char save[0x58], buf[68];
+                unsigned char far *e;
+                r.h.ah = 0x19;
+                intdos(&r, &r);
+                d = r.h.al;
+                if (d < lol[0x21]) {
+                    e = (unsigned char far *)MK_FP((unsigned)(p >> 16), (unsigned)p + d * sz);
+                    for (i = 0; i < sz; i++) save[i] = e[i];
+                    e[3] = 'W'; e[4] = '1'; e[5] = '6'; e[6] = 'Q'; e[7] = 0;
+                    r.h.ah = 0x47;
+                    r.h.dl = 0;
+                    r.x.si = (unsigned)buf;
+                    segread(&sr);
+                    intdosx(&r, &r, &sr);
+                    info.cds_live = !r.x.cflag && buf[0] == 'W' && buf[1] == '1' && buf[2] == '6'
+                        && buf[3] == 'Q' && buf[4] == 0;
+                    for (i = 0; i < sz; i++) e[i] = save[i];
+                }
+            }
         }
     }
     /* a DOS VM's memory starts after this program's block (its MCB is the

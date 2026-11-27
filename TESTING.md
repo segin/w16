@@ -112,7 +112,7 @@ Boot-test settings:
 - `BOOTTEST_REFRESH=1`: rerun the Windows 3.1 reference boots instead of using the cache in `build/refcache/` (the cache is keyed on everything a reference depends on, so you rarely need this).
 - Results go to `build/boottest-HHMMSS/`: for a failing case, `CASE-*-diff.png` shows the differing pixels, and the case's `-ref` and `-w16` directories hold both sides' screens and logs. Retries are logged to `build/boottest-retries.log`. A test that fails only sometimes is a bug, not noise: report it.
 
-Other test scripts, each documented at its top: `tests/gd13.sh` (the TrueType probe GD13 as the shell, `-r` on Microsoft's GDI, with the free test font installed through CreateScalableFontResource; `tools/gd13.py REF LOG` compares two logs, `tools/gd11.py tt REF LOG` GD11's TrueType answers), `tests/ttview.sh` (TTVIEW.EXE, the TrueType viewer that rasterises with w16's fixed-point `gdi/ttf/ttfx.c`, on Windows/386 2.11, 3.1 Standard and 386 Enhanced, w16 and an emulated 80286: its page, hinted by the font's own instructions (`gdi/ttf/ttfbc.c`; `-a` w16's autohinter `gdi/ttf/ttfhint.c`) and unhinted, against the host's drawing bit for bit; `-2` the 8-24 pixel specimen, `-u` shows the unhinted page, `-g` the specimen as 3.1 draws it with its own rasteriser, whose TTVIEW.SCR `tests/ttf/ttvspec.py FONT PAGE.PG TTVIEW.SCR` compares line by line with w16's page (`build/host/ttvhost -2`); `tests/ttf/pg2png.py` makes images of the pages; `build/host/ttbcshow` prints a glyph or line with the instructions, the autohinter or neither; `make test` runs `tests/ttf/ttfxtest.c`, the rasteriser against floating-point stb_truetype, the hinted bitmaps against the scan-conversion rules on the hinted outline and every glyph through the bytecode interpreter, `tests/ttf/ttfbctest.c`, each instruction against the specification, and `ttvspec.py` on Liberation Sans against 3.1's committed rendering), `tests/npscenarios.sh` (`NP_W16FILES="$PWD/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE"` runs w16's Notepad on w16's edit control too), `tests/npqes.sh` (Notepad when Windows ends: whole-screen captures of its system-modal boxes),
+Other test scripts, each documented at its top: `tests/gd13.sh` (the TrueType probe GD13 as the shell, `-r` on Microsoft's GDI, with the free test font installed through CreateScalableFontResource; `tools/gd13.py REF LOG` compares two logs, `tools/gd11.py tt REF LOG` GD11's TrueType answers), `tests/ttview.sh` (TTVIEW.EXE, the TrueType viewer that rasterises with w16's fixed-point `gdi/ttf/ttfx.c`, on Windows/386 2.11, 3.1 Standard and 386 Enhanced, w16 and an emulated 80286: its page, hinted by the font's own instructions (`gdi/ttf/ttfbc.c`; `-a` w16's autohinter `gdi/ttf/ttfhint.c`) and unhinted, against the host's drawing bit for bit; `-2` the 8-24 pixel specimen, `-u` shows the unhinted page, `-g` the specimen as 3.1 draws it with its own rasteriser, whose TTVIEW.SCR `tests/ttf/ttvspec.py FONT PAGE.PG TTVIEW.SCR` compares line by line with w16's page (`build/host/ttvhost -2`); `tests/ttf/pg2png.py` makes images of the pages; `build/host/ttbcshow` prints a glyph or line with the instructions, the autohinter or neither; `make test` runs `tests/ttf/ttfxtest.c`, the rasteriser against floating-point stb_truetype, the hinted bitmaps against the scan-conversion rules on the hinted outline and every glyph through the bytecode interpreter, `tests/ttf/ttfbctest.c`, each instruction against the specification, and `ttvspec.py` on Liberation Sans against 3.1's committed rendering), `tests/ttfonts.sh` (w16's TrueType fonts on 3.1 through probe FN4: every width, metric and kerning pair against Microsoft's faces, and the .FOT files 3.1 writes), `tests/ttshow.sh` (FN4's show pages, w16's fonts at 8-24 pt, on 3.1 and on w16's tree: the lines in w16's faces compared pixel for pixel, `-o DIR` keeps the screens), `tests/npscenarios.sh` (`NP_W16FILES="$PWD/build/dos/USER.EXE=WINDOWS/SYSTEM/USER.EXE"` runs w16's Notepad on w16's edit control too), `tests/npqes.sh` (Notepad when Windows ends: whole-screen captures of its system-modal boxes),
 `tests/wfscenarios.sh` and `tests/wfhelp.sh` (w16's File Manager against
 Microsoft's; `tests/wfobs.sh` for observing the original; scripts with
 `; fmx:` load w16's File Manager extension probe FMX.DLL, `tests/apps/fmx.c`),
@@ -308,7 +308,7 @@ setup. w16's WIN386 writes its trace to COM1 (`serial1=file file:com1.txt`).
 Real mouse motion does not reach the guest in DOSBox-X, so the boot-test
 case `win386input` (mouse, keys, Exit Windows) runs in DOSBox through
 `tests/inputrun.sh` (`-c "WIN /3 /B"`, with KRNL386.EXE put back by `-f`:
-see the case in `tests/boottest.sh`). `tests/vsdprobe.sh ms|w16 [fg bg two hung cadd kbd ...]` runs the Virtual Sound Device's probes with the sound recorded (ARCHITECTURE.md 12.8 VSD). `tests/vdmadprobe.sh [-R] ms|w16` runs the Virtual DMA Device's: SBD.COM's Sound Blaster DMA and VDS calls in a box, the probe VxD VXM.386 (`-R`: VXMR, which reserves buffer space; `VDMADPROBE_INI` adds SYSTEM.INI settings), the sound recorded; `tools/vdmadcmp.py REF W16` compares two runs (the boot-test case vdmad). `tests/msvcvxd.sh [-o DIR] [vxc boot cvw wx cl]` runs the probe VxD VXC.386 (and VXCU.386, a missing VMM service) under both WIN386s, and, with Visual C++ 1.52 installed in `$W16_MSVC_DIR` (its C:\MSVC; skipped without), boots w16's tree with its four devices, starts CodeView for Windows, runs WXSRVR.EXE (VMB.386's client) with Program Manager's menus opened, and compiles a hello world with CL.EXE in a DOS box with DOSXNT.386 and without, against Windows 3.1 (boot-test cases `win386vxc` and `msvc`, ARCHITECTURE.md 12.7). `tests/vxpprobe.sh ms|w16` loads the
+see the case in `tests/boottest.sh`). `tests/vsdprobe.sh ms|w16 [fg bg two hung cadd kbd ...]` runs the Virtual Sound Device's probes with the sound recorded (ARCHITECTURE.md 12.8 VSD). `tests/vdmadprobe.sh [-R] ms|w16` runs the Virtual DMA Device's: SBD.COM's Sound Blaster DMA and VDS calls in a box, the probe VxD VXM.386 (`-R`: VXMR, which reserves buffer space; `VDMADPROBE_INI` adds SYSTEM.INI settings), the sound recorded; `tools/vdmadcmp.py REF W16` compares two runs (the boot-test case vdmad). `tests/msvcvxd.sh [-o DIR] [vxc boot cvw wx cl msquery cvdos]` runs the probe VxD VXC.386 (and VXCU.386, a missing VMM service) under both WIN386s, and, with Visual C++ 1.52 installed in `$W16_MSVC_DIR` (its C:\MSVC; skipped without), boots w16's tree with its four devices, starts CodeView for Windows, runs WXSRVR.EXE (VMB.386's client) with Program Manager's menus opened, and compiles a hello world with CL.EXE in a DOS box with DOSXNT.386 and without, against Windows 3.1 (boot-test cases `win386vxc` and `msvc`, ARCHITECTURE.md 12.7); by name, `msquery` closes Microsoft Query and its Cue Cards on w16's tree and on 3.1 (its Windows-directory files from `$W16_MSQUERY_DIR`, default MSQUERY beside the MSVC directory; boot-test case `msquery`, with probe US39) and `cvdos` runs CodeView for MS-DOS in a full-screen box with the mouse moved over it (boot-test case `cvdos`). `tests/vxpprobe.sh ms|w16` loads the
 probe VxD VXP.386 (`make vxprobes`) and prints the control messages and
 service results it saw (ARCHITECTURE.md 12.7). The DPMI host's answers
 are probed by VX11 (`tests/apps/vx11.c`, run as the shell with
@@ -368,6 +368,22 @@ End VM on a busy box (3.1's Terminate warning), End Task on VMTH.EXE
 Shift+F10's shortcut menu, the IDs columns; VMT1 logs the tasks' and
 VMs' IDs for comparison and checks at the end that VMTH and the box are
 gone (shots e0-e8 in OUTDIR).
+`tests/vmtasksoak.sh OUTDIR [tree|ms]` leaves VMTASK.EXE running (0.5 s)
+while VMTSOAK.EXE (`tests/apps/vmtsoak.c`) starts and closes Clock,
+Notepad, Calculator, Cardfile and Write and, every other cycle, a busy
+DOS box it ends through VMTASK.386; after each cycle it logs the free
+memory, GDI's and USER's resources and objects (GDI's by type), the
+global blocks, the tasks, VMTASK's own blocks and the *WOA.FON modules,
+and at the end checks that VMTASK still runs and nothing grew past a
+small margin (exit 1 otherwise; KERNEL's output, a fault report, in
+OUTDIR/OUT.TXT). `VMTASK_CYCLES` (40), `VMTASK_APPS` (the list; empty:
+none), `VMTASK_BOX=0`, `VMTASK_LAUNCH=0` (without VMTASK: what the rest
+leaves by itself), `VMTASK_TREE` (another install tree, e.g. a copy of
+your own), `VMTASK_DOSBOX=x`, `VMTASK_EXTRA` (more dropin.sh options,
+e.g. `-i WIN.INI:vmtsoak:memfill=600`: fill global memory to 600 KB
+free first; `gdifill=N`, `userfill=N`: GDI and USER objects until N per
+cent are free, -1 until one fails). The boot-test case `vmtasksoak`
+runs it on the tree under DOSBox-X for 20 cycles.
 `tests/qtplay.sh` takes `QTPLAY_W16OPTS` and
 `tests/sb16/sbaudio.sh` `SBAUDIO_OPTS`/`SBAUDIO_CONF` (more dropin.sh
 options, a COM1 for the VMM's trace) for the w16 side. XMS and EMS in a DOS box:
@@ -393,6 +409,18 @@ a fault no handler takes, `c` two boxes at once) under Microsoft's WIN386
 for Standard mode), and prints its logs; `tools/dpmicmp.sh KIND REF DIR`
 compares two runs, leaving out the INFO and MEM lines (the case
 `win386dpmi`, ARCHITECTURE.md 12.16).
+
+What Windows leaves DOS with: `tests/dosstrun.sh OUTDIR MODE [x|dosbox]`
+(MODE `ms`, `w16` or `tree`) runs DOSST.EXE (`tests/dos/dosst.c`: the
+interrupt vectors and whose memory they point into, the MCB chain with the
+UMBs, the PIC masks, the BIOS data area, the INT 33h user handler, XMS)
+before `WIN /3` and again after Exit Windows, moves the mouse after the
+exit and types a DOS command, then prints what changed, whether the prompt
+answered and how many INT 6 lines DOSBox-X logged. `DOSSTRUN_SHELL=FILE`
+makes FILE the shell instead (TK55X: Windows ended through ExitKernel,
+the drivers never disabled); `DOSSTRUN_TREE` and `DROPIN_COVER` boot a
+tree with applications installed (kept outside the repository). The case
+`win386exit` compares the changes with Microsoft's WIN386's.
 
 ## 5. Running on a remote host
 

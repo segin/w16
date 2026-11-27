@@ -37,7 +37,6 @@
 /* ---- the heap's layout ---- */
 static BOOL k386;               /* KRNL386's arenas */
 static WORD bmsel;              /* the Burgermaster */
-static DWORD bmbase;
 
 /* an arena, read into one form for both layouts */
 typedef struct {
@@ -50,10 +49,23 @@ static void heap_init(void)
 {
     DWORD m = kGlobalMasterHandle();
     bmsel = HIWORD(m);
-    bmbase = GetSelectorBase(bmsel);
     /* KRNL386's header has the first arena's offset (80h) as a dword at
        06h; KRNL286's the first sentinel's selector (always odd) */
     k386 = PW(bmsel, 6) == 0x80 && PW(bmsel, 8) == 0;
+}
+
+/* The Burgermaster's linear address, asked each time: when its arenas
+   fill up, KRNL386 moves it to a larger block and frees the old one, its
+   selector staying (w16's kernel/global386.c, bm_grow). The address kept
+   from the first walk then pointed at freed pages: the VM Task Manager,
+   which walks the heap every 5 s, ended Windows with a page fault in
+   GlobalNext once enough blocks had been allocated (the user's report,
+   2026-11-27; tests/vmtasksoak.sh). */
+static DWORD bm_base(void)
+{
+    if (!bmsel)
+        heap_init();
+    return GetSelectorBase(bmsel);
 }
 
 static BOOL arena(DWORD id, ARENA *a)
@@ -63,7 +75,7 @@ static BOOL arena(DWORD id, ARENA *a)
     a->id = id;
     if (k386) {
         BYTE r[0x20];
-        if (!id || !lread(bmbase + id, r, 0x20))
+        if (!id || !lread(bm_base() + id, r, 0x20))
             return FALSE;
         a->next = *(DWORD *)&r[0x00];
         a->addr = *(DWORD *)&r[0x08];
@@ -295,7 +307,7 @@ static DWORD arena_of(WORD h)
     if (!bmsel)
         heap_init();
     if (k386) {
-        if (!lread(bmbase + off + (DWORD)idx * 4, &id, 4))
+        if (!lread(bm_base() + off + (DWORD)idx * 4, &id, 4))
             return 0;
     } else
         id = PW(bmsel, (WORD)off + idx * 2);

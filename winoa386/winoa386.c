@@ -338,6 +338,9 @@ static BOOL get_env(const char *name, char *out, int max)
    [386Enh] keys, default EGA80WOA.FON, EGA40WOA.FON, CGA80WOA.FON,
    CGA40WOA.FON) with their cells; WINOA386 puts them in AltFnt[0..3]
    (80x25, 40x25, 80x43/50, 40x43/50) and the first in DefFont (GR3) ---- */
+static char font_file[4][16];           /* the files added (AddFontResource) */
+static HFONT font_made[4];              /* the fonts made (CreateFont) */
+
 static void load_fonts(void)
 {
     /* Microsoft's VGA.3GR writes more than the 4 x 17 bytes w16's does
@@ -358,8 +361,10 @@ static void load_fonts(void)
             continue;
         if (AddFontResource(e) <= 0)
             continue;
+        lstrcpyn(font_file[i], e, sizeof font_file[i]);
         f = CreateFont(h, w, 0, 0, FW_NORMAL, 0, 0, 0, OEM_CHARSET, OUT_DEFAULT_PRECIS,
                        CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, FIXED_PITCH | FF_MODERN, "Terminal");
+        font_made[i] = f;
         eps.AltFnt[i].hFont = (WORD)f;
         eps.AltFnt[i].height = h;
         eps.AltFnt[i].width = w;
@@ -370,6 +375,25 @@ static void load_fonts(void)
         eps.AltFnt[0].width = 8;
     }
     eps.DefFont = eps.AltFnt[0];
+}
+
+/* at the end: the fonts deleted and the files removed again, as Windows
+   3.1's WINOA386 leaves them (observed with tests/vmtasksoak.sh: after a
+   box has ended, GDI has no more fonts than before and the *WOA.FON
+   modules are gone). w16's kept four fonts and the files' modules for
+   every box ever run, so that a long session's DOS boxes used up GDI's
+   heap. */
+static void free_fonts(void)
+{
+    int i;
+    for (i = 0; i < 4; i++) {
+        if (font_made[i])
+            DeleteObject(font_made[i]);
+        font_made[i] = 0;
+        if (font_file[i][0])
+            RemoveFontResource(font_file[i]);
+        font_file[i][0] = 0;
+    }
 }
 
 /* ---- the window ---- */
@@ -926,8 +950,10 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
     hwnd = CreateWindow("WOA386", title,
                         WS_OVERLAPPEDWINDOW | WS_HSCROLL | WS_VSCROLL | WS_CLIPSIBLINGS | WS_MINIMIZE,
                         0, 0, CW_USEDEFAULT, 0, NULL, NULL, hi, NULL);
-    if (!hwnd)
+    if (!hwnd) {
+        free_fonts();
         return 0;
+    }
     eps.WindHand = (WORD)hwnd;
     SetScrollRange(hwnd, SB_HORZ, 0, 0, FALSE);
     SetScrollRange(hwnd, SB_VERT, 0, 0, FALSE);
@@ -957,6 +983,7 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
         message(IDS_NOMEM, MB_OK | MB_ICONEXCLAMATION);
         ended = TRUE;
         DestroyWindow(hwnd);
+        free_fonts();
         return 0;
     }
     vm = r->eax;
@@ -989,5 +1016,6 @@ int PASCAL WinMain(HINSTANCE hi, HINSTANCE hprev, LPSTR cmd, int show)
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+    free_fonts();
     return 0;
 }

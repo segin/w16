@@ -1145,6 +1145,7 @@ static int nest_service(u32 svc, struct svcregs *s)
          * the transfer buffer's), and keeps when the call leaves them */
         int pm = !(c->eflags & EFL_VM) && cur_vm->pm;
         int ds = pm ? sel_to_seg(c->ds) : (int)c->ds, es = pm ? sel_to_seg(c->es) : (int)c->es;
+        if ((s->eax & 0xFF) == 0x21) vm_dos_cwd();     /* the VM's own directory (vm.c) */
         if (ds < 0) ds = xbuf_seg();
         if (es < 0) es = xbuf_seg();
         memset(&v, 0, sizeof(v));

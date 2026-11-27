@@ -24,10 +24,12 @@
  *   dib    SetDIBitsToDevice of a 160 x 120 8-bit DIB to the screen
  *   peek   PeekMessage(PM_REMOVE) calls with no message waiting
  *   msgs   message round trips (PostAppMessage, GetMessage)
- *   text, fill, line, scroll, stretch, getdc, lbsort, edit, xsend, galloc,
- *   prof   drawing, USER and KERNEL work (the performance audit: see each)
+ *   text, textdx, ttsize, fill, line, scroll, stretch, getdc, lbsort, edit,
+ *   xsend, galloc, prof   drawing, USER and KERNEL work (the performance
+ *          audit: see each)
  * WIN.INI [vx16]: secs=4, wait=5 (seconds of messages before the first
- * phase), only=LIST (the phases to run, default all).
+ * phase), only=LIST (the phases to run, default all), ttface=NAME (the
+ * ttsize phase's face, default w16 Sans).
  * Output: TK.LOG as it goes; C:\VX16.LOG at the
  * end: lines "VX16 NAME=COUNT".
  * Black box (ARCHITECTURE.md 3): only the published API, the clock and
@@ -408,6 +410,49 @@ int __cdecl tmain(void)
         }
         ReleaseDC(0, sdc);
         report("text", n);
+    }
+    /* the same line with the caller's widths (lpDx: word processors') */
+    if (want("textdx")) {
+        HDC sdc = GetDC(0);
+        RECT r;
+        static int dx[54];
+        int i;
+        for (i = 0; i < 54; i++)
+            dx[i] = 10;
+        SetRect(&r, 20, 300, 620, 316);
+        SetBkMode(sdc, OPAQUE);
+        n = 0;
+        start();
+        for (;;) {
+            ExtTextOut(sdc, 20 + (int)(n & 7), 300, ETO_OPAQUE, &r,
+                       "The quick brown fox jumps over the lazy dog 0123456789", 54, dx);
+            n++;
+            if (!(n & 3) && done()) break;
+        }
+        ReleaseDC(0, sdc);
+        report("textdx", n);
+    }
+    /* a TrueType size made and measured: WIN.INI [vx16] ttface= (default
+       w16 Sans, the tree's; Arial on 3.1) at character heights 9 to 72
+       pixels in turn (more sizes than GDI keeps) */
+    if (want("ttsize")) {
+        HDC sdc = GetDC(0);
+        TEXTMETRIC tm;
+        char face[LF_FACESIZE];
+        GetProfileString("vx16", "ttface", "w16 Sans", face, sizeof face);
+        n = 0;
+        start();
+        for (;;) {
+            HFONT f = CreateFont(-(9 + (int)(n & 63)), 0, 0, 0, 400, 0, 0, 0, 0, 4, 0, 0, 0, face);
+            HFONT of = SelectObject(sdc, f);
+            GetTextMetrics(sdc, &tm);
+            SelectObject(sdc, of);
+            DeleteObject(f);
+            n++;
+            if (done()) break;
+        }
+        ReleaseDC(0, sdc);
+        report("ttsize", n);
     }
     if (want("fill")) {
         HDC sdc = GetDC(0);

@@ -14,9 +14,13 @@ ARCHITECTURE.md 12.16 has the facts and the design; this is the state of the wor
 - `MSVCVXD_VXCD=1` (or VXCD.386 in any SYSTEM.INI): every INT 21h/2Fh/31h of the DOS VMs with registers in and out on COM1, under either WIN386; diff the two logs for the first difference. Under 3.1, VXCD's logging once made CL.EXE fail with "too many open files": the early part of its log is still good.
 - `[w16] vmmtrace=1`: INT 31h calls, translated DOS paths, `{Lxx+n}` LDT allocations in DOS VMs; `=2`: a DOS VM's V86 interrupts, raw switches (`[PM2RM ...]`, `[RMk ...]`).
 
+## The user's crash (2026-11-26, master 6f1e1e3)
+
+CL in a windowed Command Prompt box on their tree, after Ctrl+Break had ended programs twice, stopped DOSBox-X with "Corrupt MCB chain". Fixed: a client DOS ends in V86 mode is now noticed at its PSP's terminate address (dpmi.c `W386_DPMIRM_TERM`, vmm.c `exec_unwind`); before, the next client nested in the dead one. The box's current directory also moved under it on DOSBox's DOS (KERNEL in the System VM), so `CL HELLO.C` in C:\ found no hello.c: vm.c `vm_dos_cwd` keeps each VM's where DOS does not answer from its CDS (the loader's `cds_live` test). Repro inputs, never committed: a copy of their C: drive on installation-05 under `/mnt/build/w16-runs/w16-vmdpmi-in/userc`; scratch scripts `usercl.sh` (dropin with `DROPIN_COVER`) and `ctrlc.sh` (inputrun: Ctrl+C during CL). `tests/msvcvxd.sh cltree` is the committed check.
+
 ## Open
 
-- DOSBox's own DOS keeps current directories in the emulator, so KERNEL's task switches move a box's current directory (the CL test uses full paths). Real DOS is fine with the CDS instanced.
+- vm_dos_cwd: a box missed its directory once in some 58,000 polls in some runs (dpmicmp d allows two); UNVERIFIED where.
 - 0500h counts physical memory only (3.1 adds its paging file: 32 MB of blocks in a 16 MB DOSBox); 0B00h's watchpoints never trigger; 0102h keeps the segment's base (3.1 moves it to the VM's high linear address).
 - What the extra selector 3.1 allocates for a nested 16-bit client is for (w16 allocates one, mapping the host stack, to keep the numbers).
 - Not DPMI: a w16 box shows the MS-DOS Prompt banner for a batch file's PIF (3.1 does not).

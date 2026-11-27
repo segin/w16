@@ -99,7 +99,9 @@ DWORD GDIAPI GetTextExtent(HDC hdc, LPCSTR s, int n)               /* GDI.91 */
 BOOL GDIAPI GetTextExtentPoint(HDC hdc, LPCSTR s, int n, POINT __far *sz) /* GDI.471 */
 {
     DWORD e;
-    if (!sz)
+    /* (no DC, or a metafile's: SDK, zero when it fails; UNVERIFIED: 3.1's
+       for a count of 0, here TRUE and 0 by 0) */
+    if (!sz || !dc_get(hdc))
         return FALSE;
     e = GetTextExtent(hdc, s, n);
     sz->x = LOWORD(e);
@@ -221,12 +223,12 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     if (!font_realize(dc))
         return FALSE;
     dc = dc_get(hdc);
-    if (n > 0 && s)
-    {
-        if (dc_font(dc)->tt)            /* TrueType: the glyphs not drawn yet */
-            tt_glyphs(dc->xFont, s, n);
-        else
-            font_bits(dc_font(dc));     /* a scaled copy's bits, the first time */
+    if (n > 0 && s) {
+        /* TrueType: the glyphs not drawn yet; else a scaled copy's bits,
+           the first time (FALSE: no memory for them) */
+        if (!(dc_font(dc)->tt ? tt_glyphs(dc->xFont, s, n) : font_bits(dc_font(dc))))
+            return FALSE;
+        dc = dc_get(hdc);
     }
     fi = dc_font(dc)->fi;
     font_xform(dc, dc_font(dc), &tx);
@@ -235,14 +237,18 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     if (n < 0 || !s)
         n = 0;
     if (dx && n) {
-        int i;
-        xdx = xalloc(n * 2);
-        if (xdx) {
-            ddx = xptr(xdx);
-            for (i = 0; i < n; i++)
-                ddx[i] = dc_scale_x(dc, dx[i]);
+        if (dc->mapMode == 1)
+            ddx = (short __far *)dx;    /* MM_TEXT: the caller's widths as they are */
+        else {
+            int i;
+            xdx = xalloc(n * 2);
+            if (xdx) {
+                ddx = xptr(xdx);
+                for (i = 0; i < n; i++)
+                    ddx[i] = dc_scale_x(dc, dx[i]);
+            }
+            dc = dc_get(hdc);
         }
-        dc = dc_get(hdc);
     }
     if (dc->textAlign & TA_UPDATECP) {
         x = dc->cur.x;
@@ -256,7 +262,7 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
     /* the width: the driver's extent (GD1's log of GD10 on 3.1: with
        the caller's widths, if any), which the underline and strike-out
        take, and the simulated italic's overhang beyond it */
-    lw = n > 0 ? LOWORD(drv_extent_w(dc, s, n, ddx ? xptr(xdx) : (short __far *)0)) : 0;
+    lw = n > 0 ? LOWORD(drv_extent_w(dc, s, n, xdx ? (short __far *)xptr(xdx) : ddx)) : 0;
     tw = n > 0 ? lw + io : 0;
     if (dc->textAlign & TA_CENTER) {
         if ((dc->textAlign & TA_CENTER) == TA_CENTER)
@@ -289,7 +295,7 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
         clip = nrects == 1 ? rao->box : rao->r[k];
         if (!io || !n) {
             fn(dc->lpPDevice, x, y, &clip, s, n, fi, &dc->dm, &tx,
-               ddx ? xptr(xdx) : (short __far *)0, opt ? &orc : 0, opt);
+               xdx ? (short __far *)xptr(xdx) : ddx, opt ? &orc : 0, opt);
             continue;
         }
         /* italic (GD10, GD1's log on 3.1): the text again for each band
@@ -309,7 +315,7 @@ BOOL GDIAPI ExtTextOut(HDC hdc, int x, int y, WORD opt, const RECT __far *rc,
                 if (bc.top >= bc.bottom)
                     continue;
                 fn(dc->lpPDevice, x + io - b, y, &bc, s, n, fi, &dc->dm, &tx,
-                   ddx ? xptr(xdx) : (short __far *)0, opt ? &orc : 0, opt);
+                   xdx ? (short __far *)xptr(xdx) : ddx, opt ? &orc : 0, opt);
             }
         }
     }
@@ -452,15 +458,15 @@ BOOL GDIAPI GetCharWidth(HDC hdc, WORD first, WORD last, short __far *buf) /* GD
     {
         /* GD10 on 3.1: a simulated italic's widths have its overhang */
         int io = font_italic_overhang(dc_font(dc)->fi, &tx);
-        WORD i;
+        DWORD i, n = (DWORD)last - first + 1;      /* (0 to FFFFh: no wrap) */
         if (io)
-            for (i = 0; i <= last - first; i++)
+            for (i = 0; i < n; i++)
                 buf[i] += io;
     }
     if (dc->mapMode != 1) {             /* logical units (GD5 on 3.1) */
-        WORD i;
+        DWORD i, n = (DWORD)last - first + 1;
         dc = dc_get(hdc);
-        for (i = 0; i <= last - first; i++)
+        for (i = 0; i < n; i++)
             buf[i] = log_x(dc, buf[i]);
     }
     return TRUE;

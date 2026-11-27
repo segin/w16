@@ -147,6 +147,11 @@ fi
 if [ -n "${INPUTRUN_NOLOCK:-}" ]; then
     sed -i 's/^\[sdl\]$/[sdl]\nautolock=false/' "$work/dosbox.conf"
 fi
+# INPUTRUN_CONFSED: a sed script applied to dosbox.conf (e.g. sound on:
+# tests/dosstrun.sh's DOSSTRUN_SOUND)
+if [ -n "${INPUTRUN_CONFSED:-}" ]; then
+    sed -i "$INPUTRUN_CONFSED" "$work/dosbox.conf"
+fi
 # INPUTRUN_HDD=1: Windows on a real DOS: the scratch drive becomes a hard
 # disk image with MS-DOS 4.00 (built from Microsoft's MIT-licensed source,
 # tools/msdos-build.sh), CONFIG.SYS loading the install's HIMEM.SYS, and

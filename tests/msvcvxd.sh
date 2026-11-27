@@ -57,13 +57,40 @@
 #          caption, menu and tool bar, as for wps).
 #   heapwalk  HeapWalk (BIN\HEAPWALK.EXE, TOOLHELP's global heap walk) the
 #          same way: no fault, its window (caption, menu bar) there as
-#          under 3.1.
+#          under 3.1, and its list painted within twice 3.1's time and
+#          4 s more (a screenshot every second).
+#   msquery  Microsoft Query (MSAPPS\MSQUERY\MSQUERY.EXE, which Visual
+#          C++ 1.52's Setup installs in the Windows directory, with its
+#          Cue Cards and the ODBC libraries) from WIN.INI run= on w16's
+#          tree alone and on Windows 3.1 without Arial: the Cue Cards' box
+#          "Cue Cards uses Arial font" must take Return, then Alt+F4 closes
+#          the Cue Cards, Alt+F4 Query, Alt+F4 and Return end Windows
+#          (tests/scripts/input/msquery.txt); w16 must not fault and must
+#          end with code 0 (it did not: USER's SetFocus activated Query's
+#          disabled window again, the box took no keys, and closing Query
+#          closed the Cue Cards under their box, which faulted). The
+#          Windows directory's files (MSAPPS\MSQUERY, CCARD200.EXE,
+#          MSQUERY.INI, ODBC.INI, ODBCINST.INI, SYSTEM\: CCAPI200.DLL,
+#          CTL3D.DLL, CTL3DV2.DLL, CUECARD2.DLL, QRYINTL.DLL, ODBC.DLL,
+#          ODBCINST.DLL, ODBCCURS.DLL) come from $W16_MSQUERY_DIR (default:
+#          MSQUERY beside the MSVC directory), laid out as there.
+#   cvdos  CodeView for MS-DOS (BIN\CV.EXE, a DPMI client) in a full-screen
+#          DOS box on w16's tree with Visual C++'s four devices, started
+#          from the MS-DOS prompt in C:\MSVC\BIN, the mouse moved over it,
+#          quit with Escape, EXIT (tests/scripts/input/cvdos.txt): DOSBox-X
+#          must stay alive (the mouse ended it: "IRET: Illegal descriptor
+#          type 12", MOUSE.DRV's PS/2 handler run in CodeView's VM),
+#          CodeView's screen a text screen whose menu bar equals the same
+#          run's under Microsoft's WIN386, and Windows back after EXIT.
+#          (The Load dialog's file list is empty under w16's WIN386: not
+#          compared.)
 # Visual C++ is not w16's: nothing of it is committed. boot and cvw take
 # the installed C:\MSVC directory from $W16_MSVC_DIR (default
 # ~/Downloads/msvc152/MSVC; boot needs BIN's four .386 files, cvw BIN's
 # CVW.EXE and its DLLs too); without it they say so and pass ("skip").
 #
-#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx cl)
+#   usage: tests/msvcvxd.sh [-o OUTDIR] [PART ...]   (default: vxc boot cvw wx cl cltree;
+#          msquery and cvdos by name: boot-test cases msquery and cvdos)
 set -u
 unset DISPLAY WAYLAND_DISPLAY     # headless only: never the user's desktop
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -76,7 +103,7 @@ while getopts o: opt; do
     esac
 done
 shift $((OPTIND - 1))
-parts=${*:-vxc boot cvw wx cl}
+parts=${*:-vxc boot cvw wx cl cltree}
 [ -n "$out" ] || out=$(mktemp -d)
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
@@ -203,6 +230,60 @@ serial1=file file:$out/wx-w16.com1" timeout 600 "$root/tests/inputrun.sh" -s -b 
         r="$(grep -m1 'not in w16\|panic\|fatal' "$out/cvw-w16.log")"
     if [ "$r" = ok ]; then echo "ok   cvw: CodeView for Windows comes up as under Windows 3.1"
     else echo "FAIL cvw: $r"; fails=$((fails + 1)); fi ;;
+cltree)
+    # the user's way (2026-11-26): w16's tree alone with Visual C++'s four
+    # devices in SYSTEM.INI, a windowed box from the tree's Command Prompt
+    # PIF in C:\, MSVCVARS.BAT, then CL HELLO.C as typed (no paths), twice,
+    # then a 32-bit client that DOS ends in real mode (DPMIPRB T32: as
+    # Ctrl+C ends CL's DOSXNT) and CL again; machine as theirs (svga_s3, 32 MB). Before: the
+    # pass found no hello.c (the box's directory moved), and after a CL
+    # ended by Ctrl+C the next one crashed DOSBox-X ("Corrupt MCB chain")
+    [ -n "$(mfile BIN CL.EXE)" ] && [ -n "$(mfile BIN MSVCVARS.BAT)" ] && [ -d "$msvc/LIB" ] && [ -d "$msvc/INCLUDE" ] ||
+        { echo "skip cltree: no Visual C++ 1.52 compiler at $msvc (W16_MSVC_DIR)"; continue; }
+    set --
+    for d in BIN INCLUDE LIB; do
+        for f in $(cd "$msvc" && find "$d" -type f); do
+            set -- "$@" -f "$msvc/$f=MSVC/$(printf '%s' "$f" | tr a-z A-Z)"
+        done
+    done
+    for x in DOSXNT MMD CVW1 VMB; do
+        set -- "$@" -i "386Enh:+device=C:\\MSVC\\BIN\\$x.386"
+    done
+    printf '#include <stdio.h>\r\n\r\nint main(int argc, char *argv[])\r\n{\r\n    printf("Hello from %%d worlds!\\n", argc);\r\n    return 0;\r\n}\r\n' > "$out/HELLO.C"
+    printf 'CALL C:\\MSVC\\BIN\\MSVCVARS.BAT\r\nCL HELLO.C > CL1.TXT\r\nDEL HELLO.EXE\r\nCL HELLO.C > CL2.TXT\r\nC:\\W16\\DPMIPRB T32 T\r\nCL HELLO.C > CL3.TXT\r\nHELLO > RUN.TXT\r\nECHO done > DONE.TXT\r\n' > "$out/CLT.BAT"
+    python3 "$root/tools/mkpif.py" "$root/assets/CMD.PIF" "$out/CLT.PIF" "title=CL" 'program=C:\CLT.BAT' 'dir=C:\' \
+        windowed=1 || exit 2
+    rm -rf "$out/cltree" "$out/cltree.com1"
+    # MSVCVXD_W386=FILE: that WIN386.EXE in the tree (an older one, to see
+    # the failure)
+    [ -n "${MSVCVXD_W386:-}" ] && set -- "$@" -f "$MSVCVXD_W386=W16/SYSTEM/WIN386.EXE"
+    DROPIN_CONF="[serial]
+serial1=file file:$out/cltree.com1
+[log]
+logfile=$out/cltree.emu" DROPIN_MACHINE=svga_s3 DROPIN_MEMSIZE=32 DROPIN_NOREDIR=1 timeout 700 "$root/tests/dropin.sh" \
+        -T "$root/build/w16" -3 -p 386 -c "WIN /3" -t 600 -o "$out/cltree" -W DONE.TXT \
+        -f "$out/HELLO.C=HELLO.C" -f "$out/CLT.BAT=CLT.BAT" -f "$out/CLT.PIF=W16/CLT.PIF" \
+        -f "$root/build/dos/DPMIPRB.COM=W16/DPMIPRB.COM" -i 'WIN.INI:windows:run=C:\W16\CLT.PIF' "$@" \
+        > "$out/cltree.txt" 2>&1
+    { tr -d '\r' < "$out/cltree.com1"; } > "$out/cltree.log" 2>/dev/null
+    r=ok
+    for t in CL1 CL2 CL3 RUN; do
+        g=$(find "$out/cltree" -maxdepth 3 -ipath "*/c/$t.TXT" | head -1)
+        { tr -d '\r' < "$g"; } > "$out/cltree.$t.txt" 2>/dev/null || : > "$out/cltree.$t.txt"
+    done
+    for t in CL1 CL2 CL3; do
+        [ "$r" != ok ] || ! grep -qi 'error\|warning' "$out/cltree.$t.txt" ||
+            r="$t: $(grep -i -m1 'error\|warning' "$out/cltree.$t.txt") ($out/cltree.$t.txt)"
+        [ "$r" != ok ] || [ -s "$out/cltree.$t.txt" ] || r="$t: no output from CL ($out/cltree.txt)"
+    done
+    [ "$r" != ok ] || [ "$(cat "$out/cltree.RUN.txt")" = "Hello from 1 worlds!" ] ||
+        r="the program did not run: '$(head -c 80 "$out/cltree.RUN.txt")' ($out/cltree.txt)"
+    [ "$r" != ok ] || ! grep -qi 'mcb chain\|memory error' "$out/cltree.emu" 2>/dev/null ||
+        r="DOSBox-X: $(grep -i -m1 'mcb chain\|memory error' "$out/cltree.emu")"
+    [ "$r" != ok ] || ! grep -q 'not in w16\|panic\|fatal' "$out/cltree.log" ||
+        r="$(grep -m1 'not in w16\|panic\|fatal' "$out/cltree.log")"
+    if [ "$r" = ok ]; then echo "ok   cltree: w16's tree: CL HELLO.C in C:\\ in a windowed box, three times, around a client DOS ended"
+    else echo "FAIL cltree: $r"; fails=$((fails + 1)); fi ;;
 cl)
     [ -n "$(mfile BIN CL.EXE)" ] && [ -n "$(mfile BIN DOSXNT.EXE)" ] && [ -d "$msvc/LIB" ] && [ -d "$msvc/INCLUDE" ] ||
         { echo "skip cl: no Visual C++ 1.52 compiler at $msvc (W16_MSVC_DIR)"; continue; }
@@ -286,10 +367,13 @@ wps|ole2view|heapwalk)
     # (the paths have no blanks: the MSVC directory's files are listed
     # word by word above too)
     # shellcheck disable=SC2046
-    DROPIN_FIXED=1 run $part-ref -r -3 -c "WIN /3" -t 60 -s "$out/$part-ref.png" \
+    # HeapWalk: a screenshot every second, to time its list's first paint
+    shots=
+    [ $part = heapwalk ] && shots=$(seq -s ' ' 2 58)
+    DROPIN_SHOTS=$shots DROPIN_FIXED=1 run $part-ref -r -3 -c "WIN /3" -t 60 -s "$out/$part-ref.png" \
         -i "WIN.INI:windows:run=C:\\MSVC\\BIN\\$prog" "$@" $(sysf WINDOWS) &
     # shellcheck disable=SC2046
-    DROPIN_FIXED=1 run $part-w16 -T "$root/build/w16" -3 -c "WIN /3 /B" -t 60 -s "$out/$part-w16.png" \
+    DROPIN_SHOTS=$shots DROPIN_FIXED=1 run $part-w16 -T "$root/build/w16" -3 -c "WIN /3 /B" -t 60 -s "$out/$part-w16.png" \
         -i "WIN.INI:windows:run=C:\\MSVC\\BIN\\$prog" "$@" $(sysf W16) &
     wait
     r=ok
@@ -319,8 +403,113 @@ wps|ole2view|heapwalk)
     elif [ "$r" = ok ] && { [ $(( (nw - nr) * 20 )) -gt "$nr" ] || [ $(( (nr - nw) * 20 )) -gt "$nr" ]; }; then
         r="$prog's window is not there as under Windows 3.1: $nw caption pixels, 3.1 $nr ($out/$part-w16.png)"
     fi
+    # HeapWalk's list painted (its column headings and first line, two
+    # rows of #0000AA under the menu bar): the first second it shows,
+    # under 3.1 and on w16. It took 35 s on a user's tree with Visual
+    # C++'s groups (w16's list box drew its scroll bar for each item
+    # added with redraw off); 3.1 took about 2.
+    if [ "$r" = ok ] && [ $part = heapwalk ]; then
+        for s in ref w16; do
+            t=none
+            for i in $shots; do
+                magick "$out/$part-$s-$i.png" -crop 640x26+0+42 +repage "$out/$part-$s-list.png" 2>/dev/null || continue
+                [ "$(blue "$out/$part-$s-list.png")" -ge 12000 ] && { t=$i; break; }
+            done
+            eval "t_$s=\$t"
+        done
+        echo "     heapwalk: list painted after $t_ref s under 3.1, $t_w16 s on w16"
+        if [ "$t_ref" = none ]; then
+            r="HeapWalk's list never painted under Windows 3.1 ($out/$part-ref-*.png)"
+        elif [ "$t_w16" = none ] || [ "$t_w16" -gt $((t_ref * 2 + 4)) ]; then
+            r="HeapWalk's list painted after $t_w16 s on w16, $t_ref s under 3.1 ($out/$part-w16-*.png)"
+        fi
+    fi
     if [ "$r" = ok ]; then echo "ok   $part: $prog comes up on w16's tree as on Windows 3.1"
     else echo "FAIL $part: $r"; fails=$((fails + 1)); fi ;;
+msquery)
+    mq=${W16_MSQUERY_DIR:-$(dirname "$msvc")/MSQUERY}
+    [ -f "$mq/MSAPPS/MSQUERY/MSQUERY.EXE" ] || { echo "skip msquery: no Microsoft Query at $mq (W16_MSQUERY_DIR)"; continue; }
+    # the Windows directory's files: WINDOWS on 3.1, W16 on the tree
+    # (their paths have no blanks)
+    mqf() {
+        (cd "$mq" && find . -type f) | while read -r f; do
+            f=${f#./}
+            printf ' -f %s=%s/%s' "$mq/$f" "$1" "$(printf '%s' "$f" | tr a-z A-Z)"
+        done
+    }
+    scr=$root/tests/scripts/input/msquery.txt
+    for s in ref w16; do
+        rm -rf "$out/msquery-$s"
+        if [ $s = ref ]; then
+            # Windows 3.1 without Arial, as w16's tree (the Cue Cards' box)
+            set -- -r -3 -c "WIN /3 /B" -i 'WIN.INI:windows:run=C:\WINDOWS\MSAPPS\MSQUERY\MSQUERY.EXE' \
+                -i "WIN.INI:fonts:-Arial (TrueType)=" -i "WIN.INI:fonts:-Arial Bold (TrueType)=" \
+                -i "WIN.INI:fonts:-Arial Bold Italic (TrueType)=" -i "WIN.INI:fonts:-Arial Italic (TrueType)="
+            for x in ARIAL ARIALBD ARIALBI ARIALI; do
+                set -- "$@" -f "WINDOWS/SYSTEM/$x.TTF=-" -f "WINDOWS/SYSTEM/$x.FOT=-"
+            done
+            # shellcheck disable=SC2046
+            set -- "$@" $(mqf WINDOWS)
+        else
+            # shellcheck disable=SC2046
+            set -- -T "$root/build/w16" -3 -c "WIN /3 /B" \
+                -i 'WIN.INI:windows:run=C:\W16\MSAPPS\MSQUERY\MSQUERY.EXE' $(mqf W16)
+        fi
+        timeout 500 "$root/tests/inputrun.sh" -s -b 150 -t 300 "$scr" "$out/msquery-$s" -p 386 "$@" \
+            > "$out/msquery-$s.txt" 2>&1
+    done
+    r=ok
+    grep -q '^Windows ended' "$out/msquery-ref/input.log" 2>/dev/null ||
+        r="Windows 3.1 did not end after Query and its Cue Cards were closed ($out/msquery-ref)"
+    [ "$r" != ok ] || ! grep -q '^w16: exception' "$out/msquery-w16.txt" ||
+        r="$(grep -m1 '^w16: exception' "$out/msquery-w16.txt") ($out/msquery-w16.txt)"
+    [ "$r" != ok ] || { grep -q '^Windows ended' "$out/msquery-w16/input.log" 2>/dev/null &&
+        grep -q '^w16: back to DOS, code 0000' "$out/msquery-w16.txt"; } ||
+        r="w16 did not end Windows after Query and its Cue Cards were closed ($out/msquery-w16)"
+    if [ "$r" = ok ]; then echo "ok   msquery: Microsoft Query's Cue Cards box takes the keys, Query closes and Windows ends as under 3.1"
+    else echo "FAIL msquery: $r"; fails=$((fails + 1)); fi ;;
+cvdos)
+    [ -n "$(mfile BIN CV.EXE)" ] || { echo "skip cvdos: no CV.EXE in $msvc/BIN (W16_MSVC_DIR)"; continue; }
+    set -- -p 386 -T "$root/build/w16" -3 -c "WIN /3 /B"
+    for f in "$msvc"/BIN/*; do
+        case $(basename "$f" | tr a-z A-Z) in
+        *.EXE|*.DLL|*.386|*.HLP) set -- "$@" -f "$f=MSVC/BIN/$(basename "$f" | tr a-z A-Z)" ;;
+        esac
+    done
+    for x in DOSXNT MMD CVW1 VMB; do
+        set -- "$@" -i "386Enh:+device=C:\\MSVC\\BIN\\$x.386"
+    done
+    scr=$root/tests/scripts/input/cvdos.txt
+    # w16's WIN386 first, then Microsoft's (its run's menu bar the reference)
+    for s in w16 ms; do
+        rm -rf "$out/cvdos-$s"
+        [ $s = ms ] && set -- "$@" -f "$ref/SYSTEM/WIN386.EXE=W16/SYSTEM/WIN386.EXE"
+        # (the user's machine: an S3 card, 32 MB)
+        DROPIN_MACHINE=svga_s3 DROPIN_MEMSIZE=32 DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+            timeout 500 "$root/tests/inputrun.sh" -s -b 200 -t 300 \
+            "$scr" "$out/cvdos-$s" "$@" > "$out/cvdos-$s.txt" 2>&1
+    done
+    r=ok
+    for s in ms w16; do
+        [ "$r" != ok ] || ! grep -aq 'E_Exit' "$out/cvdos-$s/dosbox.log" ||
+            r="DOSBox-X ended ($s): $(grep -a -m1 'E_Exit' "$out/cvdos-$s/dosbox.log")"
+        for n in 01-cv 02-moved 04-back; do
+            [ "$r" != ok ] || [ -f "$out/cvdos-$s/$n.png" ] || r="no $n screen ($s: $out/cvdos-$s)"
+        done
+    done
+    if [ "$r" = ok ]; then
+        for n in 01-cv 02-moved; do
+            [ "$(magick identify -format '%wx%h' "$out/cvdos-w16/$n.png")" = 720x400 ] || { r="$n: not a text screen"; break; }
+            # CodeView's menu bar (the top 16 rows)
+            for s in ms w16; do magick "$out/cvdos-$s/$n.png" -crop 720x16+0+0 +repage "$out/cvdos-$s-$n-bar.png"; done
+            d=$(pixdiff "$out/cvdos-ms-$n-bar.png" "$out/cvdos-w16-$n-bar.png")
+            [ "$d" = 0 ] || { r="$n: CodeView's menu bar differs from the run under Microsoft's WIN386: $d pixels"; break; }
+        done
+    fi
+    [ "$r" != ok ] || [ "$(magick identify -format '%wx%h' "$out/cvdos-w16/04-back.png")" = 640x480 ] ||
+        r="Windows not back after EXIT ($out/cvdos-w16/04-back.png)"
+    if [ "$r" = ok ]; then echo "ok   cvdos: CodeView for MS-DOS starts, takes the mouse moving and quits in a DOS box; DOSBox-X stays alive"
+    else echo "FAIL cvdos: $r"; fails=$((fails + 1)); fi ;;
 *)
     echo "FAIL $part: no such part"; fails=$((fails + 1)) ;;
 esac

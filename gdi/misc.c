@@ -229,8 +229,12 @@ WORD GDIAPI GetNearestPaletteIndex(HPALETTE h, COLORREF c)         /* GDI.370 */
         return 0;
     e = pal_entries(p);
     for (i = 0; i < p->nEntries; i++) {
-        long dr = (long)e[i].peRed - (BYTE)c, dg = (long)e[i].peGreen - (BYTE)(c >> 8);
-        long db = (long)e[i].peBlue - (BYTE)(c >> 16), d = dr * dr + dg * dg + db * db;
+        /* each square at most 65025: 16-bit unsigned products (inline MUL,
+           no long multiplications), summed as a long */
+        int dr = e[i].peRed - (BYTE)c, dg = e[i].peGreen - (BYTE)(c >> 8);
+        int db = e[i].peBlue - (BYTE)(c >> 16);
+        long d = (long)((unsigned)dr * (unsigned)dr) + (unsigned)dg * (unsigned)dg
+                 + (unsigned)db * (unsigned)db;
         if (d < bd) {
             bd = d;
             best = i;

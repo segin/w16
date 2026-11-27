@@ -44,7 +44,8 @@ typedef unsigned long  w_u32;
 #define W386_BP_DPMIRM  26
 #define W386_DPMIRM_RAW  0      /* 0306h: real to protected mode */
 #define W386_DPMIRM_SAVE 1      /* 0305h: save/restore state (a far return) */
-#define W386_DPMIRM_CB   2      /* 2..: the real-mode callbacks (0303h) */
+#define W386_DPMIRM_TERM 2      /* a DOS VM's client's PSP terminate address (dpmi.c) */
+#define W386_DPMIRM_CB   3      /* 3..: the real-mode callbacks (0303h) */
 
 /* pm_go returns this when the VMM ended Windows before the System VM ran,
  * with its message (CR LF lines) in the fatal_lin buffer */
@@ -131,6 +132,7 @@ struct w386_info {
        current directories of its own (vm.c) */
     w_u32 cds_lin;
     w_u32 cds_size;
+    w_u32 cds_live;     /* DOS answers INT 21h 47h from it (else: vm.c vm_dos_cwd) */
 };
 #pragma pack()
 

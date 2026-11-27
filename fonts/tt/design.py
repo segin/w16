@@ -57,7 +57,7 @@ class Style:
             self.sh = 214 if b else 164          # horizontal strokes
             self.shc = 226 if b else 172
             self.hair = self.sh
-            self.n, self.ni = 2.35, 2.6
+            self.n, self.ni = 2.2, 2.4             # (rounder than 2.35, 2.6: the squarish bowls filled their corners at 9 pt)
             self.thin = self.sh                  # thin diagonals
         elif kind == 'serif':
             self.sv = 258 if b else 172
@@ -709,7 +709,10 @@ def s_curve(s, L, R, y0, y1, wv, wh, caps=True, cut=0):
            (R - wv / 2 - w * 0.0, y0 + h * 0.265),
            (cx - w * 0.02, y0 + wh / 2),
            (L + wv * 0.45, y0 + h * 0.24)]
-    tans = [(-0.55, 1), (-1, 0), (0, -1), (1, -0.45 * h / w), (0, -1), (-1, 0), (-0.55, 1)]
+    # the spine crosses the middle nearly level (under 1:8), so that its
+    # edges are hinted as a bar: crossing at a slope, it fell across two
+    # rows and made s and S the darkest letters at 9-10 pt
+    tans = [(-0.55, 1), (-1, 0), (0, -1), (1, -0.08 * h / w), (0, -1), (-1, 0), (-0.55, 1)]
     if s.sans:
         c0, c1 = cut, cut
     else:
@@ -773,7 +776,7 @@ def mono_w(s, x0, x1, top, sv):
     q = (x1 - x0) / 4
     t = sv * 0.82
     ha = top * 0.7
-    b1, b2, m = x0 + q * 1.05, x1 - q * 1.05, (x0 + x1) / 2
+    b1, b2, m = x0 + q * 0.7, x1 - q * 0.7, (x0 + x1) / 2     # (steep outer strokes: four strokes in seven pixels)
     h1 = dw(t, b1 - x0, top)
     h2 = dw(t, m - b1, ha)
     out = slanted(x0 + h1 / 2, b1, top, 0, h1) + slanted(x1 - h1 / 2, b2, top, 0, h1)

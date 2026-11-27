@@ -22,6 +22,15 @@ Done:
   listed and chosen in the Font dialog;
 - .FOT files byte for byte as 3.1 writes them (`tools/mkfot.py`).
 
+2026-11-27 (after the user's look in w16's Write on w16's tree):
+diagonal strokes keep their outer edge, level ends at the stem's
+control value, S spine level, rounder Sans bowls, steeper Mono w;
+`tests/ttshow.sh` compares w16's GDI with 3.1 (1.0-10.4%). Seen on the
+way: w16's Font dialog (COMMDLG/USER on w16's tree) did not move the
+focus with Tab from the face box, so a script's "Tab Tab 12" went into
+the face name ("w16 Serif12", not installed: w16 Sans); not fixed
+here (not font work).
+
 Open:
 1. FN4 (`tests/ttfonts.sh`): w16 Mono equals 3.1's every compared value;
    Sans and Serif differ in 0.3-2% of the per-size widths (mostly at 27

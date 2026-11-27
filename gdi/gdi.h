@@ -627,7 +627,7 @@ typedef struct FONTENT {
 typedef FONTENT __far *LPFONT;
 void font_init(void);
 LPFONT font_realize(LPDC dc);
-void font_bits(LPFONT f);               /* before drawing: a scaled copy's bits */
+BOOL font_bits(LPFONT f);               /* before drawing: a scaled copy's bits (FALSE: no room) */
 LPFONT dc_font(LPDC dc);                /* the DC's realized font (after font_realize) */
 void font_reap(void);                   /* removed fonts and scaled copies no DC uses any more go */
 void font_xform(LPDC dc, LPFONT f, TEXTXFORM __far *tx);
@@ -647,7 +647,7 @@ void tt_free(LPFONT f);                 /* a base entry goes: its TTFILE */
 int tt_usable(LPFONT f);                /* enabled, and its .TTF found and valid */
 int tt_ppem(XP xf, int h, int w, WORD __far *xppem);   /* the size a request asks */
 LPFONTINFO tt_info(XP xs);              /* a size's header and character table */
-void tt_glyphs(XP xs, LPCSTR str, int n);       /* draw the glyphs not drawn yet */
+BOOL tt_glyphs(XP xs, LPCSTR str, int n);       /* draw the glyphs not drawn yet (FALSE: no room) */
 LPFONT tt_dc_font(LPDC dc);             /* the DC's font if it is TrueType */
 int tt_enum(XP xf, WORD ppem, TEXTMETRIC __far *tm, WORD __far *ntm, char __far *full,
             char __far *style);         /* an entry as font enumeration gives it */

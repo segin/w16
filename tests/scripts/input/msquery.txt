@@ -1,0 +1,27 @@
+; Microsoft Query (WIN.INI run=) with Arial missing: its Cue Cards say so
+; in a MessageBox owned by Query's window, which must be active (Return
+; dismisses it), then the Cue Cards window comes up; Alt+F4 closes it,
+; Alt+F4 closes Query, Alt+F4 and Return end Windows (tests/msvcvxd.sh
+; msquery). On w16 the box was not active: Return did nothing, and
+; closing Query closed the Cue Cards under their own box (a fault)
+sleep 5
+settle 30 4
+shot 01-start
+key Return
+sleep 2
+settle 15 3
+shot 02-cards
+key alt+F4
+sleep 3
+settle 20 3
+shot 03-query
+key alt+F4
+sleep 3
+settle 20 3
+shot 04-closed
+key alt+F4
+sleep 3
+settle 15 2
+shot 05-exit
+key Return
+waitexit 60
