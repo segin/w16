@@ -144,6 +144,42 @@ struct vdmad_link {
     vu32 buf_conv;                          /* the conventional buffer (physical; 0: none) */
 };
 
+/* The VMM and w16's W32S (Win32s's device, 002Dh, win386/vxd/w32s.c;
+ * ARCHITECTURE.md 12.19): the DDB's reference data points at a struct
+ * w32s_link, which the VMM fills in. What Microsoft's W32S.386 takes from
+ * the VMM's internals (12.18) w16's device gets here instead: page tables
+ * of its own in the page directory, physical pages for them and for the
+ * Win32 memory they map, the transfer buffer for its DOS calls. */
+#define W32S_LINK_MAGIC 0x4B4E4C33u         /* "3LNK" */
+struct w32s_link {
+    vu32 magic;
+    /* page directory entry i (the one directory all VMs share above 4 MB) */
+    vu32 (*pdir_get)(vu32 i);
+    void (*pdir_set)(vu32 i, vu32 v);
+    /* a zeroed physical page, 0 if none; one given back */
+    vu32 (*page_alloc)(void);
+    void (*page_free)(vu32 phys);
+    /* the ring-0 linear address that maps physical page phys */
+    vu32 (*phys_lin)(vu32 phys);
+    /* the TLB flushed after page table changes */
+    void (*flush)(void);
+    /* the transfer buffer of the current VM (linear, segment, bytes) */
+    vu32 (*xbuf_lin)(void);
+    vu32 (*xbuf_seg)(void);
+    vu32 (*xbuf_size)(void);
+    /* a line to the VMM's trace (COM1, [w16] vmmtrace) */
+    void (*log)(const char *s);
+    /* the first page directory entry past the VMM's window (its pages
+     * and the physical memory it maps) */
+    vu32 window_end_pde;
+    /* [w16] vmmtrace: the device traces every API call */
+    vu32 trace;
+    /* the System VM's LDT made readable and writable from ring 3, as
+     * Windows 3.1's is (its system pages carry the user bit): Win32s's
+     * WIN32S16.DLL reads descriptors there through its flat selector */
+    void (*ldt_user)(void);
+};
+
 /* the VM control block's fields the devices read (the DDK's CB_VM_Status,
  * CB_High_Linear, CB_Client_Pointer, CB_VMID) */
 #define CB_HIGH_LINEAR(vm)  (*(vu32 *)((vm) + 4))

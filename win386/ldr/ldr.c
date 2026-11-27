@@ -643,6 +643,19 @@ static void load_device(const char *name)
     int h, i, ok = 0;
 
     if (!*name || name_done(name)) return;
+    {
+        /* Win32s's device: a device= line naming W32S.386 (Win32s
+         * Setup writes the full path, C:\WINDOWS\SYSTEM\WIN32S\W32S.386)
+         * loads w16's own W32S module from WIN386.EXE's W3 table instead
+         * of Microsoft's file, which needs the internals of Microsoft's
+         * VMM (ARCHITECTURE.md 12.18, 12.19). [w16] W32SReplace=0 loads
+         * the file as written. */
+        unsigned n = strlen(name);
+        if (n >= 8 && !stricmp(name + n - 8, "W32S.386")
+            && (n == 8 || name[n - 9] == '\\' || name[n - 9] == '/' || name[n - 9] == ':')
+            && !ini_w16_zero("W32SReplace"))
+            name = "*W32S";
+    }
     if (name[0] == '*') {
         char mod[9];
         for (i = 0; i < 8; i++) mod[i] = ' ';

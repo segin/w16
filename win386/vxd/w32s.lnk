@@ -1,0 +1,5 @@
+# W32S.386: w16's W32S module (win386/vxd), an LE VxD, device 002Dh
+format windows vxd
+option quiet
+option nodefaultlibs
+export W32S_DDB.1

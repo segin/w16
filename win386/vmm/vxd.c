@@ -762,6 +762,25 @@ static u32 link_alloc_run(u32 n, u32 align, u32 max_phys, u32 *phys)
     return phys_to_lin(p);
 }
 
+/* W32S's link: a page directory entry set, the TLB flushed, a line to
+ * the trace */
+static void link_pdir_set(u32 i, u32 v)
+{
+    vmm_pdir_entry(i, v);
+}
+static void link_flush(void)
+{
+    set_cr3(get_cr3());
+}
+static void link_log(const char *s)
+{
+    trace("%s", s);
+}
+static void link_ldt_user(void)
+{
+    make_user((u32)ldt, ldt_limit + 1);
+}
+
 static u32 watch_on;                    /* [w16] vmmtrace=3: map_phys's watch (below) */
 
 /* [w16] vmmtrace=4: each instruction of W32S.386's Device_Init
@@ -846,6 +865,27 @@ void vxd_init(void)
             l->alloc_run = link_alloc_run;
             l->buf_kb = info->dma_buf_kb;
             l->buf_conv = (u32)info->dma_buf_seg << 4;
+        }
+    for (i = 0; i < ndevs; i++)                     /* W32S's link (w16vxd.h) */
+        if (devs[i]->device_id == 0x2D && devs[i]->ref_data
+            && ((struct w32s_link *)devs[i]->ref_data)->magic == W32S_LINK_MAGIC) {
+            struct w32s_link *l = (struct w32s_link *)devs[i]->ref_data;
+            l->pdir_get = vmm_pdir_entry_get;
+            l->pdir_set = link_pdir_set;
+            l->page_alloc = page_alloc;
+            l->page_free = page_free;
+            l->phys_lin = phys_to_lin;
+            l->flush = link_flush;
+            l->xbuf_lin = xbuf_lin;
+            l->xbuf_seg = xbuf_seg;
+            l->xbuf_size = xbuf_size;
+            l->log = link_log;
+            /* past the window and the physical memory _MapPhysToLinear
+             * maps after it (vxd.c physmap_next): 16 entries on, as
+             * Windows 3.1's W32S.386 leaves after the system arena (12.18) */
+            l->window_end_pde = (W386_VMM_LIN + ((info->xms_size + 0x3FFFFFu) & ~0x3FFFFFu)) >> 22;
+            l->trace = info->trace;
+            l->ldt_user = link_ldt_user;
         }
     for (i = 0; i < ndevs; i++)                     /* REBOOT's link (w16vxd.h) */
         if (devs[i]->device_id == 9 && devs[i]->ref_data) reboot_link_of(devs[i]->ref_data);

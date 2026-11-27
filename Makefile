@@ -1223,6 +1223,10 @@ $(W386)/REBOOT.386: $(W386REBOOT) win386/vxd/reboot.lnk
 W386VMPOLL := $(W386)/vxd/vmpollddb.o $(W386)/vxd/vmpoll.o $(W386)/vxd/vxdrt.o
 $(W386)/VMPOLL.386: $(W386VMPOLL) win386/vxd/vmpoll.lnk
 	$(WLINK) @win386/vxd/vmpoll.lnk name $@ option map=$(W386)/vmpoll.map file { $(W386VMPOLL) }
+# W32S: w16's Win32s device, used for device=...W32S.386 (ARCHITECTURE.md 12.19)
+W386W32S := $(W386)/vxd/w32sddb.o $(W386)/vxd/w32s.o $(W386)/vxd/vxdrt.o
+$(W386)/W32S.386: $(W386W32S) win386/vxd/w32s.lnk
+	$(WLINK) @win386/vxd/w32s.lnk name $@ option map=$(W386)/w32s.map file { $(W386W32S) }
 W386VSD := $(W386)/vxd/vsdddb.o $(W386)/vxd/vsd.o $(W386)/vxd/vxdrt.o
 $(W386)/VSD.386: $(W386VSD) win386/vxd/vsd.lnk
 	$(WLINK) @win386/vxd/vsd.lnk name $@ option map=$(W386)/vsd.map file { $(W386VSD) }
@@ -1245,8 +1249,8 @@ $(DOS)/VMTASK.386: $(W386VMTASK) win386/vxd/vmtask.lnk tools/leautodata.py
 	$(WLINK) @win386/vxd/vmtask.lnk name $@ option map=$(W386)/vmtask.map file { $(W386VMTASK) }
 	python3 tools/leautodata.py $@
 dos: $(DOS)/VMTASK.386
-W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VSD=$(W386)/VSD.386 VMPOLL=$(W386)/VMPOLL.386 VDMAD=$(W386)/VDMAD.386
-$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VSD.386 $(W386)/VMPOLL.386 $(W386)/VDMAD.386 tools/mkw3.py
+W386MODS := VPICD=$(W386)/VPICD.386 VMD=$(W386)/VMD.386 VKD=$(W386)/VKD.386 REBOOT=$(W386)/REBOOT.386 VSD=$(W386)/VSD.386 VMPOLL=$(W386)/VMPOLL.386 VDMAD=$(W386)/VDMAD.386 W32S=$(W386)/W32S.386
+$(W386)/WIN386.EXE: $(W386)/WIN386L.EXE $(W386)/VMM.386 $(W386)/VPICD.386 $(W386)/VMD.386 $(W386)/VKD.386 $(W386)/REBOOT.386 $(W386)/VSD.386 $(W386)/VMPOLL.386 $(W386)/VDMAD.386 $(W386)/W32S.386 tools/mkw3.py
 	python3 tools/mkw3.py $@ $(W386)/WIN386L.EXE WIN386=$(W386)/VMM.386 $(W386MODS)
 
 # VX1-VX2.COM: the WIN386 probes (tests/vxobs.sh; ARCHITECTURE.md 12)
