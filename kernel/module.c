@@ -478,18 +478,29 @@ int mod_base_name(const char FAR *name, char *base)
    "C:\X\TKFA.DLL" find module TKFB loaded from TKFA.DLL; "TKFA" does
    not). With a module TKFN and another module loaded from the file TKFN,
    "TKFN" finds the module named TKFN. */
-u16 KAPI GetModuleHandle(const char FAR *name)                /* KERNEL.47 */
+u32 KAPI GetModuleHandle(const char FAR *name)                /* KERNEL.47 */
 {
     module FAR *m;
+    /* DX: the first module table of the list, KERNEL's (Pietrek ch. 3,
+       "upon return from this call, DX contains the module handle of the
+       first module in the system"; TK60 on 3.1 under KRNL386, Standard
+       and 386 Enhanced mode: KERNEL's for a name found or not and for
+       MAKELP(0, h) whatever h is; NULL gives 0:0). Visual C++ 1.52's
+       Windows Process Status (WPS.EXE) walks the module list from it;
+       w16 left a selector of its own in DX, and WPS faulted on the "KE"
+       of KERNEL's name read as a selector. */
+    u32 head = (u32)(module_first ? module_first->ne_sel : 0) << 16;
 
+    if (!name)
+        return 0;
     if (!FP_SEG(name)) {
         m = module_of(FP_OFF(name));
-        return m ? m->ne_sel : 0;
+        return head | (m ? m->ne_sel : 0);
     }
     m = module_find(name);
     if (!m)
         m = module_find_file(name);
-    return m ? m->ne_sel : 0;
+    return head | (m ? m->ne_sel : 0);
 }
 
 /* Observed: returns the length copied; at most n - 1 characters and a
