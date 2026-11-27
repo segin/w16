@@ -51,3 +51,11 @@ WIN386).
 ## Test state (2026-11-27, w16-vm3)
 
 installation-05, `tools/remote-test.sh -n w16-vm3` at "Docs: 12.18 ...": make test passes; the full boot test 192 ok, 4 failures, none the branch's: toolhelp tree286 (`m`: the W16SANS... font modules; fails on master the same), lzexpand quirks (fails on master the same), holdbtn and trails@timednl (timing under the host's load: both pass rerun, on the branch and on master). The targeted run before it: kernel k386 pestart win32s vmprobe bigmem taskman holdbtn vdmad ver (with w32s) msvc msvccl win386dpmi win386 win386dos win386two win386tree all ok (taskman too, this time; see Open 2).
+
+## Test state (2026-11-27, fourth round)
+
+installation-05, `tools/remote-test.sh -n w16-w32s-t` at "Docs: 12.18 what
+W32S.386 checks ...": make test passes; the full boot test 193 ok, 4
+failures: lzexpand quirks (master's), holdbtn and trails@timed (both pass
+rerun), taskman tree `21-dosesc` (974,869 pixels, the same as Open 2:
+failed again on the rerun; master's flake, not looked at again here).
