@@ -27,6 +27,7 @@
 #include <windows.h>
 
 static HANDLE logf;
+static int with_exc;             /* "x" on the command line: the exceptions too */
 
 static void put(const char *s)
 {
@@ -149,7 +150,7 @@ static void vm_section(void)
     if (!r)
         return;
     query("reserved", r);
-    try_it("readreserved", p_read, (DWORD)r);
+    if (with_exc) try_it("readreserved", p_read, (DWORD)r);
     /* commit the first 8 KB */
     p = VirtualAlloc(r, 0x2000, MEM_COMMIT, PAGE_READWRITE);
     line("commit", 2, (DWORD)p, GetLastError(), 0, 0);
@@ -163,12 +164,12 @@ static void vm_section(void)
     ok = VirtualProtect(r, 0x1000, PAGE_READONLY, &old);
     line("protect", 2, ok, old, 0, 0);
     query("readonly", r);
-    try_it("writereadonly", p_write, (DWORD)r);
+    if (with_exc) try_it("writereadonly", p_write, (DWORD)r);
     line("afterwrite", 1, *(DWORD *)r, 0, 0, 0);
     ok = VirtualProtect(r, 0x1000, PAGE_NOACCESS, &old);
     line("noaccess", 2, ok, old, 0, 0);
     query("noaccess", r);
-    try_it("readnoaccess", p_read, (DWORD)r);
+    if (with_exc) try_it("readnoaccess", p_read, (DWORD)r);
     ok = VirtualProtect(r, 0x1000, PAGE_READWRITE, &old);
     line("readwrite", 2, ok, old, 0, 0);
     line("kept", 1, *(DWORD *)r, 0, 0, 0);
@@ -176,7 +177,7 @@ static void vm_section(void)
     ok = VirtualFree(r + 0x1000, 0x1000, MEM_DECOMMIT);
     line("decommit", 1, ok, 0, 0, 0);
     query("decommitted", r + 0x1000);
-    try_it("readdecommitted", p_read, (DWORD)(r + 0x1000));
+    if (with_exc) try_it("readdecommitted", p_read, (DWORD)(r + 0x1000));
     /* commit it again: zeroed */
     q = VirtualAlloc(r + 0x1000, 0x1000, MEM_COMMIT, PAGE_READWRITE);
     line("recommit", 2, (DWORD)q, *(DWORD *)(r + 0x1FFC), 0, 0);
@@ -284,7 +285,7 @@ static void map_section(void)
         line("shared", 2, v2[0], v1[0], 0, 0);
         query("view1", v1);
         query("view2", v2);
-        try_it("writeview2", p_write, (DWORD)v2);
+        if (with_exc) try_it("writeview2", p_write, (DWORD)v2);
     }
     if (v2) UnmapViewOfFile(v2);
     if (v1) UnmapViewOfFile(v1);
@@ -297,9 +298,17 @@ void __cdecl w32mmain(void)
                        FILE_ATTRIBUTE_NORMAL, NULL);
     if (logf == INVALID_HANDLE_VALUE)
         ExitProcess(1);
+    {
+        /* the exceptions only with "x" on the command line: under Windows
+           3.1 with Win32s 1.30c the first one hung the program (12.20) */
+        const char *cl = GetCommandLineA();
+        while (*cl && *cl != ' ') cl++;
+        while (*cl == ' ') cl++;
+        with_exc = *cl == 'x';
+    }
     line("W32M start", 1, GetVersion(), 0, 0, 0);
     vm_section();
-    exc_section();
+    if (with_exc) exc_section();
     heap_section();
     map_section();
     put("W32M end\r\n");

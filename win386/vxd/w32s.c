@@ -604,6 +604,8 @@ void __cdecl w32s_api(struct vregs *r)
         if (trace_on) {
             tput("W32S: file to map, DOS handle ");
             thex(b[1]);
+            { vu32 k; tput(" S"); for (k = 0; k < 8; k++) { tput(" "); thex(((vu32 *)b[0])[k]); } }
+            { vu32 k; tput(" B"); for (k = 2; k < 12; k++) { tput(" "); thex(b[k]); } }
             tput(" size ");
             thex(size);
             tput(" handle ");
