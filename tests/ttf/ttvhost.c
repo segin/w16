@@ -3,9 +3,12 @@
  * from the same code as TTVIEW.EXE, for tests/ttview.sh to compare with
  * what TTVIEW drew on Windows (tests/ttf/ttvcmp.py).
  *
- *   usage: ttvhost [-u] [-h FLAGS] [-2] FONT.TTF PAGE.PG
+ *   usage: ttvhost [-u|-a] [-h FLAGS] [-2] FONT.TTF PAGE.PG
  *     -u  unhinted (ttfx_SetHinting 0; TTVIEW /U)
- *     -h  hinted with these TTFX_HINT_* flags (default TTFX_HINT_DEFAULT)
+ *     -a  the autohinter, not the font's instructions (TTFX_HINT_DEFAULT;
+ *         TTVIEW /A)
+ *     -h  hinted with these TTFX_HINT_* flags (default TTFX_HINT_ALL: the
+ *         font's instructions, the autohinter where it has none; TTVIEW /B)
  *     -2  page 2, the specimen at 8-24 pixels to the em (TTVIEW /P2)
  *
  * PAGE.PG: 640 x 480 bits, rows of 80 bytes, set bits the glyphs' pixels
@@ -37,10 +40,12 @@ int main(int argc, char **argv)
     ttfx_font f;
     FILE *fp;
     char name[64];
-    int n, failed, hint = TTFX_HINT_DEFAULT, page2 = 0;
+    int n, failed, hint = TTFX_HINT_ALL, page2 = 0;
     while (argc > 1 && argv[1][0] == '-') {
         if (!strcmp(argv[1], "-u"))
             hint = 0;
+        else if (!strcmp(argv[1], "-a"))
+            hint = TTFX_HINT_DEFAULT;
         else if (!strcmp(argv[1], "-h") && argc > 2) {
             hint = atoi(argv[2]);
             argc--;
@@ -54,7 +59,7 @@ int main(int argc, char **argv)
         argv++;
     }
     if (argc != 3) {
-        fprintf(stderr, "usage: ttvhost [-u] [-h FLAGS] [-2] FONT.TTF PAGE.PG\n");
+        fprintf(stderr, "usage: ttvhost [-u|-a] [-h FLAGS] [-2] FONT.TTF PAGE.PG\n");
         return 2;
     }
     fp = fopen(argv[1], "rb");
@@ -73,6 +78,8 @@ int main(int argc, char **argv)
         return 1;
     }
     ttfx_SetHinting(&f, hint);
+    ttv_bcbytes = ttfx_bcBytes(&f);
+    ttv_bcmem = ttv_bcbytes ? malloc(ttv_bcbytes) : 0;
     n = page2 ? ttv_sizes(&f, page, &failed) : ttv_page(&f, page, &failed);
     ttv_name(&f, name, sizeof name);
     printf("ttvhost: %s: %d glyphs, %d failed, arena peak %u\n", name, n, failed, ttv_arena_peak);
