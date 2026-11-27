@@ -364,6 +364,21 @@ void vdd_tick(void);
 int shell_display_changed(struct vm *v, int cursor);
 #define SEL_FLAT7B  0x7B            /* SHELL's flat selector (its function 9; GDT index 15) */
 
+/* pager.c: demand paging to the paging file (ARCHITECTURE.md 12.16) */
+void pager_init(void);
+int pager_on(void);
+u32 pager_file_pages(void);
+u32 pager_avail(void);                  /* pages a client may still be given */
+int pager_map(u32 lin, u32 n);          /* new pageable pages; -1: no paging file */
+int pager_drop(u32 lin);                /* a pageable page goes; 1: nothing left to free */
+int pager_fault(u32 lin);               /* a page fault: 1 if the page is there now */
+int pager_present(u32 lin);             /* bring lin's page in if it is the pager's */
+int pager_lock(u32 lin, u32 size, int lock);
+void pager_meminfo(u32 *p);             /* DPMI 0500h */
+u32 pager_page(void);
+int pager_service(u32 dev, u32 svc, struct svcregs *s);
+void pager_stats(u32 *ins, u32 *outs, u32 *used);
+
 /* io.c: I/O port trapping */
 void io_trap_bit(u32 port, int on);                 /* vmm.c: the TSS's I/O bitmap */
 int io_trap(struct cregs *r, u8 *op);               /* IN/OUT/INS/OUTS that faulted */

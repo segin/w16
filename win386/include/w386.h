@@ -111,6 +111,15 @@ struct w386_info {
        every VM) for the VMM's profile services during initialisation */
     w_u32 ini_lin;
     w_u32 ini_len;
+    /* the paging file (win386/ldr/swap.c, win386/vmm/pager.c): its DOS
+       handle in the loader's PSP (FFFFh: none), its size in pages (0:
+       none), PageSwap's pager type (1 none, 2 MS-DOS), the size it is
+       made with in pages; [386Enh] PageOverCommit (1-20, default 4) */
+    w_u16 swap_handle;
+    w_u16 swap_type;
+    w_u32 swap_pages;
+    w_u32 swap_initial;
+    w_u16 overcommit;
 };
 #pragma pack()
 

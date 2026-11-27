@@ -244,7 +244,7 @@ static void broadcast(u32 msg, u32 esi, u32 edx, u32 edi, int rev)
  * win386-vxds.md). Its services as Windows 3.1's answered VXP:
  * VTD_Get_Version AX=030Ah, the fastest period 1 ms in EBX, the slowest
  * 54 ms (36h) in ECX; VTD_Get_Interrupt_Period 54 ms. */
-#define NBUILTIN 4
+#define NBUILTIN 5
 static void vtd_init(void);
 /* w16's VDD (vdd.c, in this module): its DDB for other devices' dynamic
  * links (Windows 3.1's: "VDD", 000Ah, 2.00, init order 28000000h, 14
@@ -264,6 +264,12 @@ static struct ddb vdd_ddb = {
 static struct ddb shell_ddb = {
     0, 0x030A, 0x0017, 3, 0, 0, { 'S', 'H', 'E', 'L', 'L', ' ', ' ', ' ' },
     0xB0000000, 0, 0, 0, 0, 0, 0, 0, 6
+};
+/* PageSwap (pager.c): Windows 3.1's "PageSwap", 0007h, 2.10, init order
+ * 1C000000h, 7 services (the DDK documents the first three) */
+static struct ddb pageswap_ddb = {
+    0, 0x030A, 0x0007, 2, 10, 0, { 'P', 'a', 'g', 'e', 'S', 'w', 'a', 'p' },
+    0x1C000000, 0, 0, 0, 0, 0, 0, 0, 7
 };
 static struct ddb vtd_ddb = {
     0, 0x030A, 0x0005, 3, 10, 0, { 'V', 'T', 'D', ' ', ' ', ' ', ' ', ' ' },
@@ -755,6 +761,8 @@ void vxd_init(void)
     devs[ndevs++] = &v86mm_ddb;
     shell_ddb.svc_table = (u32)make_slots(0x17, shell_ddb.svc_count);
     devs[ndevs++] = &shell_ddb;
+    pageswap_ddb.svc_table = (u32)make_slots(0x07, pageswap_ddb.svc_count);
+    devs[ndevs++] = &pageswap_ddb;
     for (i = 0; i < info->vxd_count; i++) {
         struct ddb *d = (struct ddb *)list[i];
         devs[ndevs++] = d;
@@ -1730,6 +1738,7 @@ void __cdecl svc_dispatch(struct svcregs *s)
     if (dev == 1 && sim_service(svc, s)) return;
     if (dev == 1 && pmint_service(svc, s)) return;
     if (dev == 1 && page_service(svc, s)) return;
+    if ((dev == 1 || dev == 7) && pager_service(dev, svc, s)) return;
     if (dev == 1 && v86hook_service(svc, s)) return;
     if (dev == 5) { vtd_service(svc, s); return; }
     if (dev == 0x06) { v86mm_service(svc, s); return; }
