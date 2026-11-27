@@ -19,6 +19,15 @@ their own permissive licences, stated with them:
 - tests/fixtures/fonts/LiberationSans-Regular.ttf is Liberation Sans
   2.1.5 (Red Hat, digitized data Google), under the SIL Open Font License
   1.1 (tests/fixtures/fonts/LICENSE-Liberation.txt); a test input only
+- assets/fonts/liberation/*.ttf are the Liberation Sans, Serif and Mono
+  2.1.5 fonts (Regular, Bold, Italic, Bold Italic), unmodified from the
+  upstream release (https://github.com/liberationfonts/liberation-fonts,
+  liberation-fonts-ttf-2.1.5), copyright Red Hat, Inc. and Google
+  Corporation (digitized data), with Reserved Font Names "Liberation",
+  "Arimo", "Tinos" and "Cousine", under the SIL Open Font License 1.1
+  (assets/fonts/liberation/OFL.TXT; AUTHORS beside it). w16's install
+  tree carries them under 8.3 names (LIBSANS.TTF ...) with .FOT files of
+  its own; the font data are not changed and keep their names
 
 The names "Microsoft", "Windows" and "MS-DOS" are trademarks of Microsoft
 Corporation; w16 uses them only to describe compatibility.

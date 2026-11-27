@@ -2442,6 +2442,31 @@ $(W16SYS)/USER.EXE $(W16SYS)/GDI.EXE $(W16SYS)/WINOLDAP.MOD: $(W16SYS)/%: $(DOS)
 $(FONS:$(FNT)/%=$(W16SYS)/%): $(W16SYS)/%: $(FNT)/%
 	@mkdir -p $(@D)
 	cp $< $@
+# The Liberation fonts (assets/fonts/liberation/, SIL Open Font License,
+# unmodified; metric-compatible with Arial, Times New Roman and Courier
+# New, which WIN.INI [FontSubstitutes] maps to them; ARCHITECTURE.md
+# 11.12): installed as 3.1's Setup installs TrueType, each .TTF with its
+# .FOT in SYSTEM (tools/mkfot.py writes what w16's
+# CreateScalableFontResource does) and a WIN.INI [fonts] line. 8.3 names:
+# LIBSANS, LIBSERF, LIBMONO and B (bold), I (italic), Z (bold italic).
+LIBFONTS := LIBSANS:Sans-Regular LIBSANSB:Sans-Bold LIBSANSI:Sans-Italic LIBSANSZ:Sans-BoldItalic \
+            LIBSERF:Serif-Regular LIBSERFB:Serif-Bold LIBSERFI:Serif-Italic LIBSERFZ:Serif-BoldItalic \
+            LIBMONO:Mono-Regular LIBMONOB:Mono-Bold LIBMONOI:Mono-Italic LIBMONOZ:Mono-BoldItalic
+LIBTTF := $(foreach f,$(LIBFONTS),$(W16SYS)/$(firstword $(subst :, ,$(f))).TTF)
+install-tree: $(LIBTTF) $(LIBTTF:.TTF=.FOT) $(W16SYS)/OFL.TXT
+# the fonts' licence, with them (the OFL asks for it)
+$(W16SYS)/OFL.TXT: assets/fonts/liberation/OFL.TXT
+	@mkdir -p $(@D)
+	sed 's/$$/\r/' $< > $@
+define libfont-rule
+$(W16SYS)/$(1).TTF: assets/fonts/liberation/Liberation$(2).ttf
+	@mkdir -p $$(@D)
+	cp $$< $$@
+$(W16SYS)/$(1).FOT: assets/fonts/liberation/Liberation$(2).ttf tools/mkfot.py
+	@mkdir -p $$(@D)
+	python3 tools/mkfot.py $$< $$@ $(1).TTF
+endef
+$(foreach f,$(LIBFONTS),$(eval $(call libfont-rule,$(firstword $(subst :, ,$(f))),$(lastword $(subst :, ,$(f))))))
 # the display grabber (drivers/grabber/)
 install-tree: $(W16SYS)/VGACOLOR.2GR
 $(W16SYS)/VGACOLOR.2GR: $(DOS)/VGACOLOR.2GR

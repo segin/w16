@@ -176,6 +176,11 @@ is newer. Neither mode needs anything of Microsoft's.
   SYSTEM\SERIFE.FON       MS Serif font
   SYSTEM\SMALLE.FON       Small Fonts (and MS Serif 6 and 7 point)
   SYSTEM\SYMBOLE.FON      Symbol font
+  SYSTEM\LIBSANS*.TTF, LIBSERF*.TTF, LIBMONO*.TTF and their .FOT files
+                          the Liberation Sans, Serif and Mono TrueType
+                          fonts (regular, bold B, italic I, bold
+                          italic Z), under the SIL Open Font License
+                          (see below; SYSTEM\OFL.TXT is the licence)
   SYSTEM\DOSAPP.FON       Terminal sizes for DOS windows
   SYSTEM\EGA80WOA.FON, EGA40WOA.FON, CGA80WOA.FON, CGA40WOA.FON
                           the grabber's fonts for DOS windows
@@ -218,8 +223,9 @@ SYSTEM subdirectory, as there) without overwriting the files above:
   Windows directory:      MORICONS.DLL (Program Manager's extra icons)
   SYSTEM:                 the sound and MCI drivers (*.DRV named in
                           SYSTEM.INI [drivers] and [mci]),
-                          the TrueType fonts (*.FOT, *.TTF) and the
-                          plotter fonts (ROMAN.FON, SCRIPT.FON,
+                          if you want them, Microsoft's TrueType fonts
+                          (*.FOT, *.TTF, with their WIN.INI [fonts]
+                          lines) and the plotter fonts (ROMAN.FON, SCRIPT.FON,
                           MODERN.FON),
                           DRIVERS.CPL and SND.CPL (Control Panel's
                           Drivers and Sound)
@@ -232,9 +238,16 @@ Notepad uses your NOTEPAD.HLP (Windows directory) for Help; w16 ships no
 help text. Printing needs your printer's driver (installed with Control
 Panel, as on Windows 3.1).
 
-Write's new documents are in Arial, a TrueType font: copy your Windows'
-*.FOT and *.TTF files into SYSTEM. Its help is your WRITE.HLP (Windows
-directory).
+Arial, Times New Roman and Courier New are Liberation Sans, Serif and
+Mono here: WIN.INI's [FontSubstitutes] names them so, as Windows 3.1's
+names Helv for MS Sans Serif, and the Liberation fonts have the same
+metrics, so programs that ask for Arial (Write's new documents) lay out
+text as with it. The Liberation fonts are copyright Red Hat, Inc. and
+Google, unmodified, under the SIL Open Font License 1.1, whose text is
+SYSTEM\OFL.TXT; the Reserved Font
+Name "Liberation" means a changed copy must not be called that.
+
+Write's help is your WRITE.HLP (Windows directory).
 
 32-bit programs (PE files) run only with Microsoft's Win32s
 installed; without it Program Manager says so instead of starting
