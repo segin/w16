@@ -177,6 +177,27 @@ L(main):
         jne .notc
         jmp L(conc)
 .notc:
+        ; T: DOS ends the client in real mode (INT 21h 4C07h through
+        ; 0300h), not its INT 21h 4Ch from protected mode
+        cmp byte [mode], 'T'
+        jne .nott
+        LS "T 4C07 in real mode"
+        NL
+        call L(clrr)
+        mov dword [rmr + 1Ch], 4C07h
+        push es
+        push ds
+        pop es
+        CLR
+        mov bx, 21h
+        mov edi, rmr
+        mov ax, 0300h
+        int 31h
+        pop es
+        LS "T survived"
+        NL
+        jmp L(fin)
+.nott:
         ; ---- INT 2Fh in protected mode ----
         mov ax, 1686h
         int 2Fh
