@@ -1749,7 +1749,8 @@ $(DOS)/WRMET.EXE: $(B)/tests/start.o $(B)/tests/wrmet.o tests/apps/app.lnk
 # segments, marked 2.0 and, in the NE other-flags byte, 02h: a 2.x program
 # that runs in protected mode (SDK vol. 4, the NE header; without it 3.1
 # would not start it as the shell)
-TTV_O := $(B)/ttview/ttview.o $(B)/ttview/ttvpage.o $(B)/ttview/ttfx.o $(B)/ttview/ttfhint.o
+TTV_O := $(B)/ttview/ttview.o $(B)/ttview/ttvpage.o $(B)/ttview/ttfx.o $(B)/ttview/ttfhint.o \
+         $(B)/ttview/ttfbc.o
 dos: $(DOS)/TTVIEW.EXE
 $(B)/ttview/%.o: tests/apps/%.c tests/apps/ttvpage.h gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
@@ -1758,6 +1759,9 @@ $(B)/ttview/ttfx.o: gdi/ttf/ttfx.c gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
 $(B)/ttview/ttfhint.o: gdi/ttf/ttfhint.c gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(WCC) $(SCFLAGS) -fo=$@ $<
+$(B)/ttview/ttfbc.o: gdi/ttf/ttfbc.c gdi/ttf/ttfbc.h gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(SCFLAGS) -fo=$@ $<
 $(B)/ttview/ttview.res: tests/apps/ttview.rc
@@ -1773,20 +1777,37 @@ $(DOS)/TTVIEW.EXE: $(B)/shell/start.o $(B)/shell/write/i4.o $(TTV_O) $(B)/ttview
 	python3 tools/nemark.py $@ 2.0 0202 02
 # ... and the same page drawn on the host, to compare with (tests/ttview.sh)
 $(B)/host/ttvhost: tests/ttf/ttvhost.c tests/apps/ttvpage.c tests/apps/ttvpage.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h \
-                  gdi/ttf/ttfhint.c
+                  gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c gdi/ttf/ttfbc.h
 	@mkdir -p $(@D)
-	$(HOSTCC) -O2 -o $@ tests/ttf/ttvhost.c tests/apps/ttvpage.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttvhost.c tests/apps/ttvpage.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c
 
 # the fixed-point TrueType code (gdi/ttf/ttfx.c) against the floating-point
 # stb_truetype it was adapted from, on the host (tests/ttf/ttfxtest.c)
 $(B)/host/ttfxtest: tests/ttf/ttfxtest.c tests/ttf/ref.c tests/ttf/ref.h gdi/ttf/ttfx.c gdi/ttf/ttfx.h \
-                    gdi/ttf/ttfhint.c gdi/ttf/stb_truetype.h
+                    gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c gdi/ttf/ttfbc.h gdi/ttf/stb_truetype.h
 	@mkdir -p $(@D)
-	$(HOSTCC) -O2 -o $@ tests/ttf/ttfxtest.c tests/ttf/ref.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c -lm
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttfxtest.c tests/ttf/ref.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c -lm
 
-test: dos fonts grpcheck $(B)/host/pwtest $(B)/hlpdump $(B)/host/ttfxtest
+# a glyph or a line printed as text, with the font's instructions, the
+# autohinter or neither (tests/ttf/ttbcshow.c; -DBC_TRACE traces them)
+$(B)/host/ttbcshow: tests/ttf/ttbcshow.c gdi/ttf/ttfx.c gdi/ttf/ttfx.h gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c \
+                    gdi/ttf/ttfbc.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttbcshow.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c
+
+# the bytecode interpreter (gdi/ttf/ttfbc.c), instruction by instruction
+$(B)/host/ttfbctest: tests/ttf/ttfbctest.c gdi/ttf/ttfx.c gdi/ttf/ttfx.h gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c \
+                     gdi/ttf/ttfbc.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O2 -o $@ tests/ttf/ttfbctest.c gdi/ttf/ttfx.c gdi/ttf/ttfhint.c gdi/ttf/ttfbc.c
+
+test: dos fonts grpcheck $(B)/host/pwtest $(B)/hlpdump $(B)/host/ttfxtest $(B)/host/ttfbctest $(B)/host/ttvhost
 	python3 tests/scripts/ss/pwtest.py $(B)/host/pwtest
 	$(B)/host/ttfxtest tests/fixtures/fonts/LiberationSans-Regular.ttf
+	$(B)/host/ttfbctest
+	$(B)/host/ttvhost -2 tests/fixtures/fonts/LiberationSans-Regular.ttf $(B)/host/libspec.pg > /dev/null
+	python3 tests/ttf/ttvspec.py tests/fixtures/fonts/LiberationSans-Regular.ttf $(B)/host/libspec.pg \
+	    tests/fixtures/fonts/LiberationSans-win31.scr 85
 	WATCOM=$(WATCOM) tests/winhelp/hlpcheck.sh $(B)/hlpdump
 	python3 tools/castcheck.py $$(find user gdi kernel shell win386 win87em winoldap drivers -name '*.c')
 	WATCOM=$(WATCOM) python3 tools/irqcheck.py $(DOS)/USER.EXE $(B)/user/user.map $(USER_OBJ) $(B)/user/stubs.o
@@ -1951,12 +1972,15 @@ GCFLAGS := -q -bt=windows -ml -zu -zp1 -2 -s -zl -ox -wx -we -wcd=201 -Igdi
 GOBJS   := $(B)/gdi/entry.o $(B)/gdi/i4.o $(B)/gdi/stubs.o $(B)/gdi/util.o $(B)/gdi/heap.o $(B)/gdi/object.o \
            $(B)/gdi/driver.o $(B)/gdi/dc.o $(B)/gdi/rgn.o $(B)/gdi/bitmap.o \
            $(B)/gdi/blt.o $(B)/gdi/font.o $(B)/gdi/text.o $(B)/gdi/misc.o $(B)/gdi/draw.o \
-           $(B)/gdi/meta.o $(B)/gdi/ttfont.o $(B)/gdi/ttfx.o $(B)/gdi/ttfhint.o
+           $(B)/gdi/meta.o $(B)/gdi/ttfont.o $(B)/gdi/ttfx.o $(B)/gdi/ttfhint.o $(B)/gdi/ttfbc.o
 gdi: $(DOS)/GDI.EXE
 $(B)/gdi/ttfx.o: gdi/ttf/ttfx.c gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(GCFLAGS) -fo=$@ $<
 $(B)/gdi/ttfhint.o: gdi/ttf/ttfhint.c gdi/ttf/ttfx.h
+	@mkdir -p $(@D)
+	$(WCC) $(GCFLAGS) -fo=$@ $<
+$(B)/gdi/ttfbc.o: gdi/ttf/ttfbc.c gdi/ttf/ttfbc.h gdi/ttf/ttfx.h
 	@mkdir -p $(@D)
 	$(WCC) $(GCFLAGS) -fo=$@ $<
 $(B)/gdi/ttfont.o: gdi/ttf/ttfx.h

@@ -5,11 +5,11 @@
 # host's drawing of the same page (build/host/ttvhost, the same code):
 # the page both hinted (w16's autohinter, gdi/ttf/ttfhint.c) and unhinted
 # bit for bit, and the screen's client area showing exactly the one shown
-# (tests/ttf/ttvcmp.py). TTVIEW gets "/T [/R n] [/U] [/2] [/G] C:\FONT.TTF"
+# (tests/ttf/ttvcmp.py). TTVIEW gets "/T [/R n] [/A] [/U] [/2] [/G] C:\FONT.TTF"
 # through C:\TTVIEW.CMD, writes C:\TTVIEW.PG (hinted), TTVIEWU.PG
 # (unhinted), .SCR and .LOG and ends Windows.
 #
-#   usage: tests/ttview.sh [-f FONT.TTF] [-r N] [-o DIR] [-s] [-u] [-2] [-g] SYSTEM...
+#   usage: tests/ttview.sh [-f FONT.TTF] [-r N] [-o DIR] [-s] [-a] [-u] [-2] [-g] SYSTEM...
 #     SYSTEM   w386    Windows/386 2.11 (tests/w386run.sh: MS-DOS 4.00,
 #                      real-mode Windows under WIN386)
 #              std     Windows 3.1 Standard mode (WIN /S)
@@ -22,6 +22,8 @@
 #     -r N     render each page N times (TTVIEW /R: timing)
 #     -o DIR   results (default build/ttview): DIR/SYSTEM/TTVIEW.{PG,SCR,LOG},
 #              TTVIEWU.PG, screen.png (the capture), host.pg, host-u.pg
+#     -a       hint with the autohinter (TTVIEW /A; default the font's
+#              instructions, TTVIEW /B)
 #     -u       show the unhinted page (TTVIEW /U; default the hinted)
 #     -2       page 2, the specimen at 8-24 pixels to the em (TTVIEW /2)
 #     -g       show the specimen as Windows draws it with its own TrueType
@@ -36,10 +38,11 @@
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 font=$root/tests/fixtures/fonts/LiberationSans-Regular.ttf
-out=$root/build/ttview reps=1 shots= opts= shown=h page2=
-while getopts f:r:o:su2g opt; do
+out=$root/build/ttview reps=1 shots= opts= shown=h page2= hostopt=
+while getopts f:r:o:sau2g opt; do
     case $opt in
     f) font=$OPTARG ;; r) reps=$OPTARG ;; o) out=$OPTARG ;; s) shots=1 ;;
+    a) opts="$opts /A" hostopt=-a ;;
     u) opts="$opts /U" shown=u ;; 2) opts="$opts /2" page2=-2 ;;
     g) opts="$opts /G" shown=g page2=-2 gdi=1 ;;
     *) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 2 ;;
@@ -49,7 +52,7 @@ shift $((OPTIND - 1))
 [ $# -gt 0 ] || set -- w386 std enh w16
 exe=$root/build/dos/TTVIEW.EXE
 mkdir -p "$out"
-"$root/build/host/ttvhost" $page2 "$font" "$out/host.pg"
+"$root/build/host/ttvhost" $hostopt $page2 "$font" "$out/host.pg"
 "$root/build/host/ttvhost" -u $page2 "$font" "$out/host-u.pg"
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 rc=0
