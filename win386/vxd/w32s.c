@@ -307,6 +307,7 @@ static vu32 sel_base(vu32 sel)
  * (vxd.c); DX is an offset in it. */
 static struct client_regs *cur;
 static struct client_regs saved;
+static vu32 cur_bx, cur_dx;             /* BX, DX of the last DOS call */
 
 static vu32 dos(vu32 ax, vu32 bx, vu32 cx, vu32 dx, vu32 *out_ax)
 {
@@ -327,6 +328,8 @@ static vu32 dos(vu32 ax, vu32 bx, vu32 cx, vu32 dx, vu32 *out_ax)
     v.eax = 0x21;
     vmm_exec_int(&v);
     if (out_ax) *out_ax = cur->eax & 0xFFFF;
+    cur_bx = cur->ebx & 0xFFFF;
+    cur_dx = cur->edx & 0xFFFF;
     cf = cur->eflags & VF_CF;
     vclear(&v, sizeof v);
     vmm_end_nest_exec(&v);
@@ -421,6 +424,31 @@ static void trace_call(const char *what, const struct client_regs *c)
     tput(" di "); thex(c->edi);
     tput(" f "); thex(c->eflags);
     tend();
+}
+
+/* DOS's current PSP made the current task's (CurTDB through 01h's EDI,
+ * the TDB's PDB at 60h, in conventional memory) for the client's DOS
+ * handles, as it is on Windows 3.1 while the program runs (w16's KERNEL
+ * sets it lazily, at the task's next INT 21h); the PSP before is
+ * returned, to be put back. 0: not done */
+static vu32 task_psp_in(void)
+{
+    vu32 a, tdb, pdb, base, old;
+    if (!k_curtdb) return 0;
+    a = sel_base(k_curtdb >> 16) + (k_curtdb & 0xFFFF);
+    tdb = *(const vu16 *)a;
+    if (!tdb) return 0;
+    pdb = *(const vu16 *)(sel_base(tdb) + 0x60);
+    base = sel_base(pdb);
+    if (!pdb || base >= 0x100000 || (base & 15)) return 0;
+    if (!dos(0x5100, 0, 0, 0, NULL)) return 0;
+    old = cur_bx;
+    dos(0x5000, base >> 4, 0, 0, NULL);
+    return old;
+}
+static void task_psp_out(vu32 old)
+{
+    if (old) dos(0x5000, old, 0, 0, NULL);
 }
 
 #define CF_SET(c)   ((c)->eflags |= VF_CF)
@@ -557,13 +585,12 @@ void __cdecl w32s_api(struct vregs *r)
     }
     case 0x0D: {                        /* a file to map: ESI the client's handle for it,
                                            [1] the DOS handle; [0] -> 1 (made) */
-        vu32 i, size = 0, dup = 0, ax;
+        vu32 i, size = 0, dup = 0, ax, psp;
         b = BLK(c);
         for (i = 0; i < NFILE && fobj[i].dos; i++) ;
+        psp = task_psp_in();
         if (i < NFILE && dos(0x4202, b[1], 0, 0, &ax)) {
-            vu32 hi = cur->edx & 0xFFFF;        /* (DX:AX after the call: restored above) */
-            size = ax;
-            (void)hi;
+            size = cur_dx << 16 | ax;
             dos(0x4200, b[1], 0, 0, NULL);
             if (dos(0x4500, b[1], 0, 0, &dup)) {
                 fobj[i].key = c->esi;
@@ -572,6 +599,14 @@ void __cdecl w32s_api(struct vregs *r)
                 fobj[i].view = 0;
                 last_fobj = &fobj[i];
             }
+        }
+        task_psp_out(psp);
+        if (trace_on) {
+            tput("W32S: file to map, size ");
+            thex(size);
+            tput(" handle ");
+            thex(dup);
+            tend();
         }
         *(vu32 *)b[0] = dup != 0;
         c->eax = 0;
@@ -600,7 +635,9 @@ void __cdecl w32s_api(struct vregs *r)
         b = BLK(c);
         if (!f) f = last_fobj;
         if (f && f->view) {
+            vu32 psp = task_psp_in();
             handle_read(f->dos, 0, f->size, f->view);
+            task_psp_out(psp);
             b[13] = f->vsize;
         }
         c->eax = 0;
@@ -620,7 +657,9 @@ void __cdecl w32s_api(struct vregs *r)
         b = BLK(c);
         f = fobj_of(*(vu32 *)b[1]);
         if (f) {
+            vu32 psp = task_psp_in();
             dos(0x3E00, f->dos, 0, 0, NULL);
+            task_psp_out(psp);
             f->dos = 0;
             if (last_fobj == f) last_fobj = NULL;
         }
