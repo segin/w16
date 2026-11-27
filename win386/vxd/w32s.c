@@ -602,7 +602,9 @@ void __cdecl w32s_api(struct vregs *r)
         }
         task_psp_out(psp);
         if (trace_on) {
-            tput("W32S: file to map, size ");
+            tput("W32S: file to map, DOS handle ");
+            thex(b[1]);
+            tput(" size ");
             thex(size);
             tput(" handle ");
             thex(dup);

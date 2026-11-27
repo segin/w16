@@ -37,23 +37,35 @@ Done:
   task: WIN32S16 reads TDB F2h through it).
 - w16's W32S module (win386/vxd/w32s.c, w32sddb.asm; W3 table module
   W32S; the loader maps device=...W32S.386 to it unless [w16]
-  W32SReplace=0; the VMM's w32s_link): functions 00, 01, 02, 04, 06, 08,
-  0A, 16, 1A, 1D so far; the LDT made user-accessible at function 00.
+  W32SReplace=0; the VMM's w32s_link): functions 00, 01, 02, 04, 05, 06,
+  07, 08, 09, 0A, 0D, 0F, 11, 12, 13, 16, 1A, 1D (0B, 14, 15, 1F answered
+  without effect); page faults on reserved pages commit them (a stack's
+  next page; any page of a reservation made with access); the LDT and GDT
+  user-accessible at 00; file mappings' DOS calls in the task's PSP.
+- The interop page / oracle (e0d9eb8) reverted. Master's memory-services
+  audit merged (it took 12.19; W32S is 12.20).
+
+Where Freecell gets on w16's tree (build/w32t, `fct.sh`): WIN32S16 and
+W32SKRNL start, FREECELL.EXE, CARDS.DLL and Win32s's system DLLs load
+(sections read by 02h), relocations and imports run (08h), then the
+file-mapping path (0Dh..) and a page fault in CARDS.DLL's code writing to
+77E8xxxxh (an unresolved import: NT's bound address) ends Windows via
+KERNEL's fault report. Last seen: 0Dh's lseek on the DOS handle it is
+given returns 0 (wrong handle or PSP); being traced (t13: the handle and
+the task's DOS opens with int21log).
 
 Open (next steps, in order):
-1. Freecell on 3.1 with w16's KRNL386 (Microsoft's WIN386) still ends:
+1. The file-mapping contract: 0Dh's block [1] is the DOS handle (5 on
+   3.1, FREECELL's), the size came from lseek 4202h in the task's PSP;
+   on 3.1 the mapped bytes are read when the view is touched (13h only
+   marks pages). Check the handle under w16, then the view's contents.
+2. Freecell on 3.1 with w16's KRNL386 (Microsoft's WIN386) still ends:
    a 16-bit function reached through a Win32s thunk runs on a 16-bit
    alias of the Win32 stack (SS base 881B8000h) and its SP wraps past 0
    (7DB8h at the first thunk, F698h when it faults in an uncommitted page
-   above the stack's top): something under w16's KERNEL uses more than
-   32 KB of stack there, or the thunk's SP is set from a value w16's
-   KERNEL gives differently. Not found yet which module 0557h is.
-2. w16's W32S on w16's tree: Win32s's client calls 00, 16, 16, 1A, then
-   WIN32S16 read its LDT through the flat selector (fault: w16's LDT was
-   supervisor-only; now made user-accessible). Next: 1D and on.
-3. The exception contract (functions 09 = VirtualQuery, 14/15 the
-   faulting context, 0B, 07, 05 at the process's end) and the fault
-   routing to W32SKRNL (Hook_PM_Fault); W32M's exception section hangs
-   on 3.1 itself (to look at: my handler or Win32s).
-4. Functions 0D, 0F, 11, 12, 13, 1F (file I/O through DOS and file
-   mappings) not implemented.
+   above the stack's top). Not found which module 0557h is.
+3. Exceptions: 14h/15h (the faulting context), routing faults in Win32
+   code to W32SKRNL (on 3.1 the next call after a fault is 14h); W32M's
+   exception section hangs on 3.1 itself.
+4. Tests: a boot-test case for the device (W32M's log under both, the
+   API's deterministic answers), the win32s case's open lines.
