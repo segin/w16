@@ -1,7 +1,8 @@
 # Win32s on w16's WIN386: virtual memory and W32S.386 (handover)
 
-Branches `w16-vm` (first agent), `w16-vm2` (second) and `w16-vm3` (third:
-w16-vm2 with master merged, the fixes below). Spec: ARCHITECTURE.md 9.8
+Branches `w16-vm` (first agent), `w16-vm2` (second), `w16-vm3` (third:
+w16-vm2 with master merged, the fixes below) and a fourth (W32S.386
+observed, then stopped). Spec: ARCHITECTURE.md 9.8
 (PE files and W32SYS.DLL), 12.17 (paging), 12.18 (W32S.386), 20.2 (VER
 and Win32 files).
 
@@ -13,16 +14,39 @@ and Win32 files).
 - **KERNEL registers Win32s relies on** (w16-vm3, TK43 on 3.1): FarSetOwner keeps AX, BX, CX, DX, ES (WIN32S16 passes the DX it had, GlobalDOSAlloc's segment, to W32S.386); KRNL386's GlobalUnlock returns the handle in DX.
 - **Debugging aids** (w16-vm3): `[w16] trace=` now also covers procedures found with GetProcAddress; `[w16] vxdlog=1` logs every call through a VxD API entry (INT 2Fh 1684h) with 32-bit registers before/after (`kernel/vxlog.asm`). Earlier: `vmmtrace=3/4` (W32S.386's Device_Init watched/stepped under w16's WIN386).
 
-## W32S.386 on w16's WIN386: stopped (12.18)
+## W32S.386 on w16's WIN386: stopped again, after observing it (12.18)
 
-W32S.386 finds Microsoft's VMM internals by matching code bytes (a sequence starting 56h inside `_MapPhysToLinear`) and a data structure (dword 000000C1h and what follows, in the VMM's first 64 KB), to do its own page-table and arena bookkeeping behind the documented services. Satisfying that means putting Microsoft's instruction bytes and internal layout into w16's VMM: excluded by the clean-room rule, so stopped and documented. No other route: WIN32S16 drives everything through W32S.386's API.
+Fourth round (run directory `w16-w32s`), under the decision that w16 may carry
+the minimal bytes W32S.386 checks for, learnt at run time:
+- Tools: VXY.386 (`tests/vxd/vxy.c`: steps the next device's Device_Init
+  under Microsoft's WIN386; `[386Enh] VXYHook=`, `VXYWatch=`/`VXYWatchLen=`/
+  `VXYQuiet=` for what happens later) and w16's oracle (`[w16]
+  vmmtrace=5`, `w32soracle=`, `w32sprefix=`; the loader's interop page at
+  80001000h, `W386_MARK_OFF`).
+- Learnt: the 56h search fails on 3.1 and WfW alike (not needed); the C1h
+  search compares 13 bytes and reads two operands (the arena base and a
+  table of 16-byte per-page records); the 87h search compares 8 bytes and
+  reads one operand, a table whose entry 0 W32S.386 replaces.
+- What they are: entry 0 is the VMM's page-fault pager for the arena
+  (an undocumented register contract both ways); W32S.386 reads and
+  writes all four fields of the per-page records (links, page table
+  entries, sentinels).
+- So: not a marker's worth; stopped and reported (12.18 has the bytes,
+  the contract and the evidence). The interop page stays empty.
+
+Hand runs on installation-05, `/mnt/build/w16-runs/w16-w32s` (synced by
+hand): `build/vxyrun.sh NAME REFDIR [dropin args]` (VXY on a reference
+C:, COM1 to `build/NAME.com1`), `build/fcms.sh NAME REFDIR [args]` (the
+same with Freecell started by WIN.INI `run=`), `build/w32boot.sh NAME
+[args]` (the treems tree after Setup, `build/wt`, with this build's
+WIN386).
 
 ## Open
 
 1. **Freecell on w16's tree with Microsoft's WIN386** (`treems`): with the VER and FarSetOwner fixes WIN32S.EXE starts, WIN32S16 calls W32S.386's API 00h, 16h (twice), 1Ah (now with 3.1's register values: EBX = GlobalDOSAlloc's seg:sel, EDX = the segment), allocates its blocks (GlobalAlloc 55F0h moveable, GlobalFix, AllocSelector + PrestoChangoSelector: a code alias; two 2042h blocks), and a little later Microsoft's VMM faults on its own stack (DOSBox "Illegal write to 80005ffc..80005c40, CS:IP 28:80006ec4", descending: exception frames pushed onto an unmapped VMM stack; with `vxdlog=1` it ends as "Reboot requested" instead). The 3.1 KERNEL does not crash, so something else w16's KERNEL hands back differs. Suspects not yet checked: the code alias's descriptor (PrestoChangoSelector/AllocSelector attributes: D bit, limit), GlobalFix'ed block's linear address/locking (W32S.386 may page-lock it), registers of other exports WIN32S16 calls (InitTask, GlobalDOSAlloc, GlobalFix, AllocSelector, PrestoChangoSelector: extend TK43's way of checking each), and whatever WIN32S.EXE does after InitTask returns (trace=WIN32S16.* tracefrom=W32SXXXX).
    Hand runs on installation-05: `/mnt/build/w16-runs/w16-vm3h` (synced by hand), `sh build/fc/go.sh NAME -f build/dos/VER.DLL=W16/SYSTEM/VER.DLL -f build/dos/KRNL386.EXE=W16/SYSTEM/KRNL386.EXE [-i w16:vxdlog=1 -i w16:int21log=1 -i w16:trace=KERNEL.* -i w16:tracefrom=WIN32S16 -i w16:traceret=1]` boots `build/fc.t` (the treems tree after Setup) and runs Freecell; logs in `build/fc/NAME/work/c/W16DBG.LOG`, `build/fc/NAME/dosbox.log`.
 2. **taskman tree** (the merge blocker of w16-vm2): not a branch regression. Ten runs of `taskman@tree` on the branch failed 5 times and four on master failed twice, all in the same way: `21-dosesc` after Ctrl+Esc from the full-screen DOS box under KRNL386 + w16's WIN386, the DOS box's icon missing (974,869 pixels). The 39-pixel `10-cascade` difference of w16-vm2 did not come back in those ten. The 21-dosesc flake is master's and needs its own look (the VMM trace goes to COM1 only in DOSBox-X, whose screens do not compare with the 0.74 references).
-3. The `win32s` case's Freecell lines are still "open" lines (Freecell does not run yet anywhere on w16's KERNEL).
+3. The `win32s` case's Freecell lines are still "open" lines (Freecell does not run yet anywhere on w16's KERNEL). Open 1 was not worked on in the fourth round (it stopped at W32S.386, as asked when the checks went past a marker).
 
 ## Test state (2026-11-27, w16-vm3)
 
