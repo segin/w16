@@ -394,3 +394,88 @@ void trace_print(void)
         kputs("\r\n");
     }
 }
+
+/* ---- [w16] vxdlog=1: the VxD API entries' calls (vxlog.asm) ----
+   KERNEL hooks protected-mode INT 2Fh; AX=1684h's entry point comes back
+   as a KERNEL thunk that writes each call to the debuglog: "VXD id
+   CS:IP >" with EAX EBX ECX EDX ESI EDI EBP DS ES and the 16 bytes at
+   DS:ESI and ES:EDI (when the selector reaches them), then "<" with the
+   same after the call and the flags. A debugging aid for devices that
+   are not w16's (Win32s's W32S.386 under Microsoft's WIN386). */
+extern u32 __cdecl vx_old2f;
+extern u32 __cdecl vx_real[8];
+extern u16 __cdecl vx_id[8];
+extern void __far vx_i2f(void);
+#pragma aux vx_i2f "_*"
+
+static char *vx_hex(char *p, u32 v, int n)
+{
+    static const char hx[] = "0123456789ABCDEF";
+    while (n--)
+        *p++ = hx[(v >> (4 * n)) & 15];
+    return p;
+}
+
+static char *vx_bytes(char *p, u16 sel, u32 off)
+{
+    u16 k;
+    *p++ = ' ';
+    *p++ = '[';
+    if (sel && off + 15 <= sel_lim16(sel) && off < 0x10000L)
+        for (k = 0; k < 16; k++)
+            p = vx_hex(p, *((const u8 FAR *)MK_FP(sel, (u16)off) + k), 2);
+    *p++ = ']';
+    return p;
+}
+
+void __cdecl __far vx_note(u16 slot4, u16 phase, u16 FAR *r, u16 ip, u16 cs)
+{
+    /* r: ES, DS, EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX (dwords), FLAGS */
+    const u32 FAR *d = (const u32 FAR *)(r + 2);
+    static const u8 order[] = { 7, 4, 6, 5, 1, 0, 2 };   /* EAX EBX ECX EDX ESI EDI EBP */
+    char s[200], *p = s;
+    u16 k;
+    *p++ = 'V'; *p++ = 'X'; *p++ = 'D'; *p++ = ' ';
+    p = vx_hex(p, vx_id[slot4 / 4 & 7], 4);
+    *p++ = ' ';
+    p = vx_hex(p, cs, 4);
+    *p++ = ':';
+    p = vx_hex(p, ip, 4);
+    *p++ = ' ';
+    *p++ = phase ? '<' : '>';
+    for (k = 0; k < 7; k++) {
+        *p++ = ' ';
+        p = vx_hex(p, d[order[k]], 8);
+    }
+    *p++ = ' ';
+    p = vx_hex(p, r[1], 4);
+    *p++ = ' ';
+    p = vx_hex(p, r[0], 4);
+    if (phase) {
+        *p++ = ' ';
+        p = vx_hex(p, r[2 + 16], 4);
+    }
+    p = vx_bytes(p, r[1], d[1]);
+    p = vx_bytes(p, r[0], d[0]);
+    *p++ = '\r';
+    *p++ = '\n';
+    *p = 0;
+    kdbg_file(s);
+}
+
+/* install the INT 2Fh hook (winboot.c, [w16] vxdlog=1) */
+void vx_hook(void)
+{
+    regs16 r;
+    r.ds = r.es = 0;
+    r.ax = 0x0204;
+    r.bx = 0x2F;
+    if (dpmi31(&r))
+        return;
+    vx_old2f = ((u32)r.cx << 16) | r.dx;
+    r.ax = 0x0205;
+    r.bx = 0x2F;
+    r.cx = FP_SEG((void __far *)vx_i2f);
+    r.dx = FP_OFF((void __far *)vx_i2f);
+    dpmi31(&r);
+}

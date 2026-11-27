@@ -34,7 +34,8 @@ KOBJS   := $(B)/kernel/kentry.o $(B)/kernel/kmain.o $(B)/kernel/util.o \
            $(B)/kernel/string.o $(B)/kernel/loader.o $(B)/kernel/procinst.o \
            $(B)/kernel/mdb.o $(B)/kernel/resource.o $(B)/kernel/atom.o $(B)/kernel/file.o \
            $(B)/kernel/profile.o $(B)/kernel/dosx.o $(B)/kernel/winboot.o $(B)/kernel/selector.o $(B)/kernel/kmisc.o $(B)/kernel/fault.o \
-           $(B)/kernel/toolhelp.o $(B)/kernel/khook.o $(B)/kernel/kmisc2.o
+           $(B)/kernel/toolhelp.o $(B)/kernel/khook.o $(B)/kernel/kmisc2.o \
+           $(B)/kernel/vxlog.o
 BOBJS   := $(B)/boot/boot0.o $(B)/boot/boot.o
 W87OBJS := $(B)/win87em/win87em.o $(B)/win87em/emu.o
 TESTS   := TK1 TK2 TK3 TK4 TK5 TK6 TK6N TK7 TK8 TK8T1 TK8T2 TK8T3 TK8T4 TK8T5 TK9 TK10 \
