@@ -150,6 +150,12 @@
 #              MS-DOS Prompt full screen, Alt+Enter to a window and back,
 #              EXIT (tests/scripts/input/dosbox386tree.txt), against the
 #              same tree under Microsoft's WIN386.EXE (DOSBox-X)
+#   win386pad  win386tree's run under Microsoft's WIN386 with w16's KRNL386
+#              built with its code shifted (build/kpad/8 and 96: padding
+#              after thunk.o, Makefile KPADS): the box must still come back
+#              to Windows after EXIT. A layout-dependent failure here
+#              (2026-11-26: the typed EXIT lost with some KERNELs and not
+#              others) is a real bug, never a flake
 #   win386plain  the user's way: the install tree alone in plain DOSBox
 #              (DOSBox's own DOS), `WIN /3` (WIN.COM's logo, no /B), the DOS
 #              Prompt full screen must be a text screen, EXIT, then Exit
@@ -1081,7 +1087,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad win386vxc msvc bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle staroff win32s exitexec kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control taskman cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle win386xms win386memload win386mcb vsd vdmad win386vxc msvc bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -2451,6 +2457,41 @@ serial1=file file:$out/win386audit-vxp.com1" timeout 400 "$root/tests/inputrun.s
         done
         if [ "$r" = ok ]; then echo "ok   win386tree: the tree's DOS box full screen, windowed, full screen, EXIT: as under Microsoft's WIN386"
         else echo "FAIL win386tree: $r ($out/win386tree-w16)"; fails=$((fails + 1)); fi ;;
+    win386pad)
+        # win386tree's reference side (the tree under Microsoft's WIN386)
+        # on KRNL386s with their code shifted (Makefile, KPADS): the case
+        # passed or failed with the size of an unused function added to
+        # KERNEL (w16's USER sent no WM_SETFOCUS when the active icon of
+        # the full-screen box was opened, so Microsoft's WINOA386 never
+        # gave the windowed box the keyboard, and whether the Alt of
+        # Alt+Enter was ever released in the VM depended on timing).
+        # Full screen, window, full screen and back to Windows after EXIT,
+        # by the screens' sizes (text 720x400, Windows 640x480; the
+        # screens themselves are win386tree's)
+        scr=$root/tests/scripts/input/dosbox386tree.txt
+        r=ok
+        for p in 8 96; do
+            t=$out/win386pad-tree$p
+            rm -rf "$t"; cp -a "$root/build/w16" "$t"
+            cp "$root/build/kpad/$p/KRNL386.EXE" "$t/SYSTEM/KRNL386.EXE"
+            set -- -p 386 -T "$t" -3 -c "WIN /3 /B" \
+                -f "$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/WIN386.EXE=W16/SYSTEM/WIN386.EXE"
+            for f in WINOA386.MOD EGA80WOA.FON EGA40WOA.FON CGA80WOA.FON CGA40WOA.FON; do
+                set -- "$@" -f "$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/$f=W16/SYSTEM/$f"
+            done
+            DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 300 "$scr" \
+                "$out/win386pad-$p" "$@" > "$out/win386pad-$p.txt" 2>&1 || true
+            rm -rf "$t"
+            for s in 01-full:720x400 02-window:640x480 03-full:720x400 04-back:640x480; do
+                a=$out/win386pad-$p/${s%%:*}.png
+                [ -f "$a" ] || { r="KRNL386 shifted by $p: no ${s%%:*} screen"; break; }
+                g=$(magick identify -format '%wx%h' "$a")
+                [ "$g" = "${s#*:}" ] || { r="KRNL386 shifted by $p: ${s%%:*} is $g, not ${s#*:} ($out/win386pad-$p)"; break; }
+            done
+            [ "$r" = ok ] || break
+        done
+        if [ "$r" = ok ]; then echo "ok   win386pad: win386tree under Microsoft's WIN386 with KRNL386's code shifted by 8 and 96 bytes"
+        else echo "FAIL win386pad: $r"; fails=$((fails + 1)); fi ;;
     win386w16dos)
         # the MS-DOS Prompt with w16's install tree (build/w16, every
         # program, driver and library but the INI files and groups) over
@@ -4527,7 +4568,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
         rsys=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM
         scr=$root/tests/scripts/input/swapesc.txt
         refrun swapesc-ref swapesc env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 300 "$scr" "$out/swapesc-ref" \
-            -3 -r -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+            -3 -r -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP' -i 'WIN.INI:windows:MouseSpeed=0'
         r=ok
         for k in ${part:-k386 k286 mswoa}; do
             case $k in
@@ -4536,7 +4577,7 @@ print(max(sum(1 for x in range(160, 480) if im.getpixel((x, y)) == (0, 0, 170)) 
             *)     set -- ;;
             esac
             INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 300 "$scr" "$out/swapesc-$k" \
-                -T "$root/build/w16" -i 'NonWindowsApp:SwapDisk=C:\W16' "$@" \
+                -T "$root/build/w16" -i 'NonWindowsApp:SwapDisk=C:\W16' -i 'WIN.INI:windows:MouseSpeed=0' "$@" \
                 > "$out/swapesc-$k.txt" 2>&1 || true
             a=$out/swapesc-$k b=$out/swapesc-ref
             for s in 01-dos:640x400:- 02-ver:640x400:- 03-win:640x480:w 04-dos:640x400:02-ver \

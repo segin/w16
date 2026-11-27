@@ -120,7 +120,9 @@ master's. It is not the trace code: master's KERNEL with only an unused
 function of about 100 bytes added to thunk.c (_TEXT) fails the same
 way, so some KERNEL/WIN386 path depends on where code lands in KERNEL's
 _TEXT (Microsoft's WIN386 run, "ref" in the case: after EXIT from the
-full-screen box the DOS screen stays). Not looked into further.
+full-screen box the DOS screen stays). Found later: timing, not layout,
+and w16's USER (no WM_SETFOCUS when an active icon is opened); see
+win386-handover.md, "The typed EXIT lost".
 
 Hand runs (installation-05): /mnt/build/w16-staroff/so3/run.sh tree|ref
 NAME PROG [dropin opts] (run dir /mnt/build/w16-runs/w16-staroff3b; MS=GDI.EXE,USER.EXE
