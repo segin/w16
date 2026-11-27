@@ -227,9 +227,6 @@ void vxd_send_rev(u32 msg, struct vm *v, u32 edx, u32 esi, u32 edi)
  * that fails an init message (carry) is dropped */
 #define NBUILTIN 5
 static u32 step_init;                   /* [w16] vmmtrace=4: step outside devices' Device_Init */
-static u32 orc_want;                    /* [w16] vmmtrace=5: and the oracle (vxd_oracle) */
-static void orc_start(void);
-static void orc_end(void);
 u32 vxd_step_on;                        /* (vmmasm.asm: TF set for the control call) */
 static u32 step_lo, step_hi, step_n;
 
@@ -247,10 +244,8 @@ static void broadcast(u32 msg, u32 esi, u32 edx, u32 edi, int rev)
             trace("VMM: stepping %c%c%c%c's Device_Init at %x\n", devs[i]->name[0], devs[i]->name[1],
                   devs[i]->name[2], devs[i]->name[3], devs[i]->control);
             vxd_step_on = 1;
-            if (orc_want) orc_start();
         }
         fail = vxd_control(devs[i]->control, msg, (u32)sys_cb, esi, edx, edi, (u32)sys_client);
-        if (vxd_step_on && orc_want) orc_end();
         vxd_step_on = 0;
         if (fail && msg <= INIT_COMPLETE) {
             trace("VMM: device %c%c%c%c%c%c%c%c failed message %x: not loaded\n",
@@ -809,7 +804,6 @@ void vxd_init(void)
 
     if (info->trace == 3) { watch_on = 1; info->trace = 1; }
     if (info->trace == 4) { step_init = 1; info->trace = 1; }
-    if (info->trace == 5) { step_init = orc_want = 1; info->trace = 1; }
 
     devs = kmalloc(n * sizeof(*devs));
     sys_acb = kmalloc(256);
@@ -1469,203 +1463,6 @@ static struct pgh *pgh_of(u32 h)
 static u32 physmap_next;
 static struct { u32 phys, n, lin; } physmaps[16];
 static u32 nphysmaps;
-
-/* [w16] vmmtrace=5 with [w16] w32soracle=XX [OFF:SIZE:VALUE ...] (hex; a
- * debugging aid, 12.18): learns what a device that searches the VMM's
- * first pages for the byte XX compares after each hit. The interop page
- * (W386_MARK_OFF) is filled with slots of ORC_SLOT bytes, each with XX at
- * ORC_HIT and the values known so far at their offsets from it, and made
- * not present: each read of it by the device faults and is traced (EIP,
- * the offset from the slot's hit, EDI) and let through for one
- * instruction; the flags after a read at a new offset (with EDI the hit +
- * 1: the hit the scan stopped at) say how the device's comparison came
- * out, ZF equal, CF below, and the slots not yet searched get the next
- * value of a binary search, a dword first, then a word, then a byte.
- * What a passing comparison compared is then known from the device's own
- * flags; nothing of its code is read. ORC_SLOT/ORC_HIT and the device
- * stepping (vmmtrace=4's) come with it */
-#define ORC_SLOT 64
-#define ORC_HIT 32
-static char *prof_find(const char *sec, const char *key, char *from);
-static struct orc_site { int off; u32 size, val, lo, hi, state; } orc_sites[24];   /* state 0 searching, 1 known, 2 failed */
-static u32 orc_first;                   /* slots before it: [w16] w32sprefix's bytes */
-static u32 orc_scan[4], orc_nscan;
-static u32 orc_on, orc_byte, orc_nsites, orc_armed, orc_pend, orc_pslot, orc_reads;
-static int orc_poff;
-static u32 *orc_pte;
-
-static u32 orc_hex(char **pp, int *neg)
-{
-    char *p = *pp;
-    u32 v = 0;
-    while (*p == ' ' || *p == '\t') p++;
-    if (neg) { *neg = *p == '-'; if (*neg) p++; }
-    for (;; p++) {
-        int c = *p >= 'a' ? *p - 32 : *p;
-        if (c >= '0' && c <= '9') v = v * 16 + c - '0';
-        else if (c >= 'A' && c <= 'F') v = v * 16 + c - 'A' + 10;
-        else break;
-    }
-    *pp = p;
-    return v;
-}
-
-static u32 orc_max(u32 size) { return size == 4 ? 0xFFFFFFFFu : (1u << (size * 8)) - 1; }
-
-static void orc_put(u8 *slot, int off, u32 size, u32 v)
-{
-    u32 i;
-    for (i = 0; i < size; i++)
-        if (ORC_HIT + off + (int)i >= 0 && ORC_HIT + off + (int)i < ORC_SLOT) slot[ORC_HIT + off + i] = (u8)(v >> (8 * i));
-}
-
-/* the slots from first on: the hit byte, the known values, the next guess */
-static void orc_plant(u32 first)
-{
-    u8 *pg = (u8 *)(W386_VMM_LIN + W386_MARK_OFF);
-    u32 k, i;
-    *orc_pte |= 1;
-    vmm_flush_tlb();
-    for (k = first < orc_first ? orc_first : first; k < 4096 / ORC_SLOT; k++) {
-        u8 *s = pg + k * ORC_SLOT;
-        memset(s, 0, ORC_SLOT);
-        s[ORC_HIT] = (u8)orc_byte;
-        for (i = 0; i < orc_nsites; i++)
-            orc_put(s, orc_sites[i].off, orc_sites[i].size, orc_sites[i].state == 1 ? orc_sites[i].val
-                    : orc_sites[i].state == 0 ? orc_sites[i].lo + (orc_sites[i].hi - orc_sites[i].lo) / 2 : 0);
-    }
-    *orc_pte &= ~1u;
-    vmm_flush_tlb();
-}
-
-static void orc_start(void)
-{
-    char *p = prof_find("w16", "w32soracle", NULL);
-    u32 lin = W386_VMM_LIN + W386_MARK_OFF;
-    int neg;
-    if (!p) return;
-    orc_byte = orc_hex(&p, NULL);
-    while (orc_nsites < 24) {
-        struct orc_site *s = &orc_sites[orc_nsites];
-        while (*p == ' ') p++;
-        if (!*p) break;
-        s->off = (int)orc_hex(&p, &neg);
-        if (neg) s->off = -s->off;
-        if (*p++ != ':') break;
-        s->size = orc_hex(&p, NULL);
-        if (*p++ != ':') break;
-        s->val = orc_hex(&p, NULL);
-        s->state = 1;
-        orc_nsites++;
-    }
-    orc_pte = (u32 *)phys_to_lin(vmm_pdir_entry_get(lin >> 22) & ~0xFFFu) + ((lin >> 12) & 0x3FF);
-    orc_on = 1;
-    p = prof_find("w16", "w32sprefix", NULL);
-    if (p) {                            /* bytes (hex) at the page's start: a pattern already known */
-        u8 *pg = (u8 *)lin;
-        u32 n = 0;
-        while (p[0] && p[1] && n < 4096) {
-            char b[3], *q = b;
-            b[0] = p[0]; b[1] = p[1]; b[2] = 0;
-            pg[n++] = (u8)orc_hex(&q, NULL);
-            p += 2;
-        }
-        orc_first = (n + ORC_SLOT - 1) / ORC_SLOT;
-    }
-    orc_plant(0);
-    trace("ORC: byte %x, %d known, slots of %d at %x\n", orc_byte, orc_nsites, ORC_SLOT, lin);
-}
-
-static void orc_end(void)
-{
-    u32 i;
-    if (!orc_on) return;
-    for (i = 0; i < orc_nsites; i++)
-        trace("ORC site off %d size %d %s %x\n", orc_sites[i].off, orc_sites[i].size,
-              orc_sites[i].state == 1 ? "value" : orc_sites[i].state ? "failed" : "searching, next",
-              orc_sites[i].state == 1 ? orc_sites[i].val : orc_sites[i].lo + (orc_sites[i].hi - orc_sites[i].lo) / 2);
-    *orc_pte |= 1;
-    vmm_flush_tlb();
-    orc_on = 0;
-}
-
-int vxd_oracle(u32 vec, struct tframe *f)
-{
-    u32 lin = W386_VMM_LIN + W386_MARK_OFF, a = get_cr2(), i;
-    if (!orc_on) return 0;
-    if (vec == 14 && !orc_armed && a >= lin && a < lin + 4096) {
-        u32 slot = (a - lin) / ORC_SLOT;
-        int off = (int)(a - lin - slot * ORC_SLOT) - ORC_HIT;
-        /* a scan reads every byte, a slot's first one too: such EIPs are
-         * the device's searches, not its comparisons */
-        if (off == -ORC_HIT) {
-            for (i = 0; i < orc_nscan && orc_scan[i] != f->eip; i++) ;
-            if (i == orc_nscan && orc_nscan < 4) orc_scan[orc_nscan++] = f->eip;
-        }
-        for (i = 0; i < orc_nscan && orc_scan[i] != f->eip; i++) ;
-        orc_pend = 0;
-        if (i == orc_nscan) {
-            if (orc_reads++ < 4000)
-                trace("ORC read %x slot %d off %d edi %x\n", f->eip, slot, off, f->edi);
-            if (f->edi == lin + slot * ORC_SLOT + ORC_HIT + 1) {
-                orc_pend = 1;
-                orc_pslot = slot;
-                orc_poff = off;
-            }
-        }
-        *orc_pte |= 1;
-        vmm_flush_tlb();
-        f->eflags |= EFL_TF;
-        orc_armed = 1;
-        return 1;
-    }
-    if (vec == 1 && orc_armed) {
-        orc_armed = 0;
-        if (orc_pend) {
-            u8 *s = (u8 *)(lin + orc_pslot * ORC_SLOT);
-            struct orc_site *t = 0;
-            u32 v = 0;
-            orc_pend = 0;
-            for (i = 0; i < orc_nsites; i++)
-                if (orc_sites[i].off == orc_poff) t = &orc_sites[i];
-            if (!t && orc_nsites < 24) {
-                t = &orc_sites[orc_nsites++];
-                t->off = orc_poff;
-                t->size = 4;
-                t->lo = 0;
-                t->hi = 0xFFFFFFFFu;
-                t->state = 0;
-            }
-            if (t && t->state == 0) {
-                for (i = 0; i < t->size; i++)
-                    if (ORC_HIT + t->off + (int)i >= 0 && ORC_HIT + t->off + (int)i < ORC_SLOT)
-                        v |= (u32)s[ORC_HIT + t->off + i] << (8 * i);
-                if (f->eflags & EFL_ZF) {
-                    t->state = 1;
-                    t->val = v;
-                    trace("ORC equal: off %d size %d value %x (flags %x)\n", t->off, t->size, v, f->eflags & 0xFFF);
-                } else {
-                    if (f->eflags & EFL_CF) {
-                        if (v == orc_max(t->size)) t->lo = 1, t->hi = 0; else t->lo = v + 1;
-                    } else {
-                        if (v == 0) t->lo = 1, t->hi = 0; else t->hi = v - 1;
-                    }
-                    if (t->lo > t->hi) {
-                        trace("ORC off %d: no %d-byte value\n", t->off, t->size);
-                        if (t->size == 1) t->state = 2;
-                        else { t->size /= 2; t->lo = 0; t->hi = orc_max(t->size); }
-                    }
-                }
-                orc_plant(orc_pslot + 1);
-            }
-        }
-        *orc_pte &= ~1u;
-        vmm_flush_tlb();
-        if (!vxd_step_on) f->eflags &= ~EFL_TF;
-        return !vxd_step_on;
-    }
-    return 0;
-}
 
 /* [w16] vmmtrace=3: a device's first _MapPhysToLinear of the VMM's own
  * memory gets an alias of the whole window (every page of it, not

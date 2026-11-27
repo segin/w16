@@ -22,13 +22,6 @@ typedef unsigned long  w_u32;
 #define W386_VMM_LIN    0x80000000UL    /* linear base of the VMM window */
 #define W386_WINDOW_MAX 0x40000000UL    /* its largest size: the VMs' high
                                            linear windows start at C0000000h */
-/* the window's first pages: the page directory, the VMM's
-   interoperability page (the marker and data Win32s's W32S.386 finds by
-   searching the VMM's first pages: ARCHITECTURE.md 12.18), the identity
-   table of the first 4 MB, then the tables that map the window */
-#define W386_MARK_OFF   0x1000UL
-#define W386_IDENT_OFF  0x2000UL
-#define W386_TABLES_OFF 0x3000UL
 
 /* Breakpoints: ARPL (63h) bytes in the loader's code segment. In V86 mode
  * ARPL is an invalid opcode, so executing one traps to the VMM, which tells
