@@ -557,9 +557,11 @@ static void bc_delta(ttfx__bc *bc, int which, ttfx_u8 op)
 
 /* ---- the interpreter ---- */
 
-/* (in line: most instructions pop and push) */
-#define POP() (bc->sp ? bc->stack[--bc->sp] : bc_pop(bc))
-#define PUSH(v) do { ttfx_i32 v_ = (v); if (bc->sp < bc->maxsp) bc->stack[bc->sp++] = v_; else bc_push(bc, v_); } while (0)
+/* (in line: most instructions pop and push; stk and maxsp are
+   ttfx__bcRun's copies, fixed while it runs: sp stays in bc, which the
+   helpers pop and push) */
+#define POP() (bc->sp ? stk[--bc->sp] : bc_pop(bc))
+#define PUSH(v) do { ttfx_i32 v_ = (v); if (bc->sp < maxsp) stk[bc->sp++] = v_; else bc_push(bc, v_); } while (0)
 #define GS bc->gs
 
 int ttfx__bcLastError, ttfx__bcLastProg, ttfx__bcTrace;
@@ -572,6 +574,9 @@ int ttfx__bcRun(ttfx__bc *bc, int prog)
     int ncall = 0;
     ttfx__frame calls[BC_MAXCALL];
     ttfx_u8 cprog = (ttfx_u8)prog;
+    ttfx_i32 TTFX_FAR *stk = bc->stack;
+    ttfx_u16 maxsp = bc->maxsp;
+    ttfx_u32 budget = bc->budget;       /* (on the stack: tested each instruction) */
     bc->prog = (ttfx_u8)prog;
     bc_vectors(bc);
     while (!bc->error) {
@@ -583,7 +588,7 @@ int ttfx__bcRun(ttfx__bc *bc, int prog)
                 bc->error = BC_ECODE;   /* a function without ENDF */
             break;
         }
-        if (!bc->budget--) {
+        if (!budget--) {
             bc->error = BC_ELOOP;
             break;
         }
@@ -1375,6 +1380,7 @@ int ttfx__bcRun(ttfx__bc *bc, int prog)
         }
         ip = next;
     }
+    bc->budget = budget;
     return !bc->error;
 }
 

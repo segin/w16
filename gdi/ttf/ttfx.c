@@ -1752,26 +1752,33 @@ static int ttfx__render_tt(const ttfx_font *f, ttfx_bitmap *bm, const ttfx_outli
         return 0;
     }
     t.d = t.r + (unsigned)bytes;
-    for (i = 0; i < (unsigned)bytes * 2; i++)
-        t.r[i] = 0;
+    for (i = 0; i < (unsigned)bytes; i++)       /* r and d: bytes words */
+        ((ttfx_u16 TTFX_FAR *)t.r)[i] = 0;
     ok = ttfx__tt_sweep(f, &t, t.h, 0);
     if (ok && t.mode != TTFX_DROP_NONE)
         ok = ttfx__tt_sweep(f, &t, t.w, 1);
     /* into bm: r's (x, y) is the outline's (x0 + x, y0 + y), bm's that
        less (off_x, off_y) */
-    if (ok)
+    if (ok) {
+        /* each row's pointers and x range once (r, d and bm each in
+           one block under 64K: the products fit an unsigned) */
+        int dx = x0 - off_x, xs = dx < 0 ? -dx : 0, xe = bm->w - dx < t.w ? bm->w - dx : t.w;
         for (y = 0; y < t.h; y++) {
             int by = y + y0 - off_y;
+            const ttfx_u8 TTFX_FAR *rr, TTFX_FAR *dd;
+            ttfx_u8 TTFX_FAR *bp;
             if (by < 0 || by >= bm->h)
                 continue;
-            for (x = 0; x < t.w; x++) {
-                int bx = x + x0 - off_x;
-                if (bx < 0 || bx >= bm->w)
-                    continue;
-                if (TT_BIT(t.r, x, y) || TT_BIT(t.d, x, y))
-                    bm->pixels[(ttfx_u32)by * bm->stride + (bx >> 3)] |= (ttfx_u8)(0x80 >> (bx & 7));
-            }
+            rr = t.r + (unsigned)y * rs_;
+            dd = t.d + (unsigned)y * rs_;
+            bp = bm->pixels + (unsigned)by * bm->stride;
+            for (x = xs; x < xe; x++)
+                if ((rr[x >> 3] | dd[x >> 3]) & (0x80 >> (x & 7))) {
+                    int bx = x + dx;
+                    bp[bx >> 3] |= (ttfx_u8)(0x80 >> (bx & 7));
+                }
         }
+    }
     ttfx_free(f->alloc, t.r);
     ttfx_free(f->alloc, pts);
     ttfx_free(f->alloc, counts);
