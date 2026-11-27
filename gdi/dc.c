@@ -21,10 +21,15 @@
 #define DCHF_VALIDATEVISRGN 2
 
 
+/* one validation (obj_get's): the DC begins with its OBJHDR */
 LPDC dc_get(HDC h)
 {
-    WORD m = obj_magic(h) & MAGIC_MASK;
-    return m == DC_MAGIC || m == DISDC_MAGIC ? (LPDC)obj_get(h, 0) : (LPDC)0;
+    LPOBJHDR o = obj_get(h, 0);
+    WORD m;
+    if (!o)
+        return 0;
+    m = o->wMagic & MAGIC_MASK;
+    return m == DC_MAGIC || m == DISDC_MAGIC ? (LPDC)o : (LPDC)0;
 }
 
 /* ---- the DC list (DeleteObject's "still selected" check,
