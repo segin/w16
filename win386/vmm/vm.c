@@ -991,6 +991,12 @@ void vm_dos_cwd(void)
     /* (another VM waiting inside DOS, a box's prompt reading the keyboard,
      * is no reason to wait: DOSBox's DOS does these four at once) */
     if (v->indos || v->crit) return;
+    /* not before a DOS VM's stub has a PSP of its own: until then the
+     * current one is the loader's, which the System VM shares, and DOS
+     * saves the caller's stack there at each call (the stub keeps that
+     * once, after its first call: with these calls before it, Exit
+     * Windows after a box hung, boot-test win386plain) */
+    if (v != &sysvm && info->sda_lin && *(u16 *)(info->sda_lin + 0x10) < v->refstk_seg) return;
     if (cwd_owner) {
         memset(&t, 0, sizeof(t));
         t.eax = 0x1900;
