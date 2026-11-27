@@ -149,7 +149,7 @@ static u32 block_page(struct pgh *h, u32 i)
     e = pte_at(h->lin + i * 4096);
     if (e && (*e & 1)) return *e & ~0xFFFu;
     if (h->flags & H_FREEPHYS) return 0;
-    p = page_alloc();
+    p = pager_page();                   /* (a client's page goes to the file if none is free) */
     if (!p || !map_page(h->lin + i * 4096, p, P_PRES | P_WRITE | P_USER | P_TYPE(h->type))) {
         if (p) page_free(p);
         return 0;
@@ -237,10 +237,10 @@ static struct pgh *block_new(u32 n, u32 type, u32 vm, u32 flags, u32 align, u32 
     h->next = blocks;
     blocks = h;
     for (i = 0; i < n; i++) h->lk[i] = (u8)lock;
+    if (type == PG_SYS && !(h->flags & H_FREEPHYS)) sys_pages += n;
     if (lock && !(h->flags & (H_WINDOW | H_FREEPHYS)))
         for (i = 0; i < n; i++)
             if (!block_page(h, i)) { block_free(h); return NULL; }
-    if (type == PG_SYS && !(h->flags & H_FREEPHYS)) sys_pages += n;
     return h;
 }
 
@@ -484,17 +484,19 @@ int memsvc_page_fault(u32 lin, u32 err, struct vm *in)
     e = pt[pg];
     if (lin != hook_last_lin) { hook_last_lin = lin; hook_last_count = 0; }
     if (!usable(e, err)) {
+        /* (the services that map flush the TLB where an entry was
+         * present; a not-present one needs none) */
         memset(&s, 0, sizeof(s));
         s.eax = pg;
         s.ebx = VMH(v);
         vmm_call_proc(hook_proc[pg], &s);
-        e = pt[pg];
-    }
-    vmm_flush_tlb();
-    /* a procedure that maps nothing: the fault again and again, and after
-     * a few the VM ends (the DDK: map the page or end the VM) */
-    if (usable(e, err)) hook_last_count = 0;
-    else if (++hook_last_count > 4) { hook_last_lin = 0; return 0; }
+        if (usable(pt[pg], err)) { hook_last_count = 0; return 1; }
+    } else
+        vmm_flush_tlb();                /* usable already: a stale TLB entry */
+    /* a procedure that maps nothing (or a fault the entry does not
+     * explain): the fault again and again, and after a few it is not
+     * taken here: the VM ends (the DDK: map the page or end the VM) */
+    if (++hook_last_count > 4) { hook_last_lin = 0; return 0; }
     return 1;
 }
 
@@ -703,19 +705,20 @@ int memsvc_service(u32 svc, struct svcregs *s)
         s->eax = (info->img_size >> 12) + sys_pages;
         break;
     case 0x5D: {                    /* _MapIntoV86(hMem, VM, VMLinPgNum, nPages, PageOff, flags) */
-        u32 i, *pt;
+        u32 i, *pt, fl;
         h = a[0] == (u32)nul_handle() ? nul_h : pgh_of(a[0]);
         v = vm_of(a[1]);
         s->eax = 0;
         if (!h || !v || !v86_range_ok(a[2], a[3])) break;
         if (h != nul_h && (a[4] + a[3] > h->n || a[4] + a[3] < a[4])) break;
         pt = vm_ptab(v);
-        for (i = 0; i < a[3]; i++) {
+        for (i = 0, fl = 0; i < a[3]; i++) {
             u32 p = h == nul_h ? nul_phys : block_page(h, a[4] + i);
             if (!p) break;
+            fl |= pt[a[2] + i] & P_PRES;
             pt[a[2] + i] = p | P_PRES | P_WRITE | P_USER | P_TYPE(h->type);
         }
-        vmm_flush_tlb();
+        if (fl) vmm_flush_tlb();        /* (a not-present entry needs none) */
         s->eax = i == a[3];
         if (info->trace == 1)
             trace("VMM: _MapIntoV86(%x, VM %d, %x, %x, %x) by %s\n", a[0], v->id, a[2], a[3], a[4],
