@@ -651,6 +651,31 @@ void v86_farcall(struct cregs *v, int iret)
     exec_v86(v);
 }
 
+/* DOS ended a program inside calls the VMM had made for it (a DPMI
+ * client's DOS call reflected from protected mode, ended by Ctrl+C):
+ * those calls never return; their contexts above mark are dropped and
+ * the VM's ring-0 stack, reflection stack and delivery state are what
+ * they were outside them (dpmi.c, a client's terminate address) */
+static struct cregs *hw_r_unwound;
+static int hw_r_unwind;
+void *exec_mark(void)
+{
+    return cur_exec;
+}
+
+void exec_unwind(void *mark)
+{
+    while (cur_exec && cur_exec != mark && cur_exec->vm == cur_vm) {
+        struct execctx *c = cur_exec;
+        cur_exec = c->prev;
+        hw_r_unwound = c->saved_hw_r;
+        hw_r_unwind = 1;
+        kesp0 = c->saved_esp0;
+        cur_vm->refsp = c->saved_refsp;
+    }
+    tss_set_esp0(kesp0);
+}
+
 int exec_depth(void)
 {
     int n = 0;
@@ -935,6 +960,7 @@ static void software_int(struct cregs *r, int vec)
         if (vec == 0x2F && v86mm_int2f(r)) return;     /* a DOS VM's XMS driver */
         if (vec == 0x67 && cur_vm != &sysvm && v86mm_ems(r)) return;   /* its EMS */
         if (vec == 0x2A) vm_int2a(r);   /* DOS's critical sections: noted, then on to DOS's handler */
+        if (vec == 0x16) vm_dos_cwd();  /* (DOSBox's shell reads keys so: vm.c) */
         if (vec == 0x21) { vm_int21(r); return; }
         /* INT 1Ch, 23h, 24h go to a protected-mode handler (DPMI 0.9) */
         if ((vec == 0x1C || vec == 0x23 || vec == 0x24) && dpmi_v86_hook(r, vec, 0)) return;
@@ -1275,7 +1301,8 @@ void __cdecl trap(struct tframe *f)
     }
     vmm_build_int_pending(r);
     if (vpicd) vpicd->resume();         /* virtual interrupts VPICD has pending */
-    hw_r = saved_hw_r;
+    hw_r = hw_r_unwind ? hw_r_unwound : saved_hw_r;    /* (exec_unwind) */
+    hw_r_unwind = 0;
     vm_end_trap(&local);
     cur_vm->r = local;
     resume(&cur_vm->r);

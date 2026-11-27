@@ -128,6 +128,8 @@ void dos_pm(struct cregs *r)
     u32 ah = (AX(r) >> 8) & 0xFF, al = AX(r) & 0xFF;
     struct cregs v;
 
+    vm_dos_cwd();                       /* the VM's own current directory (vm.c) */
+
     if (dpmi_verbose) trace("[D21:%x %x %x %x es %x at %x:%x]", AX(r), BX(r), CX(r), DX(r), r->es, r->cs, r->eip);
 
     switch (ah) {
