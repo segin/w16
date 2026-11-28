@@ -63,4 +63,8 @@ from the w16-atm run's build/atmtest.
 
 ## Test state
 
-See the commit adding this note.
+Branch atm2 at 32af8f3: make test passes; boot-test cases atm (install ok,
+acro ok: 3455 red pixels of link text, 3.1 3406), acroread, appexit,
+strstack, lbdir, gdi, gdik, gdifont, writefonts, kernel, k286, k386 ok.
+Full boot test: 203 ok, 1 failure, lzexpand (quirks: eof, zero, long
+matches), which fails the same way on a clean master build.
