@@ -18,10 +18,12 @@
  *   - the stack growing 192 KB deep
  *   - the process heap, HeapCreate's heaps, GlobalAlloc
  *   - a named file mapping of the paging file, mapped twice
- * then "W32M end". Addresses are written as they come: they are
- * Win32s's own choice and compared where they are deterministic.
+ * then "W32M end", and makes C:\W32M.END. Addresses are written as they
+ * come: they are Win32s's own choice (on 3.1 they differ from run to run)
+ * and tests/win32s/w32mcmp.py compares them relative to the first
+ * reservation's.
  *
- * Built like W32T.EXE (tests/win32ssetup.sh): wcc386 -bt=nt -zl, wlink
+ * Built by tests/win32s/w32mrun.sh: wcc386 -bt=nt -zl -ecc, nasm (w32mx.asm), wlink
  * system nt_win, start=_w32mmain, kernel32 and user32.
  */
 #include <windows.h>
@@ -313,5 +315,8 @@ void __cdecl w32mmain(void)
     map_section();
     put("W32M end\r\n");
     CloseHandle(logf);
+    /* C:\W32M.END: the log is complete (the test waits for it) */
+    CloseHandle(CreateFileA("C:\\W32M.END", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                            FILE_ATTRIBUTE_NORMAL, NULL));
     ExitProcess(0);
 }
