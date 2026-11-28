@@ -50,7 +50,7 @@ static int coolswitch = -1;     /* WIN.INI CoolSwitch, once read */
 static HWND shown;              /* what the switch window shows */
 static HWND drawn;              /* CoolSwitch=0: the window drawn active */
 static BOOL cool;               /* this loop's kind of display */
-extern BYTE switch_ended;       /* input.c: the Alt key's release after it */
+extern BYTE __far switch_ended;       /* input.c: the Alt key's release after it */
 extern HWND pos_companion, pos_companion_after;     /* pos.c: Alt+Esc's old window */
 
 #define BOX_CX 400

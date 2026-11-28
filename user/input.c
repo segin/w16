@@ -133,8 +133,8 @@ static void push_event(WORD msg, WORD wp, DWORD lp)
         set_wakebit(hqInput, (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) ? QS_MOUSE : QS_KEY);
 }
 
-static BYTE alt_switched;       /* Alt+Tab or Alt+Esc since Alt went down */
-BYTE switch_ended;              /* and its switching loop has ended (switch.c) */
+static BYTE __far alt_switched;       /* Alt+Tab or Alt+Esc since Alt went down */
+BYTE __far switch_ended;              /* and its switching loop has ended (switch.c) */
 
 /* KEYBOARD's event procedure: AL = virtual key, AH bit 7 = released,
    BL = scan code, BH bit 0 = extended key (DDK) */
