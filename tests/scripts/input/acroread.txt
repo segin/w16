@@ -1,0 +1,18 @@
+; Acrobat Reader 2.0 (WIN.INI run=) without Adobe Type Manager: its box
+; "Adobe Type Manager was not found."; Return dismisses it and Reader
+; ends itself (INT 21h 4C00h with its windows up); then Alt+F4 and
+; Return end Windows from Program Manager (tests/acroread.sh). On w16
+; Reader's own window procedure faulted during its exit
+sleep 5
+settle 60 4
+shot 01-atm
+key Return
+sleep 5
+settle 30 3
+shot 02-gone
+key alt+F4
+sleep 3
+settle 20 2
+shot 03-exitbox
+key Return
+waitexit 60

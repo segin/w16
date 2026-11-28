@@ -98,6 +98,8 @@ static LONG call_dlgproc(HWND h, UINT msg, WPARAM wp, LPARAM lp, BOOL *handled)
     *handled = FALSE;
     if (f) {
         PWND w = valid_wnd(h);
+        if (app_exit_skips(w, (FARPROC)f))      /* msg.c: its task ends */
+            return 0;
         r = call_wndproc((WNDPROC)f, w ? (WORD)w->hInstance : 0, h, msg, wp, lp);
         *handled = LOWORD(r) != 0;
     }

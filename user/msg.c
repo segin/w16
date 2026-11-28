@@ -207,9 +207,53 @@ BOOL WINAPI SetMessageQueue(int size)
 }
 
 /* ---- calling window procedures ---- */
+
+/* The queue of the task that is ending while USER cleans up after it
+   (misc.c app_exit; Pietrek ch. 3, AppExit's HQAppExit). Its windows are
+   destroyed without a call into the program: TK82 on 3.1, a program that
+   ends with INT 21h 4Ch with a window, a child, an owned popup or a
+   MessageBox still up, got not one message more after the exit call
+   (WM_DESTROY, WM_NCDESTROY, WM_ACTIVATE included), and its windows were
+   gone afterwards. Its C runtime has been shut down by then: w16 sent
+   them WM_DESTROY and the rest, and Acrobat Reader 2.0's window
+   procedure, ending this way after its "Adobe Type Manager was not
+   found" box, faulted on its runtime's cleared data and took Windows
+   down. USER's own window procedures (the controls, a MessageBox's
+   dialog) still run, so that what they hold in USER's heaps is freed: a
+   control the program subclassed gets its class's procedure. */
+HQUEUE hqAppExit;
+
+static BOOL user_proc(FARPROC f)
+{
+    static HMODULE um;
+    if (!um)
+        um = K_GETEXEPTR(hInstUser);
+    return f && K_GETEXEPTR((HANDLE)(WORD)((DWORD)f >> 16)) == um;
+}
+
+/* the procedure to call for window w: its own, or for an ending task's
+   window USER's procedure only (0: none) */
+static WNDPROC wnd_proc_of(PWND w)
+{
+    WNDPROC f = w->lpfnWndProc;
+    if (!hqAppExit || w->hq != hqAppExit || user_proc((FARPROC)f))
+        return f;
+    f = w->cls ? ((PCLS)w->cls)->lpfnWndProc : 0;
+    return user_proc((FARPROC)f) ? f : 0;
+}
+
+/* a dialog procedure of the ending task is not called either */
+BOOL app_exit_skips(PWND w, FARPROC f)
+{
+    return hqAppExit && w && w->hq == hqAppExit && !user_proc(f);
+}
+
 LONG call_wnd(PWND w, HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
-    return call_wndproc(w->lpfnWndProc, (WORD)w->hInstance, h, msg, wp, lp);
+    WNDPROC f = wnd_proc_of(w);
+    if (!f)
+        return 0;
+    return call_wndproc(f, (WORD)w->hInstance, h, msg, wp, lp);
 }
 
 extern BOOL hook_set(int type);

@@ -39,6 +39,8 @@ static void app_exit(HTASK task, BOOL fault)
     /* the module (InitApp's instance): it goes when this is its last
        instance */
     m = K_GETEXEPTR(q_of(hq)->hinst);
+    /* from here on its window procedures are not called (msg.c) */
+    hqAppExit = hq;
     /* nobody waits for its replies, and it waits for none (Pietrek ch. 3,
        AppExit: FlushSentMessages; again in destroy_queue for what comes
        while its windows are destroyed) */
@@ -77,6 +79,7 @@ static void app_exit(HTASK task, BOOL fault)
         hqInput = 0;
     K_SETTASKQUEUE(task, 0);
     destroy_queue(hq);
+    hqAppExit = 0;
     G_GDITASKTERMINATION(task);
 }
 
