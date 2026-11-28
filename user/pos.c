@@ -12,6 +12,7 @@
 #include "user.h"
 
 void refresh_dcs(void);
+HWND icon_title_of(HWND h);
 void byte_align(PWND w, BOOL made);
 void pointer_changed(const RECT *r);
 void follow_icon_title(HWND h);
@@ -112,6 +113,138 @@ static void move_children(PWND w, int dx, int dy)
     }
 }
 
+/* already where HWND_TOP puts it: first, or under topmost windows only */
+static BOOL at_top(PWND w)
+{
+    HWND s, h = HW(w);
+    for (s = PW(w->hwndParent)->hwndChild; s && s != h; s = PW(s)->hwndNext)
+        if (!(PW(s)->exstyle & WS_EX_TOPMOST) || (w->exstyle & WS_EX_TOPMOST) ||
+            w->hwndParent != hwndDesktop)
+            return FALSE;
+    return s == h;
+}
+
+/* A top-level window's group, the windows owner_order moves with it, in
+   the order they end up in (3.1, US42: Alt+Tab to C's owned popup Cp
+   sent Cp WM_WINDOWPOSCHANGING, then C with hwndInsertAfter Cp and
+   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE; their WM_WINDOWPOSCHANGED in
+   the same order after the activation; C brought up, Cp first). GRP
+   gets them, *K the window's own place; 0 when it moves alone */
+#define NGRP 8
+static int pos_group(PWND w, HWND after, HWND *grp, int *k)
+{
+    HWND me = HW(w), s, owner = 0;
+    int n = 0;
+    PWND d = PW(hwndDesktop);
+    *k = 0;
+    if (w->hwndOwner && valid_wnd(w->hwndOwner) && PW(w->hwndOwner)->hwndParent == hwndDesktop)
+        owner = w->hwndOwner;
+    if (owner) {
+        /* up: it, its owner's other windows, the owner; down: the
+           owner's other windows, it, the owner */
+        if (after == HWND_TOP)
+            grp[n++] = me;
+        for (s = d->hwndChild; s && n < NGRP - 2; s = PW(s)->hwndNext)
+            if (s != me && s != owner && PW(s)->hwndOwner == owner && ((PCLS)PW(s)->cls)->atom != 32772)
+                grp[n++] = s;
+        if (after == HWND_BOTTOM) {
+            *k = n;
+            grp[n++] = me;
+        }
+        grp[n++] = owner;
+    } else if (after == HWND_TOP) {
+        /* up: the windows it owns, then it */
+        for (s = d->hwndChild; s && n < NGRP - 1; s = PW(s)->hwndNext)
+            if (s != me && PW(s)->hwndOwner == me && ((PCLS)PW(s)->cls)->atom != 32772)
+                grp[n++] = s;
+        *k = n;
+        grp[n++] = me;
+    }
+    if (n < 2) {
+        *k = 0;
+        return 0;
+    }
+    return n;
+}
+
+/* a group window's WM_WINDOWPOSCHANGING; the first one's place is the
+   moved window's */
+static void group_changing(HWND *grp, int i, HWND first_after)
+{
+    WINDOWPOS g;
+    if (!valid_wnd(grp[i]))
+        return;
+    g.hwnd = grp[i];
+    g.hwndInsertAfter = i ? grp[i - 1] : first_after;
+    g.x = g.y = g.cx = g.cy = 0;
+    g.flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+    send_message(grp[i], WM_WINDOWPOSCHANGING, 0, (LPARAM)(WINDOWPOS __far *)&g);
+}
+
+/* S's place in Z order: how many windows are above it */
+static HWND above_of(HWND s)
+{
+    HWND t;
+    WORD n = 0;
+    for (t = PW(hwndDesktop)->hwndChild; t && t != s; t = PW(t)->hwndNext)
+        n++;
+    return (HWND)n;
+}
+
+static void send_changed_msg(HWND h, WINDOWPOS *p);
+
+/* a group window's WM_WINDOWPOSCHANGED, when its place changed */
+static void group_changed(HWND *grp, HWND *gprev, int i)
+{
+    WINDOWPOS g;
+    PWND gw = valid_wnd(grp[i]);
+    if (!gw || above_of(grp[i]) == gprev[i])
+        return;
+    /* where it went in the Z order, the screen there drawn again (what it
+       covers now, what it covered before) */
+    if (is_visible(gw))
+        invalidate_screen(&gw->rcWindow);
+    g.hwnd = grp[i];
+    g.hwndInsertAfter = i ? grp[i - 1] : 0;
+    if (!i) {
+        HWND t;
+        for (t = PW(hwndDesktop)->hwndChild; t && t != grp[0] && PW(t)->hwndNext != grp[0];
+             t = PW(t)->hwndNext)
+            ;
+        g.hwndInsertAfter = t == grp[0] ? 0 : t;
+    }
+    g.x = gw->rcWindow.left;
+    g.y = gw->rcWindow.top;
+    g.cx = gw->rcWindow.right - gw->rcWindow.left;
+    g.cy = gw->rcWindow.bottom - gw->rcWindow.top;
+    g.flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | 0x1800;
+    send_changed_msg(grp[i], &g);
+}
+
+/* Alt+Esc's window going down (switch.c), and the WM_WINDOWPOSCHANGED
+   messages held back meanwhile */
+HWND pos_companion, pos_companion_after;
+static int defer_changed, quiet_changed;
+static struct { HWND h; WINDOWPOS wp; } deferred[NGRP + 1];
+static int ndeferred;
+
+static void send_changed_msg(HWND h, WINDOWPOS *p)
+{
+    if (quiet_changed)
+        return;
+    if (defer_changed && ndeferred < NGRP + 1) {
+        deferred[ndeferred].h = h;
+        deferred[ndeferred].wp = *p;
+        ndeferred++;
+        return;
+    }
+    send_message(h, WM_WINDOWPOSCHANGED, 0, (LPARAM)(WINDOWPOS __far *)p);
+}
+
+/* SetWindowPos's activation, made before WM_WINDOWPOSCHANGED (input.c) */
+extern BOOL activate_in_pos;
+static HWND pos_activate;
+
 BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags)
 {
     PWND w = valid_wnd(h), parent;
@@ -119,6 +252,9 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     RECT oldwin, oldcli;
     BOOL wasvis, nowvis, changed, send_changed, restored = FALSE, zmoved = FALSE;
     HRGN above = 0;             /* what covered it before it came up */
+    HWND shown_after;
+    HWND grp[NGRP], gprev[NGRP];
+    int ng = 0, k = 0, i;
     int px = 0, py = 0;
     BOOL client_rule = max_client_rule;     /* (this call's only) */
     max_client_rule = FALSE;
@@ -133,6 +269,63 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         flags &= ~SWP_SHOWWINDOW;
     if ((flags & SWP_HIDEWINDOW) && !(w->style & WS_VISIBLE))
         flags &= ~SWP_HIDEWINDOW;
+    wp.hwnd = h;
+    /* hwndInsertAfter as the place it goes (3.1, US42): a top-level window
+       brought up goes under the switch window (#32771, always above the
+       others: switch.c), one sent down under the last window */
+    shown_after = after;
+    if (!(flags & SWP_NOZORDER) && w->hwndParent == hwndDesktop) {
+        if (after == HWND_TOP && !(w->exstyle & WS_EX_TOPMOST)) {
+            HWND s, last = 0;
+            HWND it = icon_title_of(h);
+            for (s = parent->hwndChild; s && s != h && (PW(s)->exstyle & WS_EX_TOPMOST); s = PW(s)->hwndNext)
+                last = s;
+            shown_after = last;
+            /* a window with an icon title (shown, or hidden since it was
+               restored): under it, as it goes up first (3.1, US42) */
+            if (it)
+                shown_after = it;
+        } else if (after == HWND_BOTTOM) {
+            HWND s, last = 0;
+            for (s = parent->hwndChild; s; s = PW(s)->hwndNext)
+                if (s != h)
+                    last = s;
+            if (last)
+                shown_after = last;
+        }
+    }
+    wp.hwndInsertAfter = shown_after;
+    /* the caller's values as given: 0,0 0x0 for SWP_NOMOVE | SWP_NOSIZE
+       (3.1, US42: SetWindowPos(HWND_TOP, 0, 0, 0, 0, ...)) */
+    wp.x = x;
+    wp.y = y;
+    wp.cx = cx;
+    wp.cy = cy;
+    wp.flags = flags;
+    /* the windows of its group that move with it (owner_order) */
+    ng = 0;
+    if (!(flags & SWP_NOZORDER) && w->hwndParent == hwndDesktop && (after == HWND_TOP || after == HWND_BOTTOM))
+        ng = pos_group(w, after, grp, &k);
+    for (i = 0; i < k; i++)
+        group_changing(grp, i, shown_after);
+    if (!(flags & SWP_NOSENDCHANGING) || 1) {
+        if (k > 0)
+            wp.hwndInsertAfter = grp[k - 1];
+        if ((flags & (SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW | SWP_HIDEWINDOW)) !=
+            (SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER) || !(flags & SWP_NOACTIVATE))
+            send_message(h, WM_WINDOWPOSCHANGING, 0, (LPARAM)(WINDOWPOS __far *)&wp);
+        if (!(w = valid_wnd(h)))
+            return FALSE;
+        if (k > 0 && wp.hwndInsertAfter == grp[k - 1])
+            wp.hwndInsertAfter = shown_after;
+    }
+    for (i = k + 1; i < ng; i++)
+        group_changing(grp, i, shown_after);
+    if (!(w = valid_wnd(h)))
+        return FALSE;
+    x = wp.x, y = wp.y, cx = wp.cx, cy = wp.cy, flags = wp.flags;
+    if (wp.hwndInsertAfter != shown_after)
+        after = wp.hwndInsertAfter;
     if (flags & SWP_NOMOVE) {
         x = w->rcWindow.left - px;
         y = w->rcWindow.top - py;
@@ -141,22 +334,6 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         cx = w->rcWindow.right - w->rcWindow.left;
         cy = w->rcWindow.bottom - w->rcWindow.top;
     }
-    wp.hwnd = h;
-    wp.hwndInsertAfter = after;
-    wp.x = x;
-    wp.y = y;
-    wp.cx = cx;
-    wp.cy = cy;
-    wp.flags = flags;
-    if (!(flags & SWP_NOSENDCHANGING) || 1) {
-        if ((flags & (SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW | SWP_HIDEWINDOW)) !=
-            (SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER) || !(flags & SWP_NOACTIVATE))
-            send_message(h, WM_WINDOWPOSCHANGING, 0, (LPARAM)(WINDOWPOS __far *)&wp);
-        if (!(w = valid_wnd(h)))
-            return FALSE;
-    }
-    x = wp.x, y = wp.y, cx = wp.cx, cy = wp.cy, flags = wp.flags;
-    after = wp.hwndInsertAfter;
     /* a new size for an overlapped or thick-framed window: WM_GETMINMAXINFO,
        and the size kept within its tracking sizes, an icon's and a
        maximised window's excepted
@@ -189,6 +366,8 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     oldcli = w->rcClient;
     wasvis = is_visible(w);
 
+    for (i = 0; i < ng; i++)
+        gprev[i] = valid_wnd(grp[i]) ? above_of(grp[i]) : 0;
     /* Z order */
     if (!(flags & SWP_NOZORDER) && w->hwndParent == hwndDesktop) {
         if (after == (HWND)-1)          /* HWND_TOPMOST */
@@ -197,8 +376,8 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
             w->exstyle &= ~WS_EX_TOPMOST;
     }
     if (!(flags & SWP_NOZORDER) && after != h && w->hwndParent) {
-        if (!(after == HWND_TOP && PW(w->hwndParent)->hwndChild == h)) {
-            HWND s;
+        if (!(after == HWND_TOP && at_top(w)) || ng) {
+            HWND s, was_above = w->hwndParent == hwndDesktop ? above_of(h) : 0;
             if (wasvis) {
                 above = CreateRectRgn(0, 0, 0, 0);
                 for (s = PW(w->hwndParent)->hwndChild; s && s != h; s = PW(s)->hwndNext)
@@ -213,8 +392,33 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
             if (w->hwndParent == hwndDesktop)
                 owner_order(w, after);
             changed = TRUE;
-            zmoved = TRUE;
+            /* (a top-level window put back where it was has not moved:
+               3.1, US42, SetWindowPos(HWND_TOP) of the window already on
+               top sent no WM_WINDOWPOSCHANGED) */
+            zmoved = w->hwndParent != hwndDesktop || above_of(h) != was_above;
         }
+    }
+    /* Alt+Esc: the window going down, its WM_WINDOWPOSCHANGING after this
+       one's and its group's, its WM_WINDOWPOSCHANGED after this one's;
+       Alt+Shift+Esc: the old one under this one's group, with none
+       (3.1, US42; switch.c) */
+    if (pos_companion && pos_companion != h) {
+        HWND c = pos_companion, ca = pos_companion_after;
+        BOOL quiet = ca != HWND_BOTTOM;
+        pos_companion = 0;
+        if (quiet && ng)
+            ca = grp[ng - 1];
+        else if (quiet)
+            ca = h;
+        defer_changed++;
+        if (quiet)
+            quiet_changed++;
+        set_window_pos(c, ca, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        if (quiet)
+            quiet_changed--;
+        defer_changed--;
+        if (!(w = valid_wnd(h)))
+            return FALSE;
     }
     /* place */
     if (!(flags & SWP_NOMOVE) || !(flags & SWP_NOSIZE)) {
@@ -284,7 +488,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
        sent WM_WINDOWPOSCHANGING and WM_CHILDACTIVATE alone) */
     send_changed = !EqualRect(&oldwin, &w->rcWindow) ||
                    (flags & (SWP_SHOWWINDOW | SWP_HIDEWINDOW | SWP_FRAMECHANGED)) ||
-                   (!(flags & SWP_NOZORDER) && (zmoved || !(w->style & WS_CHILD)));
+                   (!(flags & SWP_NOZORDER) && zmoved);
     if (send_changed) {
         /* moved or sized: the window or its client area (US18: on 3.1 a
            scroll bar a window's WM_SIZE takes away gives it a second
@@ -390,8 +594,42 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
         icon_title_above(h);
     if (!(w = valid_wnd(h)))
         return TRUE;
-    if (send_changed)
-        send_message(h, WM_WINDOWPOSCHANGED, 0, (LPARAM)(WINDOWPOS __far *)&wp);
+    /* SetWindowPos activating it: the activation between WM_WINDOWPOSCHANGING
+       and WM_WINDOWPOSCHANGED (3.1, US42: Alt+Tab's SetWindowPos, the
+       window's WM_WINDOWPOSCHANGING, WH_CBT's HCBT_ACTIVATE, the old
+       window's deactivation, the new one's activation, then its
+       WM_WINDOWPOSCHANGED) */
+    if (pos_activate == h) {
+        pos_activate = 0;
+        if (!(w->style & WS_CHILD) && is_visible(w) && h != hwndActive) {
+            activate_in_pos = !(flags & SWP_NOZORDER);
+            activate_window(h, FALSE);
+            activate_in_pos = FALSE;
+            if (!(w = valid_wnd(h)))
+                return TRUE;
+        }
+    }
+    /* the client area kept its place, its size: 0800h, 1000h (3.1, US42:
+       1803h for a window only brought up) */
+    if (oldcli.left == w->rcClient.left && oldcli.top == w->rcClient.top)
+        wp.flags |= 0x0800;
+    if (oldcli.right - oldcli.left == w->rcClient.right - w->rcClient.left &&
+        oldcli.bottom - oldcli.top == w->rcClient.bottom - w->rcClient.top)
+        wp.flags |= 0x1000;
+    for (i = 0; i < k; i++)
+        group_changed(grp, gprev, i);
+    if (send_changed && valid_wnd(h))
+        send_changed_msg(h, &wp);
+    for (i = k + 1; i < ng; i++)
+        group_changed(grp, gprev, i);
+    if (!defer_changed && ndeferred) {
+        int n = ndeferred;
+        ndeferred = 0;
+        for (i = 0; i < n; i++)
+            if (valid_wnd(deferred[i].h))
+                send_message(deferred[i].h, WM_WINDOWPOSCHANGED, 0,
+                             (LPARAM)(WINDOWPOS __far *)&deferred[i].wp);
+    }
     return TRUE;
 }
 
@@ -405,8 +643,13 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
    were (UNVERIFIED which of them 3.1 makes without SWP_NOACTIVATE) */
 BOOL WINAPI SetWindowPos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags)
 {
-    BOOL r = set_window_pos(h, after, x, y, cx, cy, flags);
+    BOOL r;
     PWND w = valid_wnd(h);
+    if (w && !(flags & (SWP_NOACTIVATE | SWP_HIDEWINDOW | SWP_SHOWWINDOW)) && !(w->style & WS_CHILD))
+        pos_activate = h;
+    r = set_window_pos(h, after, x, y, cx, cy, flags);
+    pos_activate = 0;
+    w = valid_wnd(h);
     if (r && w && !(flags & (SWP_NOACTIVATE | SWP_HIDEWINDOW)) && !(w->style & WS_CHILD) &&
         is_visible(w) && h != hwndActive)
         activate_window(h, FALSE);
@@ -455,6 +698,20 @@ static void icon_place(PWND w, POINT *pt)
        desktop (US4: 408 on a 480-line screen, its title at 444) and in a
        parent window alike (TK75 on 3.1: 128 in a 200-line MDI client,
        201 in a 273-line window; w16 put a child's icon 24 lines lower) */
+}
+
+/* another shown icon of the same parent at PT (the parent's coordinates) */
+static BOOL icon_taken(PWND w, POINT pt)
+{
+    HWND s;
+    PWND parent = PW(w->hwndParent);
+    int px = (w->style & WS_CHILD) ? parent->rcClient.left : 0;
+    int py = (w->style & WS_CHILD) ? parent->rcClient.top : 0;
+    for (s = parent->hwndChild; s; s = PW(s)->hwndNext)
+        if (s != HW(w) && (PW(s)->style & (WS_MINIMIZE | WS_VISIBLE)) == (WS_MINIMIZE | WS_VISIBLE) &&
+            PW(s)->rcWindow.left - px == pt.x && PW(s)->rcWindow.top - py == pt.y)
+            return TRUE;
+    return FALSE;
 }
 
 typedef struct PLACE { RECT normal; POINT icon; WORD hasicon; HWND title; } PLACE;
@@ -633,7 +890,10 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             }
             w->style &= ~WS_MAXIMIZE;
             w->style |= WS_MINIMIZE;
-            if (pl && pl->hasicon)
+            /* its place as an icon before, unless another icon is there
+               now (3.1, US42: D minimised again while B's icon had its
+               old place went to the next free one) */
+            if (pl && pl->hasicon && !icon_taken(w, pl->icon))
                 pt = pl->icon;
             else
                 icon_place(w, &pt);
@@ -695,7 +955,15 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 if (hwndFocus && (hwndFocus == h || IsChild(h, hwndFocus)))
                     set_focus(0);
                 set_window_pos(h, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                t = next_to_activate(h);
+                /* the window active before it, while it is there to take
+                   it, else the next one (3.1, US42: D, activated by Alt+Esc
+                   from C's popup Cp, minimised: Cp, at the bottom, was
+                   activated over E right under D; B, activated as a
+                   dialog closed, minimised: A, the next) */
+                t = hwndActivePrev;
+                if (!t || t == h || !valid_wnd(t) || !is_visible(PW(t)) ||
+                    (PW(t)->style & (WS_DISABLED | WS_MINIMIZE | WS_CHILD)))
+                    t = next_to_activate(h);
                 if (t)
                     activate_window(t, FALSE);
             }

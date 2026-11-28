@@ -248,6 +248,7 @@ int __far __cdecl user_init(HINSTANCE hinst)
                                 WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
                                 0, 0, sysmet[SM_CXSCREEN], sysmet[SM_CYSCREEN],
                                 0, 0, hInstUser, NULL);
+    switch_init();
     input_enable();
     redraw_screen();
     return 1;

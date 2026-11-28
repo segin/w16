@@ -113,8 +113,15 @@ static int box(HWND owner, LPCSTR text, LPCSTR caption, LPCSTR iconid, const cha
         HWND f = GetDlgItem(dlg, ids[def]);
         int r;
         extern int dialog_run(HWND dlg, HWND owner, HWND focus);
+        HWND oldsm = 0;
         mb_result = 0;
+        /* MB_SYSTEMMODAL: the system-modal window meanwhile (3.1, US42:
+           Alt+Tab and Alt+Esc did nothing while it was up) */
+        if (sysmodal)
+            oldsm = SetSysModalWindow(dlg);
         r = dialog_run(dlg, owner, f);
+        if (sysmodal)
+            SetSysModalWindow(oldsm);
         return r > 0 ? r : (mb_result ? mb_result : ids[0]);
     }
 }

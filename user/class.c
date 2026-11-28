@@ -340,6 +340,7 @@ extern LONG WINAPI DefWindowProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI __loadds DesktopWndProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI __loadds MenuWndProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI __loadds IconTitleWndProc(HWND, UINT, WPARAM, LPARAM);
+extern LONG WINAPI __loadds SwitchWndProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI __loadds MDIClientWndProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI __loadds ButtonWndProc(HWND, UINT, WPARAM, LPARAM);
 extern LONG WINAPI __loadds StaticWndProc(HWND, UINT, WPARAM, LPARAM);
@@ -372,6 +373,10 @@ void register_system_classes(void)
     sysclass(MAKEINTRESOURCE(32769), CS_DBLCLKS, (WNDPROC)DesktopWndProc, 0,
              (HBRUSH)(COLOR_BACKGROUND + 1), IDC_ARROW);
     sysclass(MAKEINTRESOURCE(32772), 0, (WNDPROC)IconTitleWndProc, 0, 0, IDC_ARROW);
+    /* the Alt+Tab switch window (switch.c): CS_SAVEBITS, the desktop's
+       brush (US2 on 3.1: style 0803h, hbrBackground 2) */
+    sysclass(MAKEINTRESOURCE(32771), CS_VREDRAW | CS_HREDRAW | CS_SAVEBITS, (WNDPROC)SwitchWndProc, 0,
+             (HBRUSH)(COLOR_BACKGROUND + 1), IDC_ARROW);
     sysclass(MAKEINTRESOURCE(32768), CS_SAVEBITS, (WNDPROC)MenuWndProc, 2, 0, NULL);
     sysclass("Button", 0x008B, (WNDPROC)ButtonWndProc, 3, 0, IDC_ARROW);
     sysclass("Edit", 0x0088, (WNDPROC)EditWndProc, 6, 0, IDC_IBEAM);

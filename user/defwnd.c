@@ -277,8 +277,10 @@ static void draw_caption(HDC hdc, PWND w, BOOL active)
         COLORREF c = SetTextColor(hdc, syscolor[active ? COLOR_CAPTIONTEXT : COLOR_INACTIVECAPTIONTEXT]);
         tw = LOWORD(GetTextExtent(hdc, title, n));
         x = t.left + (t.right - t.left - tw) / 2;
+        /* a title too long for the caption starts a pixel in (3.1, US42's
+           window B: its first letter one pixel right of w16's) */
         if (x < t.left)
-            x = t.left;
+            x = t.left + 1;
         y = t.top + (t.bottom - t.top - cySysChar) / 2;
         SaveDC(hdc);
         IntersectClipRect(hdc, t.left, t.top, t.right, t.bottom);
@@ -351,12 +353,22 @@ void nc_paint(HWND h, HRGN rgn, BOOL active)
 {
     PWND w = valid_wnd(h);
     HDC hdc;
-    RECT cr;
     if (!w || !is_visible(w))
         return;
     if (w->style & WS_MINIMIZE)
         return;
     hdc = get_dc(h, TRUE, 0, 0);
+    nc_draw(hdc, w, active);
+    release_dc(h, hdc);
+    (void)rgn;
+}
+
+/* the frame, caption, menu bar and scroll bars on HDC, whose origin is the
+   window's top left (also the Alt+Tab switch window's drawing of a
+   window that is not on top: switch.c) */
+void nc_draw(HDC hdc, PWND w, BOOL active)
+{
+    RECT cr;
     /* leave the client area alone */
     cr = w->rcClient;
     OffsetRect(&cr, -w->rcWindow.left, -w->rcWindow.top);
@@ -375,8 +387,6 @@ void nc_paint(HWND h, HRGN rgn, BOOL active)
     }
     if (w->style & (WS_VSCROLL | WS_HSCROLL))
         nc_draw_scrollbars(hdc, w);
-    release_dc(h, hdc);
-    (void)rgn;
 }
 
 /* WM_NCACTIVATE's painting. Observed on 3.1 (US41): the caption is
@@ -469,7 +479,6 @@ LONG nc_hittest(PWND w, POINT pt)
     return HTBORDER;
 }
 
-/* the next visible, enabled top-level window after cur, activated */
 /* The Task List: SYSTEM.INI [boot] taskman.exe= (default taskman.exe;
    Pietrek, Windows Internals ch. 2: USER reads it at start-up), run with
    WinExec, SW_SHOWNORMAL, and the command line "X Y": the point of a
@@ -490,29 +499,6 @@ void start_taskman(int x, int y)
         load_taskman_name();
     wsprintf(cmd, "%s %d %d", (LPSTR)taskman_name, x, y);
     WinExec(cmd, SW_SHOWNORMAL);
-}
-
-void switch_window(HWND cur, BOOL tobottom)
-{
-    HWND t, first = 0;
-    for (t = PW(hwndDesktop)->hwndChild; t; t = PW(t)->hwndNext) {
-        PWND tw = PW(t);
-        if (t == cur || tw->hwndOwner || !(tw->style & WS_VISIBLE) || (tw->style & WS_DISABLED))
-            continue;
-        if (!first)
-            first = t;
-    }
-    if (!first)
-        return;
-    if (tobottom && valid_wnd(cur))
-        set_window_pos(cur, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    /* Alt+Tab takes the window under the current one: the bottom of the
-       others goes on top when cur stays put (UNVERIFIED order) */
-    activate_window(first, FALSE);
-    /* Alt+Tab restores an icon; Alt+Esc only activates it (3.1: Alt+Esc
-       from Notepad's icon to Calculator's leaves both minimised) */
-    if (IsIconic(first) && !tobottom)
-        ShowWindow(first, SW_RESTORE);
 }
 
 /* USER.172 SwitchToThisWindow(hwnd, fRestore) (Schulman, Undocumented
@@ -751,6 +737,12 @@ static void sys_command(HWND h, PWND w, WPARAM cmd, LPARAM lp)
     case SC_TASKLIST:
         start_taskman(0, 0);
         break;
+    case SC_NEXTWINDOW:
+    case SC_PREVWINDOW:
+        /* (an MDI child's are DefMDIChildProc's) */
+        if (!(w->style & WS_CHILD))
+            switch_windows(h, cmd, lp);
+        break;
     case SC_SCREENSAVE:                 /* SYSTEM.INI's saver (3.1 SDK) */
         screensave_run();
         break;
@@ -973,11 +965,14 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SYSKEYDOWN:
         if (wp == VK_F4 && (HIWORD(lp) & KF_ALTDOWN))
             send_message(top_level(h), WM_SYSCOMMAND, SC_CLOSE, 0);
-        /* Alt+Tab, Alt+Esc: the next top-level window (Alt+Esc sends the
-           current one to the bottom). UNVERIFIED: Windows 3.1 shows the
-           window's title while Alt+Tab is held; here it switches at once */
-        else if ((wp == VK_TAB || wp == VK_ESCAPE) && (HIWORD(lp) & KF_ALTDOWN))
-            switch_window(top_level(h), wp == VK_ESCAPE);
+        /* Alt+Tab, Alt+Esc: the top-level window gets WM_SYSCOMMAND
+           SC_PREVWINDOW, SC_NEXTWINDOW with Shift, lParam the key (3.1,
+           US42: F050h 0009h; Alt+Shift+Esc F040h 001Bh), whose
+           DefWindowProc switches (switch.c) */
+        else if ((wp == VK_TAB || wp == VK_ESCAPE) && (HIWORD(lp) & KF_ALTDOWN) &&
+                 GetKeyState(VK_CONTROL) >= 0 && !GetSysModalWindow())
+            send_message(top_level(h), WM_SYSCOMMAND,
+                         GetKeyState(VK_SHIFT) < 0 ? SC_NEXTWINDOW : SC_PREVWINDOW, wp);
         return 0;
     case WM_SYSKEYUP:
         /* Alt or F10 pressed and released alone (Alt+F4 must not then

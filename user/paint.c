@@ -325,9 +325,10 @@ BOOL paint_message(HQUEUE hq, HWND hf, MSG __far *m)
     }
     m->hwnd = h;
     /* a minimised window of a class with an icon gets WM_PAINTICON, which
-       DefWindowProc answers by drawing the icon (3.1 SDK) */
+       DefWindowProc answers by drawing the icon (3.1 SDK), wParam 1 (3.1,
+       US42) */
     m->message = ((PW(h)->style & WS_MINIMIZE) && ((PCLS)PW(h)->cls)->hIcon) ? WM_PAINTICON : WM_PAINT;
-    m->wParam = 0;
+    m->wParam = m->message == WM_PAINTICON;
     m->lParam = 0;
     m->time = GetTickCount();
     m->pt = ptCursor;
@@ -402,8 +403,11 @@ void update_window(HWND h, BOOL children)
            WM_PAINT (StarChart's chart window does so; it draws the chart
            in that second WM_PAINT) */
         if (w->hq == cur_hq() || !booted) {
+            /* (an icon's: WM_PAINTICON, as GetMessage's below; 3.1,
+               US42: UpdateWindow of a window shown minimised) */
+            BOOL icon = (w->style & WS_MINIMIZE) && ((PCLS)w->cls)->hIcon;
             w->flags |= WF_PAINTPENDING;
-            send_message(h, WM_PAINT, 0, 0);
+            send_message(h, icon ? WM_PAINTICON : WM_PAINT, icon, 0);
         }
         if ((w = valid_wnd(h)) != 0 && (w->flags & WF_INPAINT) && (w->flags & WF_PAINTPENDING) &&
             (w->hq == cur_hq() || !booted)) {
