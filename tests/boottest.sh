@@ -40,8 +40,8 @@
 #              (tests/atm.sh; skipped without its disk images,
 #              $W16_ATM_DIR): the same fonts, ATM.INI and SYSTEM.INI, and
 #              Windows restarted with ATMSYS.DRV; then Acrobat Reader 2.0
-#              with ATM (xfail: on w16 Reader does not find ATM, whose
-#              ATMSYS.DRV leaves w16's LoadModule and GDI unpatched)
+#              shows its help document through ATM on both (ATM's
+#              interoperability interface, ARCHITECTURE.md 11.13)
 #   kexedir    TK69 (tests/apps/tk69.c) as the shell: where KERNEL finds
 #              the DLLs a program in a directory of its own imports, what
 #              LoadModule and WinExec make of OS/2 and other foreign NE,
@@ -1665,8 +1665,7 @@ runcase() {
             echo "FAIL atm: $(grep -m1 '^FAIL' "$out/atm.txt" | sed 's/^FAIL *atm *//') ($out/atm.txt)"; fails=$((fails + 1))
         elif grep -q '^skip atm:' "$out/atm.txt"; then echo "ok   atm: $(grep -m1 '^skip' "$out/atm.txt")"
         elif grep -q '^ok   atm install' "$out/atm.txt"; then
-            echo "ok   atm: $(grep -m1 '^ok   atm install' "$out/atm.txt" | sed 's/^ok *atm install: //')"
-            grep '^xfail' "$out/atm.txt" | sed 's/^xfail atm acro:/xfail atm (acro):/' || true
+            echo "ok   atm: $(grep -m1 '^ok   atm install' "$out/atm.txt" | sed 's/^ok *atm install: //'); $(grep -m1 '^ok   atm acro\|^skip atm acro' "$out/atm.txt" | sed 's/^[a-z]* *atm acro: //')"
         else echo "FAIL atm: no result ($out/atm.txt)"; fails=$((fails + 1)); fi ;;
     acroread)
         # Acrobat Reader 2.0 (tests/acroread.sh; skip without $W16_ACROREAD_DIR)

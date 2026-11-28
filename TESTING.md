@@ -247,7 +247,9 @@ fonts, ATM.INI and SYSTEM.INI compared and Windows restarted with
 ATMSYS.DRV; then Acrobat Reader 2.0 from `$W16_ACROREAD_DIR`, whose
 `FONTS/` must hold Reader's own ATM fonts (ZX______, ZY______, ZD______
 .PFB, their .PFM and .MMM in `FONTS/PFM`), with its help document on each
-side's installed drive: `xfail` while w16 does not run ATM; skipped
+side's installed drive: both must show the document, its red link text
+(a Type 1 face ATM draws) counted in the document pane, w16 within 10% of
+3.1, `OUTDIR/acro-cmp.png` the two screens side by side; skipped
 without the images; the boot-test case `atm`),
 `tests/dropin.sh`'s `DROPIN_FLOPPY="IMG ..."` mounts copies of disk
 images as floppy drive B: (`DROPIN_FLOPPYA` as A:), and

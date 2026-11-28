@@ -666,17 +666,6 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
         return 0;
     if (!m)
         return 0;
-    {
-        extern u16 orc_on;              /* selector.c: [w16] aliasoracle=3
-                                           logs every lookup by name */
-        if (orc_on == 3 && FP_SEG(name)) {
-            kdbg_file("w16: GetProcAddress ");
-            kdbg_file(m->name);
-            kdbg_file(" ");
-            kdbg_file(name);
-            kdbg_file("\r\n");
-        }
-    }
     if (!FP_SEG(name)) {
         ord = FP_OFF(name);     /* (NULL: ordinal 0) */
     } else {
@@ -701,13 +690,6 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
     else if (trace_wanted(m->name, ord))
         thunk_trace(m->name, ord, &sel, &off);  /* [w16] trace=: a procedure
                                                    found at run time too */
-    {
-        extern u32 orc_proc;            /* selector.c: [w16] aliasoracle */
-        extern u16 orc_lmsel;
-        if (orc_lmsel && m == module_first && ord == 45)
-            sel = orc_lmsel;
-        orc_proc = ((u32)sel << 16) | off;
-    }
     return ((u32)sel << 16) | off;
 }
 

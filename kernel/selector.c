@@ -265,8 +265,6 @@ u16 KAPI AllocSelector(u16 sel)                               /* KERNEL.175 */
    (GlobalSize gives 0 afterwards). Freeing a free selector also returns
    0, but corrupted Windows' free list (it handed the selector out twice);
    w16 leaves it to the DPMI host. */
-extern u16 __cdecl orc_n;       /* the alias oracle (below) */
-static void orc_end(u16 sel);
 static void es_zero(void);
 #pragma aux es_zero = "push 0" "pop es" modify exact [es];
 
@@ -280,8 +278,6 @@ u16 KAPI FreeSelector(u16 sel)                                /* KERNEL.176 */
        at most an LDT's worth: a 4 GB limit wrapped to 0. KERNEL audit,
        H18) */
     sel = (sel & ~3u) | cpl;
-    if (orc_n)
-        orc_end(sel);
     if ((u16)(GlobalHandle(sel) >> 16) == sel) {
         GlobalFree(sel);
     } else {
@@ -388,272 +384,6 @@ u16 KAPI SelectorAccessRights(u16 sel, u16 op, u16 rights)    /* KERNEL.196 */
     return 0;
 }
 
-/* ---- the alias read-extent oracle ([w16] aliasoracle=1) ----
-   An investigation aid for interoperability checks (ARCHITECTURE.md
-   11.13), learnt at run time only: a data alias made of the code
-   segment holding the procedure GetProcAddress last returned gets a limit
-   just below that procedure's entry; kentry.asm's GP fault path raises the
-   limit by a byte at each fault through the alias and restarts the
-   instruction, so when the alias is freed its limit tells how far the
-   check read (orc_ring: each fault's CS:IP). The entry's bytes before and
-   after are logged too (whether the check wrote). */
-extern u16 __cdecl orc_sel[8], orc_n, orc_ring[256 * 4], orc_pos;
-extern void __far KLOADMODULE(void);
-#pragma aux KLOADMODULE "*"
-u16 orc_on;
-u32 orc_proc;                   /* GetProcAddress's last result (module.c) */
-static u32 orc_at[8];           /* the entry each alias was made for */
-
-static void orc_line(const char *what, u16 a, u16 b, u16 c)
-{
-    kdbg_file("w16: oracle ");
-    kdbg_file(what);
-    kdbg_file(" ");
-    kdbghex(a);
-    kdbg_file(" ");
-    kdbghex(b);
-    kdbg_file(" ");
-    kdbghex(c);
-    kdbg_file("\r\n");
-}
-
-static void orc_bytes(const char *what, const u8 FAR *p)
-{
-    u16 i;
-    kdbg_file("w16: oracle ");
-    kdbg_file(what);
-    for (i = 0; i < 16; i++) {
-        kdbg_file(" ");
-        kdbghex(p[i]);
-    }
-    kdbg_file("\r\n");
-}
-
-/* the module and segment number a selector belongs to, for the log */
-static void orc_owner(u16 sel)
-{
-    module FAR *m;
-    u16 i;
-    for (m = module_first; m; m = m->next)
-        for (i = 0; i < m->seg_count; i++)
-            if (m->seg[i].sel && (m->seg[i].sel | 7) == (sel | 7)) {
-                kdbg_file("w16: oracle  owner ");
-                kdbg_file(m->name);
-                kdbg_file(" seg ");
-                kdbghex(i + 1);
-                kdbg_file("\r\n");
-                return;
-            }
-}
-
-/* whether sel is one of KERNEL's code selectors (or the oracle's own
-   over it): only w16's own code's bytes are ever logged, never another
-   module's (the clean-room rule, ARCHITECTURE.md 3) */
-extern u16 orc_lmsel;
-static int orc_ours(u16 sel)
-{
-    module FAR *m;
-    u16 i;
-    if (orc_lmsel && (sel | 7) == (orc_lmsel | 7))
-        return 1;
-    for (m = module_first; m; m = m->next) {
-        /* KERNEL, or a module whose description says it is w16's */
-        const u8 FAR *d = m->nonres_sel ? (const u8 FAR *)MK_FP(m->nonres_sel, 0) : 0;
-        if (m != module_first && !(d && d[0] > 4 && d[1] == 'w' && d[2] == '1' &&
-                                   d[3] == '6' && d[4] == ' '))
-            continue;
-        for (i = 0; i < m->seg_count; i++)
-            if (m->seg[i].sel && (m->seg[i].sel | 7) == (sel | 7))
-                return 1;
-    }
-    return 0;
-}
-
-/* a watched selector: add it */
-static void orc_add(u16 sel, u32 at)
-{
-    u16 i;
-    for (i = 0; i < 8 && orc_sel[i]; i++)
-        ;
-    if (i == 8)
-        return;
-    orc_at[i] = at;
-    orc_sel[i] = sel;
-    orc_n++;
-    orc_line("watch", sel, (u16)(at >> 16), (u16)at);
-    if (orc_ours((u16)(at >> 16)))
-        orc_bytes("before", (const u8 FAR *)at);
-}
-
-/* KERNEL.45 as GetProcAddress gives it with the oracle on: a code
-   selector of its own over KERNEL's code, its limit below the entry, so
-   that reads of the entry through it fault (module.c) */
-u16 orc_lmsel;
-
-static void orc_lm_init(void)
-{
-    void __far *p = (void __far *)KLOADMODULE;
-    desc8 d;
-    u16 a = dpmi_alloc_desc(1);
-    if (!a)
-        return;
-    if (!get_desc(FP_SEG(p), &d)) {
-        dpmi_free_desc(a);
-        return;
-    }
-    d_set_limit(&d, (u32)FP_OFF(p) - 1);
-    put_desc(a, &d);
-    orc_lmsel = a;
-    orc_add(a, (u32)p);
-}
-
-/* KERNEL's code segments and module table in 32-byte chunks, summed:
-   phase 0 takes them, later phases log the chunks that changed (what
-   a module patched in KERNEL) with their bytes now */
-u16  KAPI GlobalAlloc(u16 flags, u32 size);
-static u16 FAR *orc_sums;
-
-void orc_snap(u16 phase)
-{
-    module FAR *m = module_first;
-    u16 i, n = 0, ad = NE_HDR(m)->auto_data;
-    if (!orc_on)
-        return;
-    if (!orc_sums) {
-        u16 h = GlobalAlloc(0x0040, 9UL * 2048 * 2);
-        if (!h)
-            return;
-        orc_sums = (u16 FAR *)MK_FP(h, 0);
-    }
-    for (i = 0; i <= m->seg_count && n < 9; i++, n++) {
-        u16 sel = i < m->seg_count ? m->seg[i].sel : m->ne_sel, c;
-        u16 lim;
-        if (i + 1 == ad || !sel)
-            continue;
-        lim = sel_lim16(sel);
-        for (c = 0; c < 2048 && (u32)c * 32 + 31 <= lim; c++) {
-            const u8 FAR *p = (const u8 FAR *)MK_FP(sel, c * 32);
-            u16 k, sum = 0;
-            for (k = 0; k < 32; k++)
-                sum = (u16)(sum * 31 + p[k]);
-            if (phase && orc_sums[n * 2048 + c] != sum) {
-                orc_line("changed", phase, sel, c * 32);
-                orc_bytes("  now", p);
-                orc_bytes("  now", p + 16);
-            }
-            orc_sums[n * 2048 + c] = sum;
-        }
-    }
-}
-
-/* a module table (w16's own data) before and after a hook ran: the
-   bytes that changed go to the debuglog */
-static u16 orc_mdb_copy;
-
-void orc_mdb_snap(u16 sel)
-{
-    u16 n = sel_lim16(sel);
-    if (!orc_on)
-        return;
-    if (!orc_mdb_copy && (orc_mdb_copy = GlobalAlloc(0, 65536UL - 16)) == 0)
-        return;
-    kmemcpy(MK_FP(orc_mdb_copy, 0), MK_FP(sel, 0), n > 0xFFE0U ? 0xFFE0U : n + 1);
-}
-
-void orc_mdb_diff(u16 sel)
-{
-    u16 n = sel_lim16(sel), i;
-    const u8 FAR *a = (const u8 FAR *)MK_FP(orc_mdb_copy, 0);
-    const u8 FAR *b = (const u8 FAR *)MK_FP(sel, 0);
-    if (!orc_on || !orc_mdb_copy)
-        return;
-    if (n > 0xFFDF)
-        n = 0xFFDF;
-    {
-        module FAR *m = module_first;
-        int ours;
-        while (m && m->ne_sel != sel)
-            m = m->next;
-        ours = m && m->seg_count && orc_ours(m->seg[0].sel);
-        for (i = 0; i <= n; i++)       /* (another module's: where only) */
-            if (a[i] != b[i])
-                orc_line("mdb", i, ours ? a[i] : 0xFFFF, ours ? b[i] : 0xFFFF);
-    }
-}
-
-/* [w16] aliasoracle: n bytes at a procedure of w16's own (never another
-   module's) to the debuglog */
-void orc_dump_ours(const char *what, u32 p, u16 n)
-{
-    u16 i;
-    if (!orc_on || !p || !orc_ours((u16)(p >> 16)))
-        return;
-    kdbg_file("w16: oracle ");
-    kdbg_file(what);
-    for (i = 0; i < n; i++) {
-        kdbg_file(i % 16 ? " " : "\r\n ");
-        kdbghex(((const u8 FAR *)p)[i]);
-    }
-    kdbg_file("\r\n");
-}
-
-/* the boot is past the system driver: how far LoadModule's entry was
-   read, and the selector made whole again for calls through it */
-void orc_lm_done(void)
-{
-    desc8 d;
-    if (!orc_lmsel)
-        return;
-    orc_end(orc_lmsel);
-    if (get_desc(orc_lmsel, &d)) {
-        d_set_limit(&d, 0xFFFFUL);
-        put_desc(orc_lmsel, &d);
-    }
-}
-
-static void orc_watch(u16 src, u16 dst)
-{
-    desc8 d;
-    u16 off = FP_OFF(orc_proc);
-    if (orc_on > 1) {
-        orc_line("alias", src, dst, (u16)(orc_proc >> 16));
-        orc_owner(src);
-    }
-    if (!orc_on || ((u16)(orc_proc >> 16) | 7) != (src | 7) || !off)
-        return;
-    if (!get_desc(dst, &d))
-        return;
-    d_set_limit(&d, (u32)off - 1);
-    put_desc(dst, &d);
-    orc_add(dst, orc_proc);
-}
-
-/* FreeSelector of a watched alias: how far it was read */
-static void orc_end(u16 sel)
-{
-    u16 i, j;
-    for (i = 0; i < 8; i++)
-        if (orc_sel[i] && !((orc_sel[i] ^ sel) & ~3u))
-            break;
-    if (i == 8)
-        return;
-    orc_line("end", sel, (u16)seg_limit(sel), (u16)seg_limit(sel) - FP_OFF(orc_at[i]) + 1);
-    for (j = 0; j < orc_pos; j++)
-        if (!((orc_ring[j * 4] ^ sel) & ~3u))
-            orc_line("fault", orc_ring[j * 4 + 1], orc_ring[j * 4 + 2], orc_ring[j * 4 + 3]);
-    if (orc_ours((u16)(orc_at[i] >> 16)))
-        orc_bytes("after", (const u8 FAR *)orc_at[i]);
-    orc_sel[i] = 0;
-    orc_n--;
-}
-
-/* [w16] aliasoracle: set up at boot (winboot.c) */
-void orc_init(void)
-{
-    if (orc_on)
-        orc_lm_init();
-}
-
 u16 KAPI PrestoChangoSelector(u16 src, u16 dst)               /* KERNEL.177 */
 {
     desc8 d;
@@ -662,7 +392,6 @@ u16 KAPI PrestoChangoSelector(u16 src, u16 dst)               /* KERNEL.177 */
     d.b[5] ^= AR_CODE;
     if (!put_desc(dst, &d))
         return 0;
-    orc_watch(src, dst);
 #ifdef KRNL386
     return dst | 1;                     /* observed (tk17.c) */
 #else
@@ -687,10 +416,7 @@ u16 KAPI AllocDStoCSAlias(u16 sel)                            /* KERNEL.171 */
 
 u16 KAPI AllocCStoDSAlias(u16 sel)                            /* KERNEL.170 */
 {
-    u16 a = sel ? copy_selector(sel | 1, 0) : 0;
-    if (a)
-        orc_watch(sel, a);
-    return a;
+    return sel ? copy_selector(sel | 1, 0) : 0;
 }
 
 /* Observed: the same as AllocCStoDSAlias, but at another address (the

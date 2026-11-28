@@ -502,16 +502,6 @@ static int target(module FAR *m, const ne_reloc FAR *rr, u16 *tsel, u16 *toff)
         tm = module_of(MOD_MODREF(m, rr->t1 - 1));
         if ((rr->flags & NERF_TYPEMASK) == NERF_IMPORTORD) {
             if (tm && module_entry(tm, rr->t2, tsel, toff, &is_const)) {
-                extern u16 orc_on;      /* selector.c: [w16] aliasoracle=3 */
-                if (orc_on == 3 && rr->t2 == 53 && kstricmp(name, "GDI") == 0) {
-                    kdbg_file("w16: import GDI.53 by ");
-                    kdbg_file(m->name);
-                    kdbg_file(" ");
-                    kdbghex(*tsel);
-                    kdbg_file(":");
-                    kdbghex(*toff);
-                    kdbg_file("\r\n");
-                }
                 if (!is_const && trace_wanted(name, rr->t2))
                     thunk_trace(name, rr->t2, tsel, toff);
                 return 1;
@@ -1516,14 +1506,8 @@ static module FAR *load_body(const char FAR *name, const char *ext, int program,
             return NULL;
         }
     } else if ((h.flags & NEF_LIBRARY) && h.cs && h.cs <= h.seg_count) {
-        extern void stp_before(module FAR *m);  /* fault.c */
-        extern void stp_after(module FAR *m);
-        u16 ok;
-        stp_before(m);
-        ok = mod_call(m->seg[h.cs - 1].sel, h.ip, entry_ds(m), h.heap_size,
-                      module_instance(m), 0, 0);
-        stp_after(m);
-        if (!ok) {
+        if (!mod_call(m->seg[h.cs - 1].sel, h.ip, entry_ds(m), h.heap_size,
+                      module_instance(m), 0, 0)) {
             *err = LE_FAILED;
             call_wep(m);
             module_signal(m->ne_sel, 0x80);     /* Pietrek: after WEP, as
@@ -1630,7 +1614,8 @@ static int empty_name(const char FAR *name)
 /* LoadLibrary is LoadModule with the parameter block -1 (Pietrek,
    Windows Internals, ch. 3), through LoadModule's exported entry
    (kentry.asm KLOADMODULE), as programs that hook LoadModule expect
-   (ARCHITECTURE.md 11.13); the boot's loads come here too (winboot.c) */
+   (ARCHITECTURE.md 11.13); the boot's loads come here too (winboot.c
+   boot_load: 3.1's LoadNewExe calls LoadModule, Pietrek ch. 1) */
 extern void __far KLOADMODULE(void);
 #pragma aux KLOADMODULE "*"
 typedef u16 (__far __pascal *lm_entry)(const char FAR *name, void FAR *params);
@@ -1650,10 +1635,6 @@ static u16 load_library(const char FAR *name)
         diag_load_start(name);
     m = acquire(name, &err);
     r = m ? module_instance(m) : err;
-    if (m && kstricmp(m->name, "GDI") == 0) {
-        extern void orc_mdb_snap(u16 sel);      /* selector.c */
-        orc_mdb_snap(m->ne_sel);
-    }
     if (FP_SEG(name))
         diag_load_end(name, r < 32 ? r : 32);
     return r;
