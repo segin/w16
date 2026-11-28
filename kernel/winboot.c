@@ -239,7 +239,11 @@ static u16 boot_load(const char *key, const char *def)
         GetPrivateProfileString("boot", key, def, name, sizeof name, sysini);
     else
         kmemcpy(name, def, kstrlen(def) + 1);
-    h = LoadLibrary(name);              /* logs LoadStart, LoadSuccess */
+    {
+        extern u16 stp_boot_load(const char FAR *name); /* fault.c */
+        h = stp_boot_load(name);        /* LoadLibrary: logs LoadStart,
+                                           LoadSuccess */
+    }
     if (h < 32)
         boot_fail(name);
     return h;
@@ -341,10 +345,27 @@ u16 winboot(void)
         extern u16 __cdecl i21_log;
         i21_log = GetPrivateProfileInt("w16", "int21log", 0, sysini);
     }
+    {
+        /* [w16] aliasoracle=1: an investigation aid (selector.c) */
+        extern u16 orc_on;
+        extern void orc_init(void);
+        orc_on = GetPrivateProfileInt("w16", "aliasoracle", 0, sysini);
+        orc_init();
+    }
     if (take_switch_b())
         diag_init();
     booting = 1;
+    {
+        extern void orc_snap(u16 phase);        /* selector.c */
+        orc_snap(0);
+    }
     boot_load("system.drv", "SYSTEM.DRV");
+    {
+        extern void orc_lm_done(void);  /* selector.c: [w16] aliasoracle */
+        extern void orc_snap(u16 phase);
+        orc_lm_done();
+        orc_snap(1);
+    }
     boot_load("keyboard.drv", "KEYBOARD.DRV");
     boot_load("mouse.drv", "MOUSE.DRV");
     boot_load("display.drv", "DISPLAY.DRV");
@@ -355,7 +376,15 @@ u16 winboot(void)
     boot_load(NULL, "GDI.EXE");
     win_screen = 1;                     /* USER's initialisation enables
                                            the display: graphics from here */
+    {
+        extern void orc_snap(u16 phase);
+        orc_snap(2);
+    }
     boot_load(NULL, "USER.EXE");
+    {
+        extern void orc_snap(u16 phase);
+        orc_snap(3);
+    }
 
     /* the shell: its command tail is the rest of KERNEL's, without the
        leading blanks (UNVERIFIED) */

@@ -85,6 +85,9 @@ def main():
         if o == 46:                     # __GP: KERNEL's fault table (entry.asm)
             L.append('export __GP.46=GDI_GP resident')
             continue
+        if o == 53:                     # CreateDC: its entry in atm.asm
+            L.append('export CREATEDC.53=GCREATEDC')
+            continue
         if o in impl:
             fn, nb, src = impl[o]
             if sb is not None and nb != sb:
@@ -93,8 +96,17 @@ def main():
                 bad = 1
             L.append(f'export {name}.{o}={fn.upper()}')
         else:
+            # (the entry begins with whole instructions that can run
+            # elsewhere, at least 5 bytes, as a C function's: Adobe Type
+            # Manager moves them to hook the function, ARCHITECTURE.md
+            # 11.13; a near call there made it give up)
             A.append(f'global S_{o}')
-            A.append(f'S_{o}:  push word {o}')
+            A.append(f'S_{o}:  mov ax, {o}')
+            A.append('        inc bp')
+            A.append('        push bp')
+            A.append('        pop bp')
+            A.append('        dec bp')
+            A.append('        push ax')
             A.append('        call gdi_unimpl_entry')
             A.append('        xor ax, ax')
             A.append('        cwd')

@@ -8,7 +8,8 @@
  * dpDEVICEsize bytes in its own global segment (offset 0), the type,
  * output and data pointers being NULL for the display. GDI finds the
  * driver's functions by ordinal (GetProcAddress; GDI imports nothing from
- * DISPLAY). DDK: Device Driver Adaptation Guide, "Enabling and Disabling
+ * DISPLAY). LoadLibrary, GetProcAddress and FreeLibrary are called through
+ * CreateDC's far calls (atm.asm), as Adobe Type Manager expects. DDK: Device Driver Adaptation Guide, "Enabling and Disabling
  * the Display Driver" and the function reference.
  */
 #include "gdi.h"
@@ -41,24 +42,24 @@ NPDEVICE dev_open(LPCSTR name)
         file[n] = name[n];
     file[n] = 0;
     lstrcat(file, ".drv");
-    h = LoadLibrary(file);
+    h = BAIT_LoadLibrary(file);
     if (h < 32)
         return 0;
     d = (NPDEVICE)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, sizeof(DEVICE));
     if (!d) {
-        FreeLibrary(h);
+        BAIT_FreeLibrary(h);
         return 0;
     }
     d->hDriver = h;
     for (i = 0; i < 15 && name[i]; i++)
         d->name[i] = name[i];
     for (i = 1; i < DRV_NENTRIES; i++)
-        d->fn[i] = GetProcAddress(h, MAKEINTRESOURCE(i));
+        d->fn[i] = BAIT_GetProcAddress(h, MAKEINTRESOURCE(i));
     gdi_loghex("dev_open: module", h);
     gdi_loghex("dev_open: Enable at offset", OFFSETOF(d->fn[DRV_ENABLE]));
     if (!d->fn[DRV_ENABLE]) {
         LocalFree((HLOCAL)d);
-        FreeLibrary(h);
+        BAIT_FreeLibrary(h);
         return 0;
     }
     r = ((DRVENABLE)d->fn[DRV_ENABLE])(&d->info, 1, 0, 0, 0);
@@ -84,7 +85,7 @@ fail:
     if (d->hPDevice)
         GlobalFree(d->hPDevice);
     LocalFree((HLOCAL)d);
-    FreeLibrary(h);
+    BAIT_FreeLibrary(h);
     return 0;
 }
 
@@ -106,7 +107,7 @@ void dev_close(NPDEVICE d)
         }
     GlobalUnlock(d->hPDevice);
     GlobalFree(d->hPDevice);
-    FreeLibrary(d->hDriver);
+    BAIT_FreeLibrary(d->hDriver);
     LocalFree((HLOCAL)d);
 }
 

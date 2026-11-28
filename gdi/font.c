@@ -1462,7 +1462,17 @@ int GDIAPI EnumFonts(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)      /* GDI
     return enum_fonts(hdc, face, proc, data);
 }
 
+/* Its own code, not EnumFonts': with the same body the compiler made the
+   two one procedure, and Adobe Type Manager hooks each of them by its
+   entry (ARCHITECTURE.md 11.13): its second hook found the first's jump
+   there and ATM gave up. enum_family only tells them apart. */
+static WORD enum_family;
+
 int GDIAPI EnumFontFamilies(HDC hdc, LPCSTR face, FARPROC proc, DWORD data)  /* GDI.330 */
 {
-    return enum_fonts(hdc, face, proc, data);
+    int r;
+    enum_family++;
+    r = enum_fonts(hdc, face, proc, data);
+    enum_family--;
+    return r;
 }

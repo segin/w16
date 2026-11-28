@@ -91,6 +91,16 @@ HMODULE WINAPI GetModuleHandle(LPCSTR);
 HINSTANCE WINAPI LoadLibrary(LPCSTR);
 void WINAPI FreeLibrary(HINSTANCE);
 FARPROC WINAPI GetProcAddress(HINSTANCE, LPCSTR);
+/* atm.asm: CreateDC's three far calls (LoadLibrary, GetProcAddress,
+   FreeLibrary), never executed; GDI binds device drivers through their
+   operands, which Adobe Type Manager replaces with its own procedures
+   (ARCHITECTURE.md 11.13) */
+extern BYTE __far gdi_bait[];
+#pragma aux gdi_bait "_gdi_bait"
+#define BAIT_OP(n)  (*(FARPROC __far *)(gdi_bait + 1 + 5 * (n)))
+#define BAIT_LoadLibrary    ((HINSTANCE (WINAPI *)(LPCSTR))BAIT_OP(0))
+#define BAIT_GetProcAddress ((FARPROC (WINAPI *)(HINSTANCE, LPCSTR))BAIT_OP(1))
+#define BAIT_FreeLibrary    ((void (WINAPI *)(HINSTANCE))BAIT_OP(2))
 HRSRC WINAPI FindResource(HINSTANCE, LPCSTR, LPCSTR);
 HGLOBAL WINAPI LoadResource(HINSTANCE, HRSRC);
 LPVOID WINAPI LockResource(HGLOBAL);

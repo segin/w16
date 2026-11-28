@@ -731,7 +731,29 @@ _mod_call:
         je .call
         push word [bp + 18]
 .call:
+        ; [w16] steptrace (stp_entry below): armed for this call, the
+        ; callee runs with the trap flag set until it returns here
+        cmp word [_stp_arm wrt DGROUP], 0
+        je .go
+        mov word [_stp_arm wrt DGROUP], 0
+        mov word [_stp_active wrt DGROUP], 1
+        mov [_stp_endsp wrt DGROUP], sp
         mov cx, [bp + 12]
+        mov di, [bp + 14]
+        mov dx, [bp + 10]
+        xor si, si
+        mov es, si
+        pushf
+        pop ax
+        or ah, 1
+        push ax
+        mov ax, 1
+        mov ds, dx
+        popf
+        call far [ss:bx]
+.stp_ret:
+        jmp .back
+.go:    mov cx, [bp + 12]
         mov di, [bp + 14]
         mov dx, [bp + 10]
         xor si, si
@@ -739,7 +761,7 @@ _mod_call:
         mov ax, 1
         mov ds, dx
         call far [ss:bx]
-        lea sp, [bp - 8]
+.back:  lea sp, [bp - 8]
         pop es
         pop ds
         pop di
@@ -1084,10 +1106,591 @@ fault_entry_%1:
 %endmacro
 FAULTENTRY 00h
 FAULTENTRY 06h
-FAULTENTRY 0Bh
 FAULTENTRY 0Ch
-FAULTENTRY 0Dh
 FAULTENTRY 0Eh
+
+; ---- KERNEL.45, LoadModule's exported entry ----
+; Adobe Type Manager's ATMSYS.DRV hooks LoadModule to see GDI load
+; (ARCHITECTURE.md 11.13). Observed at run time (black box): it compares
+; the first 5 bytes at the address GetProcAddress(KERNEL, 45) gives with
+; its own copy of them and, when they are equal, writes a far jump to its
+; hook over them; its hook runs those 5 bytes itself and jumps to the
+; entry + 5. So the entry starts with exactly these 5 bytes, a far Pascal
+; frame (as the SDK's far procedures have: an odd BP frame, the caller's
+; DS saved), and what follows them is w16's own code, which must work
+; whether it is reached through them or from the hook: it calls w16's C
+; LoadModule (loader.c) with the same two arguments. LoadLibrary and the
+; boot's loads come through here too (LoadLibrary passes -1 as the
+; parameter block: Pietrek, Windows Internals, ch. 3).
+global KLOADMODULE
+extern LOADMODULE               ; loader.c: u16 KAPI LoadModule(name, params)
+KLOADMODULE:
+        db 45h                  ; inc bp
+        db 55h                  ; push bp
+        db 8Bh, 0ECh            ; mov bp, sp
+        db 1Eh                  ; push ds
+        push word [bp + 12]             ; lpModuleName
+        push word [bp + 10]
+        push word [bp + 8]              ; lpParameterBlock
+        push word [bp + 6]
+        call far LOADMODULE
+        lea sp, [bp - 2]
+        pop ds
+        pop bp
+        dec bp
+        retf 8
+; ---- [w16] steptrace=MODULE: a module's initialisation, step by step ----
+; An investigation aid (black box: where the code runs and its registers,
+; never its bytes). mod_call sets the trap flag for the call when armed
+; (loader.c); exception 1 comes here after each instruction. Each step
+; in the traced module's code (stp_msel) is recorded, and the first of
+; each run elsewhere: CS, IP, flags, AX, BX, CX, DX, SI, DI, BP, SP, SS,
+; DS, ES, and
+; the word at SS:SP and SS:SP+2 (32 bytes), into the blocks stp_blk
+; (2048 records each); at the return to mod_call the flag is cleared.
+global _stp_arm, _stp_active, _stp_endsp, _stp_msel, _stp_blk, _stp_n, stp_entry
+segment _BSS
+_stp_arm        resw 1
+_stp_active     resw 1
+_stp_endsp      resw 1
+_stp_msel       resw 8
+_stp_blk        resw 16
+_stp_n          resw 1
+stp_ink         resw 1
+global _stp_skip
+_stp_skip       resw 1          ; skip calls out of the module (stp_resume)
+stp_rdepth      resw 1
+global _stp_bph, _stp_bpcs, _stp_bpip
+_stp_bph        resw 1          ; DPMI debug watchpoint handle + 1 (0: none)
+_stp_bpcs       resw 1
+_stp_bpip       resw 1
+stp_stopout     resw 1
+stp_lastip      resw 1
+stp_lastcs      resw 1
+stp_rst         resw 64         ; the swapped return addresses (IP, CS)
+segment _TEXT
+stp_entry:
+        push bp
+        mov bp, sp
+        push ds                         ; [bp-2]
+        push ax                         ; [bp-4]
+        push bx                         ; [bp-6]
+        push si                         ; [bp-8]
+        push di                         ; [bp-10]
+        push es                         ; [bp-12]
+        mov ax, DGROUP
+        mov ds, ax
+        cmp word [_stp_active wrt DGROUP], 0
+        jne .on
+        cmp word [_stp_bph wrt DGROUP], 0       ; the breakpoint of
+        je .stray                               ; [w16] steptracebp?
+        mov ax, [bp + 10]
+        cmp ax, [_stp_bpcs wrt DGROUP]
+        jne .stray
+        mov ax, [bp + 8]
+        cmp ax, [_stp_bpip wrt DGROUP]
+        jne .stray
+        push cx
+        push dx
+        mov bx, [_stp_bph wrt DGROUP]           ; (once: cleared, and
+        dec bx                                  ; (stored + 1)
+        mov ax, 0B01h                           ; the instruction runs
+        int 31h                                 ; on with the trap flag)
+        pop dx
+        pop cx
+        mov word [_stp_bph wrt DGROUP], 0
+        mov word [_stp_active wrt DGROUP], 1
+        mov word [stp_ink wrt DGROUP], 0
+        mov word [_stp_skip wrt DGROUP], 1
+        mov word [stp_stopout wrt DGROUP], 1
+        or word [bp + 12], 0100h
+        jmp .on
+.stray: and word [bp + 12], 0FEFFh      ; a stray trap: no more
+        jmp .ret
+.on:    mov ax, cs                      ; back in mod_call or stp_call:
+        cmp [bp + 10], ax               ; the end
+        jne .notend
+        cmp word [bp + 8], _mod_call.stp_ret
+        je .endsp
+        cmp word [bp + 8], _stp_call.ret
+        je .endsp
+        jne .notend
+.endsp: mov ax, [_stp_endsp wrt DGROUP]
+        cmp [bp + 14], ax
+        jne .notend
+        and word [bp + 12], 0FEFFh
+        mov word [_stp_active wrt DGROUP], 0
+        jmp .ret
+.notend:
+        mov ax, [bp + 10]
+        call stp_inmod
+        jnc .mod
+        cmp word [stp_ink wrt DGROUP], 0        ; elsewhere: the first
+        jne .ret                                ; step of a run only
+        mov word [stp_ink wrt DGROUP], 1
+        cmp word [_stp_skip wrt DGROUP], 0
+        je .log
+        ; skipping calls out of the module: a far return address into it
+        ; at SS:SP (a far call) or SS:BP+2 (a jump into a frame the
+        ; module's call made) is pointed at stp_resume, and the trap flag
+        ; is off until it returns there
+        mov es, [bp + 16]
+        mov bx, [bp + 14]
+        mov ax, [es:bx + 2]
+        call stp_inmod
+        jnc .swap
+        mov bx, [bp]
+        and bx, 0FFFEh
+        add bx, 2
+        mov ax, [es:bx + 2]
+        call stp_inmod
+        jnc .swap
+        cmp word [stp_stopout wrt DGROUP], 0    ; out of the module for
+        je .log                                 ; good: the end
+        mov word [stp_stopout wrt DGROUP], 0
+        mov word [_stp_active wrt DGROUP], 0
+        and word [bp + 12], 0FEFFh
+        cmp word [_stp_np wrt DGROUP], 0        ; [w16] steptracenp: its
+        je .log                                 ; code not present again
+        push cx
+        push dx
+        xor al, al
+        call stp_np_set
+        pop dx
+        pop cx
+        jmp .log
+.swap:  mov si, [stp_rdepth wrt DGROUP]
+        cmp si, 32
+        jae .log
+        inc word [stp_rdepth wrt DGROUP]
+        shl si, 2
+        mov ax, [es:bx]
+        mov [stp_rst + si wrt DGROUP], ax
+        mov ax, [es:bx + 2]
+        mov [stp_rst + si + 2 wrt DGROUP], ax
+        mov word [es:bx], stp_resume
+        mov [es:bx + 2], cs
+        and word [bp + 12], 0FEFFh
+        jmp .log
+.mod:   mov word [stp_ink wrt DGROUP], 0
+.log:   mov ax, [bp + 8]                ; a string instruction's next
+        cmp ax, [stp_lastip wrt DGROUP] ; repetition: not again
+        jne .new
+        mov ax, [bp + 10]
+        cmp ax, [stp_lastcs wrt DGROUP]
+        je .ret
+.new:   mov ax, [bp + 8]
+        mov [stp_lastip wrt DGROUP], ax
+        mov ax, [bp + 10]
+        mov [stp_lastcs wrt DGROUP], ax
+        mov si, [_stp_n wrt DGROUP]
+        cmp si, 16 * 2048
+        jae .ret
+        inc word [_stp_n wrt DGROUP]
+        mov bx, si
+        shr bx, 11
+        shl bx, 1
+        mov es, [_stp_blk + bx wrt DGROUP]
+        and si, 2047
+        shl si, 5
+        mov ax, [bp + 10]
+        mov [es:si], ax                 ; cs
+        mov ax, [bp + 8]
+        mov [es:si + 2], ax             ; ip
+        mov ax, [bp + 12]
+        mov [es:si + 4], ax             ; flags
+        mov ax, [bp - 4]
+        mov [es:si + 6], ax             ; ax
+        mov ax, [bp - 6]
+        mov [es:si + 8], ax             ; bx
+        mov [es:si + 10], cx
+        mov [es:si + 12], dx
+        mov ax, [bp - 8]
+        mov [es:si + 14], ax            ; si
+        mov ax, [bp - 10]
+        mov [es:si + 16], ax            ; di
+        mov ax, [bp]
+        mov [es:si + 18], ax            ; bp
+        mov ax, [bp + 14]
+        mov [es:si + 20], ax            ; sp
+        mov ax, [bp + 16]
+        mov [es:si + 22], ax            ; ss
+        mov ax, [bp - 2]
+        mov [es:si + 24], ax            ; ds
+        mov ax, [bp - 12]
+        mov [es:si + 26], ax            ; es
+        push ds
+        mov ds, [bp + 16]
+        mov bx, [bp + 14]
+        mov ax, [bx]
+        mov [es:si + 28], ax            ; [ss:sp]
+        mov ax, [bx + 2]
+        mov [es:si + 30], ax            ; [ss:sp+2]
+        pop ds
+.ret:   pop es
+        pop di
+        pop si
+        pop bx
+        pop ax
+        pop ds
+        pop bp
+        retf
+
+; CF clear when AX (any RPL) is one of the traced module's selectors
+stp_inmod:
+        push si
+        push bx
+        or ax, 7
+        mov si, 0
+.k:     mov bx, [_stp_msel + si wrt DGROUP]
+        test bx, bx
+        jz .n
+        or bx, 7
+        cmp ax, bx
+        je .y
+.n:     add si, 2
+        cmp si, 16
+        jb .k
+        pop bx
+        pop si
+        stc
+        ret
+.y:     pop bx
+        pop si
+        clc
+        ret
+
+; a call out of the traced module returns here (stp_entry swapped its
+; return address): on to the module's code with the trap flag set again,
+; the registers and the callee's flags as they were
+stp_resume:
+        push ax                         ; the IRET frame's IP, CS, flags
+        push ax
+        push ax
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        push si
+        pushf
+        pop ax
+        or ax, 0100h
+        mov [bp + 6], ax
+        mov ax, DGROUP
+        mov ds, ax
+        dec word [stp_rdepth wrt DGROUP]
+        mov si, [stp_rdepth wrt DGROUP]
+        shl si, 2
+        mov ax, [stp_rst + si wrt DGROUP]
+        mov [bp + 2], ax
+        mov ax, [stp_rst + si + 2 wrt DGROUP]
+        mov [bp + 4], ax
+        pop si
+        pop ax
+        pop ds
+        pop bp
+        iret
+
+; u16 __cdecl stp_call(u32 fn, u32 a, u32 b, u32 c, u32 d, u16 n): the far
+; Pascal procedure fn(a, b) (n 2: LoadModule's entry, winboot.c's boot
+; loads) or fn(a, b, c, d) (n 4: CreateDC) with the trap flag
+; set ([w16] steptraceload), until it returns here
+global _stp_call
+_stp_call:
+        push bp
+        mov bp, sp
+        push si
+        push di
+        push ds
+        push es
+        mov word [_stp_active wrt DGROUP], 1
+        mov word [stp_ink wrt DGROUP], 1
+        mov [_stp_endsp wrt DGROUP], sp ; (after the callee's RETF 8)
+        push word [bp + 12]
+        push word [bp + 10]
+        push word [bp + 16]
+        push word [bp + 14]
+        cmp word [bp + 26], 2
+        jbe .go
+        push word [bp + 20]
+        push word [bp + 18]
+        push word [bp + 24]
+        push word [bp + 22]
+.go:    pushf
+        pop ax
+        or ah, 1
+        push ax
+        popf
+        call far [bp + 6]
+.ret:   lea sp, [bp - 8]
+        mov word [_stp_active wrt DGROUP], 0
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        retf
+
+; LoadLibrary as GDI calls it through CreateDC's first far call, when
+; [w16] steptracebait=1 put this there (fault.c): on to the procedure that
+; was there (stp_shim_op: the traced module's hook) with the trap flag
+; set and the stack as it was, skipping calls out of the module, until
+; it leaves the module for good (stp_stopout)
+global _stp_shim, _stp_shim_op, _stp_frames
+segment _BSS
+_stp_shim_op    resw 2
+_stp_frames     resw 65
+segment _TEXT
+_stp_shim:
+        sub sp, 6                       ; the IRET frame: IP, CS, flags
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        ; (the stack at the call and the caller's frame, 64 bytes each,
+        ; for the debuglog: stp_frames)
+        push si
+        push cx
+        push es
+        mov ax, ds
+        mov es, ax
+        push di
+        mov di, _stp_frames
+        lea si, [bp + 8]                ; SS:SP at the call
+        mov cx, 32
+.c1:    mov ax, [ss:si]
+        stosw
+        add si, 2
+        loop .c1
+        mov si, [bp]                    ; the BP chain from the caller's
+        mov cx, 10                      ; frame: BP, [BP+2], [BP+4], 10
+.c2:    and si, 0FFFEh                  ; frames (32 words)
+        jz .c3
+        mov ax, si
+        stosw
+        mov ax, [ss:si + 2]
+        stosw
+        mov ax, [ss:si + 4]
+        stosw
+        mov si, [ss:si]
+        loop .c2
+.c3:    jcxz .c4
+        xor ax, ax
+        stosw
+        stosw
+        stosw
+        loop .c3
+.c4:    xor ax, ax
+        stosw
+        stosw
+        stosw
+        pop di
+        pop es
+        pop cx
+        pop si
+        mov ax, [_stp_shim_op wrt DGROUP]
+        mov [bp + 2], ax
+        mov ax, [_stp_shim_op + 2 wrt DGROUP]
+        mov [bp + 4], ax
+        pushf
+        pop ax
+        or ah, 1
+        mov [bp + 6], ax
+        mov word [_stp_active wrt DGROUP], 1
+        mov word [stp_ink wrt DGROUP], 1
+        mov word [_stp_skip wrt DGROUP], 1
+        mov word [stp_stopout wrt DGROUP], 1
+        pop ax
+        pop ds
+        pop bp
+        iret
+
+; ---- [w16] steptracenp=1: the traced module's code segments are made not
+; present (fault.c); a far call or jump into them comes here as exception
+; 0Bh (the error code its selector): they are made present and the module
+; is traced from there (calls out of it skipped) until it leaves, when its
+; code is made not present again. Nothing outside the module is stepped.
+global _stp_np, _stp_np_mark
+segment _BSS
+_stp_np         resw 1
+segment _TEXT
+global fault_entry_0Bh
+fault_entry_0Bh:
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        mov ax, DGROUP
+        mov ds, ax
+        cmp word [_stp_np wrt DGROUP], 0
+        je .no
+        mov ax, [bp + 6]                ; the error code: the selector
+        call stp_inmod
+        jc .no
+        push cx
+        push dx
+        mov al, 80h
+        call stp_np_set
+        pop dx
+        pop cx
+        mov word [_stp_active wrt DGROUP], 1
+        mov word [stp_ink wrt DGROUP], 1
+        mov word [_stp_skip wrt DGROUP], 1
+        mov word [stp_stopout wrt DGROUP], 1
+        or word [bp + 12], 0100h        ; the instruction again, traced
+        pop ax
+        pop ds
+        pop bp
+        retf
+.no:    pop ax
+        pop ds
+        pop bp
+        push word 0Bh
+        jmp fault_common
+
+; AL 80h: the traced module's code present, 0: not present (DPMI 0009h);
+; CX, DX lost
+stp_np_set:
+        push bx
+        push si
+        push ax
+        mov si, 0
+.n:     mov bx, [_stp_msel + si wrt DGROUP]
+        test bx, bx
+        jz .skip
+        lar dx, bx
+        jnz .skip
+        pop ax
+        push ax
+        mov cl, dh
+        and cl, 7Fh
+        or cl, al
+        xor ch, ch
+        mov ax, 0009h
+        int 31h
+.skip:  add si, 2
+        cmp si, 16
+        jb .n
+        pop ax
+        pop si
+        pop bx
+        ret
+
+; void __cdecl __far stp_np_mark(u16 present)
+_stp_np_mark:
+        push bp
+        mov bp, sp
+        push cx
+        push dx
+        mov al, [bp + 6]
+        call stp_np_set
+        pop dx
+        pop cx
+        pop bp
+        retf
+
+; ---- the alias read-extent oracle ([w16] aliasoracle=1, selector.c) ----
+; A data alias of a code segment that an interoperability check reads
+; (ATMSYS.DRV's of KERNEL's LoadModule, ARCHITECTURE.md 11.13) is given a
+; limit just below the entry it was made for. A GP fault with DS, ES (FS,
+; GS on a 386) one of the watched aliases raises that alias's limit by one
+; and restarts the instruction: the final limit is the highest byte read.
+; Each raise is noted in orc_ring (selector, CS, IP, new limit).
+global _orc_sel, _orc_n, _orc_ring, _orc_pos
+segment _BSS
+_orc_sel        resw 8
+_orc_n          resw 1
+ORC_RING        equ 256
+_orc_ring       resw ORC_RING * 4
+_orc_pos        resw 1
+segment _TEXT
+global fault_entry_0Dh
+fault_entry_0Dh:
+        push bp
+        mov bp, sp
+        push ds
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        mov ax, DGROUP
+        mov ds, ax
+        cmp word [_orc_n wrt DGROUP], 0
+        je .no
+        mov dx, [bp - 2]                ; the faulting DS
+        call orc_match
+        jnc .hit
+        mov dx, es
+        call orc_match
+        jnc .hit
+%ifdef KRNL386
+        cpu 386
+        mov dx, fs
+        call orc_match
+        jnc .hit
+        mov dx, gs
+        call orc_match
+        jnc .hit
+        cpu 286
+%endif
+.no:    pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        pop ds
+        pop bp
+        push word 0Dh
+        jmp fault_common
+.hit:   lsl cx, dx
+        jnz .no
+        cmp cx, 0FFFFh
+        je .no
+        inc cx
+        mov si, [_orc_pos wrt DGROUP]
+        cmp si, ORC_RING
+        jae .set
+        inc word [_orc_pos wrt DGROUP]
+        shl si, 3
+        mov [_orc_ring + si wrt DGROUP], dx
+        mov ax, [bp + 10]               ; the faulting CS:IP
+        mov [_orc_ring + si + 2 wrt DGROUP], ax
+        mov ax, [bp + 8]
+        mov [_orc_ring + si + 4 wrt DGROUP], ax
+        mov [_orc_ring + si + 6 wrt DGROUP], cx
+.set:   mov bx, dx
+        mov dx, cx
+        xor cx, cx
+        mov ax, 0008h                   ; DPMI: set the segment limit
+        int 31h
+        jc .no
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        pop ds
+        pop bp
+        retf                            ; back to the host: restart
+; CF clear when DX (any RPL) is a watched alias
+orc_match:
+        mov si, 0
+.next:  mov ax, [_orc_sel + si wrt DGROUP]
+        test ax, ax
+        jz .skip
+        xor ax, dx
+        and ax, 0FFFCh
+        jz .yes
+.skip:  add si, 2
+        cmp si, 16
+        jb .next
+        stc
+        ret
+.yes:   clc
+        ret
 
 fault_common:
         push bp
