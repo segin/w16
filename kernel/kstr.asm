@@ -30,7 +30,7 @@
 ; and for an expand-down data segment: TK62); on a 386 the 32-bit LSL
 ; gives a limit above 64K (str386, set by str_init in selector.c).
         bits 16
-        cpu 386
+        cpu 286                         ; (KRNL286 runs on an 80286: no 0F 8x jumps)
 
 segment _TEXT public align=16 class=CODE use16
 
@@ -72,10 +72,14 @@ _str386: db 0
 %%lim:
         cmp byte [cs:_str386], 0
         je %%l16
+        cpu 386
         movzx edx, %1
         lsl eax, edx
+        cpu 286
         jnz %3
+        cpu 386
         cmp eax, 0FFFFh
+        cpu 286
         jbe %%done
         mov ax, 0FFFFh
         jmp %%done
