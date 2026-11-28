@@ -8,6 +8,8 @@
  * (gp_handler below); the rest are reported.
  */
 #include "kernel.h"
+#include "kfile.h"
+#include "w16ver.h"
 
 u32 KAPI GetProcAddress(u16 h, const char FAR *name);
 u16 KAPI GetPrivateProfileInt(const char FAR *sec, const char FAR *key, u16 def,
@@ -15,7 +17,8 @@ u16 KAPI GetPrivateProfileInt(const char FAR *sec, const char FAR *key, u16 def,
 static const char sysini[] = "SYSTEM.INI";
 
 extern u16 __cdecl fault_regs[16];
-extern u16 __cdecl i21_ring[80];
+#define I21_N 64                /* INT 21h calls in the ring (kentry.asm) */
+extern u16 __cdecl i21_ring[I21_N * 5];
 extern u16 __cdecl i21_pos;
 extern void __far fault_entry_00h(void);
 extern void __far fault_entry_06h(void);
@@ -30,30 +33,72 @@ extern void __far fault_entry_0Eh(void);
 #pragma aux fault_entry_0Dh "*"
 #pragma aux fault_entry_0Eh "*"
 
+/* INT 10h in real mode (DPMI 0300h, the host's stack) with AX, BX and
+   CX; rmc then holds what it returned. 0 when DPMI refused. */
+static struct {
+    u32 edi, esi, ebp, res, ebx, edx, ecx, eax;
+    u16 flags, es, ds, fs, gs, ip, cs, sp, ss;
+} rmc;
+
+static int rm_int10(u16 ax, u16 bx, u16 cx)
+{
+    regs16 r;
+    kmemset(&rmc, 0, sizeof rmc);
+    kmemset(&r, 0, sizeof r);
+    rmc.eax = ax;
+    rmc.ebx = bx;
+    rmc.ecx = cx;
+    r.ax = 0x0300;
+    r.bx = 0x10;
+    r.di = FP_OFF((void FAR *)&rmc);
+    r.es = FP_SEG((void FAR *)&rmc);
+    return !dpmi31(&r);
+}
+
 /* Back to text mode before a report goes to the screen, as Windows'
    own KERNEL does before "Error loading ..." (Pietrek, TextMode: USER's
    DisableOEMLayer if it can, else INT 10h AX=0003h). w16 uses INT 10h
    (in real mode, through DPMI 0300h): KERNEL leaves to DOS right after,
-   so the display driver's state is not needed any more. */
-void text_mode(void)
+   so the display driver's state is not needed any more. 1 when mode 3
+   was set (not without a display driver: the screen is text already). */
+u16 text_mode(void)
 {
-    static struct {
-        u32 edi, esi, ebp, res, ebx, edx, ecx, eax;
-        u16 flags, es, ds, fs, gs, ip, cs, sp, ss;
-    } rmc;
-    regs16 r;
     win_screen = 0;                     /* (reports go to the screen now) */
     if (!winboot_active || !module_find("DISPLAY"))
-        return;
-    kmemset(&rmc, 0, sizeof rmc);
-    rmc.eax = 0x0003;
-    r.ax = 0x0300;
-    r.bx = 0x10;
-    r.cx = 0;
-    r.di = FP_OFF((void FAR *)&rmc);
-    r.es = FP_SEG((void FAR *)&rmc);
-    r.ds = 0;
-    dpmi31(&r);
+        return 0;
+    rm_int10(0x0003, 0, 0);
+    return 1;
+}
+
+/* the screen's rows (INT 10h AX=1130h: DL = rows - 1, on an EGA or VGA;
+   other adapters leave DL as it was, 0: 25) */
+static u16 rpt_rows = 25;
+
+static void rows_now(void)
+{
+    u16 n;
+    rpt_rows = 25;
+    if (rm_int10(0x1130, 0, 0)) {
+        n = (u8)rmc.edx + 1;
+        if (n > 25 && n <= 60)
+            rpt_rows = n;
+    }
+}
+
+/* The fault report in 80x50: after mode 3, the VGA's 8x8 ROM font (INT
+   10h AX=1112h, BL=0), so the registers, the stack, its frames and the
+   INT 21h calls fit on one screen. Only on a VGA (INT 10h AX=1A00h: AL
+   1Ah, BL 7 or 8, the active display): another adapter stays at 25 rows
+   (an EGA would give 43). DOS's prompt after the report stays in 50
+   rows (MODE CO80, or any program's mode set, gives 25 again). */
+static void rows50(void)
+{
+    if (rm_int10(0x1A00, 0, 0) && (u8)rmc.eax == 0x1A &&
+        ((u8)rmc.ebx == 7 || (u8)rmc.ebx == 8)) {
+        rm_int10(0x1112, 0x0000, 0);
+        rm_int10(0x0100, 0, 0x0607);    /* the cursor in lines 6-7 of 8 */
+    }
+    rows_now();
 }
 
 static void hook(u8 n, void (__far *h)(void))
@@ -275,14 +320,14 @@ static void reg(const char *name, u16 v)
     kputhex(v);
 }
 
-static u16 ring[80];
+static u16 ring[I21_N * 5];
 
 extern u16 __cdecl wd_ticks, wd_limit, wd_pos;
 extern u16 __cdecl wd_samples[128];
 extern void __far wd_int70(void);
 #pragma aux wd_int70 "*"
 
-static void print_int21_ring(u16 pos);
+static void print_int21_ring(u16 pos, u16 n);
 
 /* ---- the report's steps ----
    The report runs on a stack of its own (kentry.asm, fault_exit: never
@@ -300,7 +345,8 @@ static void print_int21_ring(u16 pos);
 #define RS_TRACE        0x0010          /* [w16] trace */
 #define RS_QUIET        0x0020          /* the interrupt vectors, INT 21h */
 #define RS_OEM          0x0040          /* USER's DisableOEMLayer */
-#define RS_TEXT         0x0080          /* INT 10h text mode */
+#define RS_TEXT         0x0080          /* INT 10h text mode, 50 rows */
+#define RS_FILE         0x0100          /* the crash log's DOS calls */
 
 extern u8 __cdecl rpt_active;           /* kentry.asm: a report is running */
 static u16 rpt_regs[16];                /* the fault being reported */
@@ -314,6 +360,59 @@ static u16 rpt_test;                    /* [w16] faultreptest: steps that
                                            fault on purpose, once each */
 static u32 rpt_host21;                  /* the host's INT 21h vector */
 static u32 rpt_irq[16];                 /* the IRQ vectors at the boot */
+static u16 lim_words, lim_frames;       /* the pass's stack words, frames */
+
+/* ---- the crash log ----
+   The whole report goes to a file as well, after the screen has it:
+   [w16] CrashLog (default 1; 0: none) puts it in the Windows directory,
+   W16CRASH.TXT. Each report is appended, after a separator line, with
+   a header (DOS's date and time, w16's version and build); a file over
+   64 KB at the start of a report is emptied first. The log gets every
+   line the screen does and what the screen leaves out for room: 64
+   stack words, 32 frames, the 64 INT 21h calls of the ring.
+   The report is printed twice, the same steps each time: first to the
+   screen, then (the log's pass) through kputs_hook into the file. The
+   screen goes first: its pass is the one a fault inside the report
+   restarts (below what it printed, up to three times), and a file step
+   before it would spend those restarts, or hang in DOS, before anything
+   was on the screen. A fault in the log's pass never goes back to the
+   screen's: it is noted in the log, the step that faulted is left out
+   and the log gets the report again (at most three times), then the
+   report ends. Every DOS call of the log's is the step RS_FILE (after a
+   fault in one the file is left alone); one that fails (the disk full,
+   the file read-only, INT 21h refusing) ends the log's writing
+   silently. "w16: report written to ..." is printed only when the
+   whole log was written. */
+static char rpt_path[DOS_PATHMAX];      /* the log; "" with CrashLog=0 */
+static u16 rpt_fh;                      /* its handle while open */
+static u8 rpt_fopen;                    /* open */
+static u8 rpt_file;                     /* the log's pass is running */
+static u8 rpt_logged;                   /* it has run (once only) */
+static u8 rpt_fail;                     /* a call failed: no more */
+static u8 rpt_written;                  /* the whole log was written */
+static u16 rpt_fcount;                  /* faults in the log's pass */
+static char rpt_buf[512];               /* the log's output, buffered */
+static u16 rpt_bn;
+
+/* the screen's pass: kputs to standard output, the rows counted (the
+   BIOS wraps a line at its 80th character) */
+static u16 scr_row, scr_col;
+static u8 scr_known;
+
+static void __far scr_put(const char FAR *s)
+{
+    u16 i;
+    kputs_out(s);
+    for (i = 0; s[i]; i++)
+        if (s[i] == '\n')
+            scr_row++;
+        else if (s[i] == '\r')
+            scr_col = 0;
+        else if (++scr_col == 80) {
+            scr_row++;
+            scr_col = 0;
+        }
+}
 
 static u16 pm_vec_get(u8 n, u16 *off)
 {
@@ -352,6 +451,19 @@ static void rpt_init(void)
     }
     rpt_host21 = old21;
     rpt_test = GetPrivateProfileInt("w16", "faultreptest", 0, sysini);
+    /* the crash log's path, made now: nothing of Windows is asked once
+       it has faulted */
+    rpt_path[0] = 0;
+    if (GetPrivateProfileInt("w16", "CrashLog", 1, sysini)) {
+        static const char name[] = "W16CRASH.TXT";
+        u16 n = GetWindowsDirectory(rpt_path, sizeof rpt_path);
+        if (n && n < sizeof rpt_path - sizeof name - 1) {
+            if (rpt_path[n - 1] != '\\')
+                rpt_path[n++] = '\\';
+            kmemcpy(rpt_path + n, name, sizeof name);
+        } else
+            rpt_path[0] = 0;
+    }
 }
 
 /* a general protection fault: DS loaded with a selector past the LDT's
@@ -395,20 +507,36 @@ static void print_stack(u16 ss, u16 sp, u16 bp)
     u16 i, w[6];
     if (step(RS_STACK)) {
         kputs("stack:");
-        for (i = 0; i < 16 && readable(ss, sp + 2 * i, 2); i++) {
+        for (i = 0; i < 16 && (u32)sp + 2 * i < 0xFFFFUL && readable(ss, sp + 2 * i, 2); i++) {
             kputs(" ");
             kputhex(*(u16 __far *)MK_FP(ss, sp + 2 * i));
         }
         if (!i)
             kputs(" (not readable)");
         kputs("\r\n");
+        /* (the crash log: more words, 16 a line, "stack+0020:" for the
+           words from SP+20h) */
+        for (; i >= 16 && i < lim_words && (u32)sp + 2 * i < 0xFFFFUL &&
+               readable(ss, sp + 2 * i, 2); i++) {
+            if (i % 16 == 0) {
+                kputs("stack+");
+                kputhex(2 * i);
+                kputs(":");
+            }
+            kputs(" ");
+            kputhex(*(u16 __far *)MK_FP(ss, sp + 2 * i));
+            if (i % 16 == 15)
+                kputs("\r\n");
+        }
+        if (i > 16 && i % 16)
+            kputs("\r\n");
     }
     step_end();
     if (!step(RS_FRAMES)) {
         step_end();
         return;
     }
-    for (i = 0; i < 12 && bp && readable(ss, bp & ~1, 12); i++) {
+    for (i = 0; i < lim_frames && bp && readable(ss, bp & ~1, 12); i++) {
         kmemcpy(w, MK_FP(ss, bp & ~1), sizeof w);
         rpt_step = RS_PRINT;
         kputs(" frame ");
@@ -478,13 +606,30 @@ static void oem_off(void)
        below what the first attempt printed, never over it) */
     if (!(rpt_done & RS_TEXT) && step(RS_TEXT)) {
         rpt_done |= RS_TEXT;
-        text_mode();
+        if (text_mode()) {
+            rows50();
+            scr_row = scr_col = 0;
+            scr_known = 1;
+        }
     }
     step_end();
     win_screen = 0;
+    /* not set here (a fault before USER's screen was up, or a text mode
+       that faulted): the rows as they are, from where the cursor is */
+    if (!scr_known) {
+        scr_known = 1;
+        rows_now();
+        scr_row = rm_int10(0x0300, 0, 0) ? (u8)(rmc.edx >> 8) : 0;
+    }
 }
 
 static void report_body(void);
+static void report_lines(void);
+static void report_end(void);
+static void fault_note(void);
+static void log_close(void);
+static void log_end(void);
+static void __far log_put(const char FAR *s);
 
 /* kentry.asm, fault_exit: a fault; reported on the report's stack */
 void __cdecl fault_report(void)
@@ -527,6 +672,19 @@ void __cdecl fault_report_again(void)
     kmemcpy(rpt_nest, fault_regs, sizeof rpt_nest);
     rpt_skip |= rpt_step;
     rpt_step = RS_PRINT;
+    if (rpt_file) {
+        /* in the crash log's pass: the screen has the report already */
+        if (++rpt_fcount <= 3 && rpt_fopen && !(rpt_skip & RS_FILE)) {
+            kputs_hook = log_put;
+            fault_note();
+            report_lines();
+        }
+        if (rpt_fcount <= 6)
+            log_close();
+        log_end();
+        report_end();
+    }
+    kputs_hook = 0;
     if (++rpt_count <= 3) {
         report_body();
         return;
@@ -546,18 +704,35 @@ void __cdecl fault_report_again(void)
     dos21(&r);
 }
 
-static void report_body(void)
+/* what went wrong in the report, raw (on a line of its own: the fault
+   may have come in the middle of one) */
+static void fault_note(void)
+{
+    kputs("\r\n");
+    raw_line("w16: a fault in the fault report: exception ", rpt_nest);
+    kputs("w16: the report again, without the step that faulted\r\n");
+}
+
+/* The screen's INT 21h calls: as many as the rows left hold, the last
+   ROWS_AFTER kept for what follows (the log's line, "back to DOS", DOS's
+   prompt); at least 8, or 16 (the ring's old size) without a crash log
+   to hold the rest. The log gets all 64. */
+#define ROWS_AFTER 5
+static u16 ring_count(void)
+{
+    u16 n = 0, lo = rpt_path[0] ? 8 : 16;
+    if (rpt_file)
+        return I21_N;
+    if (rpt_rows > scr_row + 1 + ROWS_AFTER)
+        n = rpt_rows - scr_row - 1 - ROWS_AFTER;
+    return n < lo ? lo : n > I21_N ? I21_N : n;
+}
+
+static void report_lines(void)
 {
     u16 *f = rpt_regs;
-    quiet();
-    oem_off();
-    if (rpt_count) {
-        /* what went wrong in the report, raw (on a line of its own: the
-           fault may have come in the middle of one) */
-        kputs("\r\n");
-        raw_line("w16: a fault in the fault report: exception ", rpt_nest);
-        kputs("w16: the report again, without the step that faulted\r\n");
-    }
+    if (rpt_count)
+        fault_note();
     kputs("w16: exception ");
     kputhex(f[0]);
     kputs(" at ");
@@ -593,33 +768,223 @@ static void report_body(void)
     kputs("\r\n");
     print_stack(f[6], f[5], f[13]);
     if (step(RS_RING))
-        print_int21_ring(rpt_pos);
+        print_int21_ring(rpt_pos, ring_count());
     step_end();
     if (step(RS_TRACE))
         trace_print();
     step_end();
+}
+
+/* ---- the crash log's DOS calls ---- */
+
+/* one INT 21h call of the log's, as the step RS_FILE: 1 when it was made
+   and succeeded */
+static int log_call(regs16 *r)
+{
+    u16 was = rpt_step;
+    int ok = 0;
+    if (!rpt_fail && step(RS_FILE))
+        ok = !dos21(r);
+    rpt_step = was;
+    return ok;
+}
+
+static void log_flush(void)
+{
+    regs16 r;
+    u16 n = rpt_bn;
+    rpt_bn = 0;
+    if (!n || !rpt_fopen || rpt_fail)
+        return;
+    kmemset(&r, 0, sizeof r);
+    r.ax = 0x4000;
+    r.bx = rpt_fh;
+    r.cx = n;
+    r.dx = FP_OFF((char FAR *)rpt_buf);
+    r.ds = FP_SEG((char FAR *)rpt_buf);
+    if (!log_call(&r) || r.ax != n)
+        rpt_fail = 1;                   /* (the disk full) */
+}
+
+/* kputs_hook in the log's pass */
+static void __far log_put(const char FAR *s)
+{
+    while (*s) {
+        if (rpt_bn == sizeof rpt_buf)
+            log_flush();
+        rpt_buf[rpt_bn++] = *s++;
+    }
+}
+
+static void log_open(void)
+{
+    regs16 r;
+    kmemset(&r, 0, sizeof r);
+    r.ax = 0x3D01;                      /* open for writing */
+    r.dx = FP_OFF((char FAR *)rpt_path);
+    r.ds = FP_SEG((char FAR *)rpt_path);
+    if (log_call(&r)) {
+        rpt_fh = r.ax;
+        rpt_fopen = 1;
+        kmemset(&r, 0, sizeof r);
+        r.ax = 0x4202;                  /* to the end: DX:AX its size */
+        r.bx = rpt_fh;
+        if (!log_call(&r)) {
+            rpt_fail = 1;
+            return;
+        }
+        if (r.dx == 0 && r.ax == 0)
+            return;
+        if (r.dx == 0 || (r.dx == 1 && r.ax == 0)) {
+            log_put("\r\n========================================"
+                    "=======================================\r\n");
+            return;
+        }
+        /* over 64 KB: emptied (made again) */
+        kmemset(&r, 0, sizeof r);
+        r.ax = 0x3E00;
+        r.bx = rpt_fh;
+        rpt_fopen = 0;
+        log_call(&r);
+    }
+    kmemset(&r, 0, sizeof r);
+    r.ax = 0x3C00;                      /* made (or emptied) */
+    r.dx = FP_OFF((char FAR *)rpt_path);
+    r.ds = FP_SEG((char FAR *)rpt_path);
+    if (!log_call(&r))
+        return;
+    rpt_fh = r.ax;
+    rpt_fopen = 1;
+}
+
+static void log_close(void)
+{
+    regs16 r;
+    log_flush();
+    if (!rpt_fopen)
+        return;
+    rpt_fopen = 0;
+    kmemset(&r, 0, sizeof r);
+    r.ax = 0x3E00;
+    r.bx = rpt_fh;
+    if (log_call(&r) && !rpt_fail)
+        rpt_written = 1;
+}
+
+static void put2(u16 v)
+{
+    char b[3];
+    b[0] = (char)('0' + v / 10 % 10);
+    b[1] = (char)('0' + v % 10);
+    b[2] = 0;
+    kputs(b);
+}
+
+/* "w16 crash report, 1992-06-15 10:00:05, w16 0.2 (abc1234), KRNL386" */
+static void log_header(void)
+{
+    regs16 r;
+    kputs("w16 crash report, ");
+    kmemset(&r, 0, sizeof r);
+    r.ax = 0x2A00;                      /* the date: CX year, DH month, DL day */
+    if (log_call(&r)) {
+        kputdec(r.cx);
+        kputs("-");
+        put2(r.dx >> 8);
+        kputs("-");
+        put2(r.dx & 0xFF);
+        kmemset(&r, 0, sizeof r);
+        r.ax = 0x2C00;                  /* the time: CH:CL:DH */
+        if (log_call(&r)) {
+            kputs(" ");
+            put2(r.cx >> 8);
+            kputs(":");
+            put2(r.cx & 0xFF);
+            kputs(":");
+            put2(r.dx >> 8);
+        }
+    } else
+        kputs("(no date)");
+    kputs(", w16 " W16_VERSION " (" W16_BUILD "), ");
+#ifdef KRNL386
+    kputs("KRNL386\r\n");
+#else
+    kputs("KRNL286\r\n");
+#endif
+}
+
+/* the log's pass over: back to the screen */
+static void log_end(void)
+{
+    kputs_hook = 0;
+    rpt_file = 0;
+    kernel_psp(0);
+}
+
+/* the crash log's pass (once) */
+static void crash_log(void)
+{
+    if (!rpt_path[0] || rpt_logged)
+        return;
+    rpt_logged = 1;
+    rpt_file = 1;
+    lim_words = 64;
+    lim_frames = 32;
+    kernel_psp(1);
+    log_open();
+    if (rpt_fopen) {
+        kputs_hook = log_put;
+        log_header();
+        report_lines();
+        log_close();
+    }
+    log_end();
+}
+
+static void report_end(void)
+{
+    kputs_hook = 0;
+    if (rpt_written) {
+        kputs("w16: report written to ");
+        kputs(rpt_path);
+        kputs("\r\n");
+    }
     kexit_to_dos(0xFF);
 }
 
-static void print_int21_ring(u16 pos)
+static void report_body(void)
 {
-    {
-        u16 i, k = pos;
-        kputs("last INT 21h calls (oldest first):\r\n");
-        for (i = 0; i < 16; i++) {
-            k = k + 10 >= 160 ? 0 : k + 10;
-            if (!ring[k / 2 + 4])
-                continue;
-            reg("AX", ring[k / 2]);
-            reg("BX", ring[k / 2 + 1]);
-            reg("DX", ring[k / 2 + 2]);
-            kputs(" from ");
-            kputhex(ring[k / 2 + 4]);
-            kputs(":");
-            kputhex(ring[k / 2 + 3]);
-            where(ring[k / 2 + 4]);
-            kputs("\r\n");
-        }
+    quiet();
+    oem_off();
+    kputs_hook = scr_put;
+    lim_words = 16;
+    lim_frames = 12;
+    report_lines();
+    kputs_hook = 0;
+    crash_log();
+    report_end();
+}
+
+static void print_int21_ring(u16 pos, u16 n)
+{
+    u16 i, k;
+    if (n > I21_N)
+        n = I21_N;
+    kputs("last INT 21h calls (oldest first):\r\n");
+    for (i = n; i--; ) {
+        /* (the entry i before the latest; pos is the latest's byte) */
+        k = (pos / 10 + I21_N - i) % I21_N * 5;
+        if (!ring[k + 4])
+            continue;
+        reg("AX", ring[k]);
+        reg("BX", ring[k + 1]);
+        reg("DX", ring[k + 2]);
+        kputs(" from ");
+        kputhex(ring[k + 4]);
+        kputs(":");
+        kputhex(ring[k + 3]);
+        where(ring[k + 4]);
+        kputs("\r\n");
     }
 }
 
@@ -778,7 +1143,7 @@ void __cdecl wd_report(void)
         where(s[j + 1]);
         kputs("\r\n");
     }
-    print_int21_ring(ipos);
+    print_int21_ring(ipos, 16);
     trace_print();
     kexit_to_dos(0xFE);
 }

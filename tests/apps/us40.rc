@@ -1,0 +1,7 @@
+/* us40.rc - US40.EXE's bitmaps (tests/apps/us40.c), made by us40bmp.py */
+1 BITMAP "us40bw.bmp"
+2 BITMAP "us40wb.bmp"
+3 BITMAP "us40rw.bmp"
+4 BITMAP "us40rg.bmp"
+5 BITMAP "us40rwc.bmp"
+6 BITMAP "us40bwc.bmp"

@@ -316,6 +316,111 @@ module FAR *module_of(u16 h)
     return task_module_of_sel(h);       /* a later instance's DGROUP */
 }
 
+/* ---- module tables a program made (Win32s's) ---- */
+
+/* Win32s's WIN32S16.DLL gives each Win32 DLL a 16-bit module of its own,
+   built in memory, not by the loader (observed at run time, its blocks
+   dumped): a moveable block starting "NE" with no segments, flags 8000h,
+   a resource table whose types have Win32s's handler, a resident name,
+   its own owner (FarSetOwner), not in the module list; and a block of
+   80h bytes it owns that is the DLL's 16-bit hInstance. Observed on 3.1
+   with such a module made the same way (TK83): GetExePtr of the module's
+   selector, its handle and the instance block give the module's
+   selector, GetModuleUsage and GetModuleHandle(MAKELP(0, h)) take them,
+   FindResource, LoadResource (the type's handler gets the instance as
+   given), LockResource, FreeResource and USER's LoadString work on its
+   table; GetModuleHandle by its name gives 0. KERNEL's own module code
+   keeps a structure beside each table it loaded; for one a program made
+   it keeps one here, made when the table is first asked for, never in
+   the module list, and dropped once the block is no longer such a
+   table. UNVERIFIED: whether 3.1 also takes a block "NE" that is not its
+   own owner (w16 does not: a program's copy of a file's header). */
+#define FOREIGN_N 32
+static module FAR *foreign[FOREIGN_N];
+
+/* the selector of h's block if it is a module table a program made: it
+   starts "NE" and is its own owner; 0 if not */
+static u16 foreign_sel(u16 h)
+{
+    u16 sel = (u16)(GlobalHandle(h) >> 16), o;
+    if (!sel || sel_lim16(sel) < 0x3F || MDB_W(sel, 0) != 0x454E)
+        return 0;
+    o = gowner(sel);
+    return o && same_sel(o, sel) ? sel : 0;
+}
+
+static module FAR *foreign_of(u16 sel)
+{
+    module FAR *m;
+    u16 i, free_i = FOREIGN_N, o, k;
+    const u8 FAR *t = MK_FP(sel, 0);
+    u16 lim = sel_lim16(sel);
+    for (i = 0; i < FOREIGN_N; i++) {
+        m = foreign[i];
+        if (!m || !m->ne_sel) {
+            if (free_i == FOREIGN_N)
+                free_i = i;
+            continue;
+        }
+        if (foreign_sel(m->ne_sel) != m->ne_sel) {
+            m->ne_sel = 0;              /* freed: the slot is free again */
+            if (free_i == FOREIGN_N)
+                free_i = i;
+            continue;
+        }
+        if (same_sel(m->ne_sel, sel))
+            return m;
+    }
+    if (free_i == FOREIGN_N)
+        return NULL;
+    if (!foreign[free_i] && (foreign[free_i] = mod_new(0)) == NULL)
+        return NULL;
+    m = foreign[free_i];
+    m->ne_sel = sel;
+    m->flags = NE_HDR(m)->flags;
+    m->seg_count = 0;
+    m->rsrc_ready = 1;                  /* its handlers are the maker's */
+    m->lib_ran = 1;
+    m->name[0] = 0;
+    m->path[0] = 0;
+    o = NE_HDR(m)->resname_off;         /* the resident name */
+    if (o && o < lim && t[o] <= MODNAME_MAX && o + t[o] <= lim) {
+        for (k = 0; k < t[o]; k++)
+            m->name[k] = t[o + 1 + k];
+        m->name[k] = 0;
+    }
+    o = MDB_W(sel, MDB_LOADFILE);       /* the load file information */
+    if (o && o < lim && t[o] > 8 && o + 1 + t[o] <= lim) {
+        for (k = 0; k + 1 < DOS_PATHMAX && 8 + k < t[o] && t[o + 8 + k]; k++)
+            m->path[k] = t[o + 8 + k];
+        m->path[k] = 0;
+    }
+    return m;
+}
+
+/* The module GetExePtr finds for h: the module of module_of, else a
+   module table a program made that h is or that owns h's block, else a
+   module whose table owns h's block (a resource's: TK83 "GetExePtr
+   (resource)"). */
+module FAR *module_of_exe(u16 h)
+{
+    module FAR *m = module_of(h);
+    u16 s, o;
+    if (m || !h)
+        return m;
+    if ((s = foreign_sel(h)) != 0)
+        return foreign_of(s);
+    o = gowner(h);
+    if (!o || same_sel(o, h))
+        return NULL;
+    for (m = module_first; m; m = m->next)
+        if (same_sel(m->ne_sel, o))
+            return m;
+    if ((s = foreign_sel(o)) != 0)
+        return foreign_of(s);
+    return NULL;
+}
+
 /* What LoadLibrary returns for a module. Observed on Windows 3.1: the
    handle of the automatic data segment (DS & ~1) for a DLL with one,
    the hModule for a DLL without (TKNOD.DLL), and for KERNEL an odd
@@ -511,7 +616,7 @@ u32 KAPI GetModuleHandle(const char FAR *name)                /* KERNEL.47 */
     if (!name)
         return 0;
     if (!FP_SEG(name)) {
-        m = module_of(FP_OFF(name));
+        m = module_of_exe(FP_OFF(name));
         return head | (m ? m->ne_sel : 0);
     }
     m = module_find(name);
@@ -525,7 +630,7 @@ u32 KAPI GetModuleHandle(const char FAR *name)                /* KERNEL.47 */
    string. */
 u16 KAPI_ES GetModuleFileName(u16 h, char FAR *buf, u16 n)       /* KERNEL.49 */
 {
-    module FAR *m = module_of(h);
+    module FAR *m = module_of_exe(h);
     u16 i;
 
     if (!n)
@@ -595,7 +700,7 @@ u32 KAPI GetProcAddress(u16 h, const char FAR *name)          /* KERNEL.50 */
    kentry.asm's GETEXEPTRX. */
 u16 KAPI GetExePtrC(u16 h)          /* KERNEL.133 (kentry.asm GETEXEPTR: the registers) */
 {
-    module FAR *m = module_of(h);
+    module FAR *m = module_of_exe(h);
     u16 t;
     if (m)
         return m->ne_sel;
@@ -611,6 +716,6 @@ u16 KAPI GetExePtrC(u16 h)          /* KERNEL.133 (kentry.asm GETEXEPTR: the reg
    UNVERIFIED: the result for a handle that is not a module (0 here). */
 u16 KAPI GetModuleUsage(u16 h)                                /* KERNEL.48 */
 {
-    module FAR *m = module_of(h);
+    module FAR *m = module_of_exe(h);
     return m ? MOD_USAGE(m) : 0;
 }

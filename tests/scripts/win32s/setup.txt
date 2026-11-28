@@ -64,3 +64,233 @@ key Return
 sleep 15
 settle 180 10
 shot freecellrun
+; Freecell plays (the pointer moved with WIN.INI MouseSpeed=0, set by
+; tests/win32sinst.sh: one pixel a unit): game 1 (Game > Select Game,
+; F3); the click that makes DOSBox take the mouse on Freecell's empty
+; table first
+click 1
+sleep 1
+key F3
+sleep 3
+settle 30 3
+type 1
+key Return
+sleep 5
+settle 60 5
+shot freecelldeal
+; the 6 of spades (column 1) to free cell 1, the 3 of diamonds and the 2
+; of clubs (column 6) to free cells 2 and 3: the aces of clubs and spades
+; and the 2 of clubs then go home by themselves ("Cards Left: 49")
+; column 1's last card
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 6 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+sleep 0.5
+click 1
+sleep 2
+; free cell 1
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 17 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 20
+sleep 0.05
+move 0 10
+sleep 0.05
+sleep 0.5
+click 1
+sleep 3
+; column 6's last card
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 16 0
+sleep 0.05
+sleep 0.5
+click 1
+sleep 2
+; free cell 2
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 10
+sleep 0.05
+move 8 0
+sleep 0.05
+sleep 0.5
+click 1
+sleep 3
+; column 6's last card again
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 16 0
+sleep 0.05
+sleep 0.5
+click 1
+sleep 2
+; free cell 3
+home
+home
+sleep 0.3
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 20
+sleep 0.05
+move 20 10
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 20 0
+sleep 0.05
+move 19 0
+sleep 0.05
+sleep 0.5
+click 1
+sleep 6
+settle 60 5
+shot freecellmoved
+; Alt+F4: "Do you want to resign this game?", Yes: Freecell ends
+key alt+F4
+sleep 3
+settle 30 3
+shot freecellresign
+key Return
+sleep 10
+settle 120 8
+shot freecellend

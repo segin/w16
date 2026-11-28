@@ -93,7 +93,7 @@ void cannot_find_box(const char FAR *name, const char *ext);  /* kmisc2.c: OF_PR
 
 /* ---- fault.c ---- */
 void fault_init(void);
-void text_mode(void);
+u16  text_mode(void);                    /* 1: mode 3 was set */
 void wd_start(u16 seconds);
 void wd_progress(void);
 void wd_stop(void);
@@ -109,6 +109,8 @@ u16  kstrlen(const char FAR *s);
 int  kstricmp(const char FAR *a, const char FAR *b);
 int  kstrnicmp_p(const char FAR *a, const u8 FAR *pstr);  /* vs length-prefixed */
 void kputs(const char FAR *s);
+void kputs_out(const char FAR *s);      /* standard output, never the hook */
+extern void (__far *kputs_hook)(const char FAR *s);    /* fault.c */
 void kputhex(u16 v);
 void kdbg(const char FAR *s);           /* util.c: w16's diagnostics */
 void kdbg_file(const char FAR *s);
@@ -244,6 +246,7 @@ module FAR *module_load_program_init(const char FAR *path, u16 *err, u16 *libini
 module FAR *module_find(const char FAR *name);
 module FAR *module_find_file(const char FAR *name);
 module FAR *module_of(u16 h);
+module FAR *module_of_exe(u16 h);    /* GetExePtr's: owners, tables a program made */
 u16      module_instance(module FAR *m);
 int      module_entry(module FAR *m, u16 ordinal, u16 *sel, u16 *off, int *is_const);
 module FAR *mod_new(u16 seg_count);

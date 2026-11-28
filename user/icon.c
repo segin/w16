@@ -542,8 +542,18 @@ BOOL WINAPI DrawIcon(HDC hdc, int x, int y, HICON h)
     return TRUE;
 }
 
+/* a colour of a 1-bit DIB's table that keeps it monochrome */
+static int bw(BYTE r, BYTE g, BYTE b)
+{
+    return (r == 0 && g == 0 && b == 0) || (r == 255 && g == 255 && b == 255);
+}
+
 /* LoadBitmap: a DIB resource made into a device bitmap; hinst NULL means
-   the display driver's OBM_* bitmaps */
+   the display driver's OBM_* bitmaps. Observed on 3.1 (US40): a 1-bit
+   DIB is a monochrome bitmap when its colour table holds only black and
+   white (in either order), else a bitmap of the screen's format in its
+   own colours (Win32s's Freecell: CARDS.DLL's hearts and diamonds are
+   1-bit red and white; w16 drew their pips black) */
 HBITMAP WINAPI LoadBitmap(HINSTANCE hinst, LPCSTR name)
 {
     HMODULE mod = hinst ? K_GETEXEPTR(hinst) : hModDisplay;
@@ -568,12 +578,22 @@ HBITMAP WINAPI LoadBitmap(HINSTANCE hinst, LPCSTR name)
         mono = bc->bcBitCount == 1 && bc->bcPlanes == 1;
         nc = bc->bcBitCount <= 8 ? 1 << bc->bcBitCount : 0;
         bits = (const BYTE __far *)bi + bc->bcSize + nc * sizeof(RGBTRIPLE);
+        if (mono) {
+            const RGBTRIPLE __far *t = (const RGBTRIPLE __far *)((const BYTE __far *)bi + bc->bcSize);
+            mono = bw(t[0].rgbtRed, t[0].rgbtGreen, t[0].rgbtBlue) &&
+                   bw(t[1].rgbtRed, t[1].rgbtGreen, t[1].rgbtBlue);
+        }
     } else {
         cx = (int)bi->biWidth;
         cy = (int)bi->biHeight;
         mono = bi->biBitCount == 1 && bi->biPlanes == 1;
         nc = dib_colors(bi);
         bits = (const BYTE __far *)bi + bi->biSize + nc * sizeof(RGBQUAD);
+        if (mono) {
+            const RGBQUAD __far *q = (const RGBQUAD __far *)((const BYTE __far *)bi + bi->biSize);
+            mono = bw(q[0].rgbRed, q[0].rgbGreen, q[0].rgbBlue) &&
+                   (nc < 2 || bw(q[1].rgbRed, q[1].rgbGreen, q[1].rgbBlue));
+        }
     }
     bm = mono ? CreateBitmap(cx, cy, 1, 1, NULL) : CreateCompatibleBitmap(hdcScreen, cx, cy);
     if (bm)

@@ -1,0 +1,6 @@
+# TK83.EXE (tests/apps/tk83.c): a module table made by the program
+@tests/apps/app.lnk
+import K_GETEXEPTR KERNEL.133
+import K_FARSETOWNER KERNEL.403
+import K_GETEXPWINVER KERNEL.167
+import K_DIRECTRESALLOC KERNEL.168
