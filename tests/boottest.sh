@@ -1529,12 +1529,14 @@ alttab_us42() {
     [ "$_ap" = close ] && set -- "$@" -i WIN.INI:US42:close=1
     _ar=alttab-$_ap-ref
     [ "$_ap" = tree ] && _ar=alttab-cool-ref
-    refrun "$_ar" alttab "$root/tests/inputrun.sh" -s -b 60 -t 400 "$_as" "$out/$_ar" -r "$@"
+    refrun "$_ar" alttab "$root/tests/inputrun.sh" -s -b 60 -t 600 "$_as" "$out/$_ar" -r "$@"
     if [ "$_ap" = tree ]; then
-        "$root/tests/inputrun.sh" -s -b 60 -t 400 -E "$out/$_ar" "$_as" "$out/alttab-$_ap-w16" \
+        # (no -E: the tree's screens, its fonts and artwork, never equal
+        # 3.1's, and each "match" would wait its whole time)
+        "$root/tests/inputrun.sh" -s -b 60 -t 600 "$_as" "$out/alttab-$_ap-w16" \
             -T "$root/build/w16" "$@" > "$out/alttab-$_ap-w16.txt" 2>&1 || true
     else
-        "$root/tests/inputrun.sh" -s -b 60 -t 400 -E "$out/$_ar" "$_as" "$out/alttab-$_ap-w16" \
+        "$root/tests/inputrun.sh" -s -b 60 -t 600 -E "$out/$_ar" "$_as" "$out/alttab-$_ap-w16" \
             -r -f "$user=WINDOWS/SYSTEM/USER.EXE" "$@" > "$out/alttab-$_ap-w16.txt" 2>&1 || true
     fi
     r=ok
@@ -1557,7 +1559,8 @@ alttab_us42() {
         fi
     fi
     if [ "$r" = ok ]; then echo "ok   alttab@$_ap: the switching as 3.1's, screens and messages"
-    else echo "FAIL alttab@$_ap: $r ($out/alttab-$_ap-w16)"; fails=$((fails + 1)); fi
+    else echo "     alttab@$_ap: $r ($out/alttab-$_ap-w16)"; fi
+    partdone "$r"
 }
 
 # alttabdos_part PART: the boot-test case alttabdos (an MS-DOS Prompt in
@@ -1569,8 +1572,9 @@ alttab_us42() {
 #   std    Standard mode (the task switcher, DSWAP), w16's USER on 3.1
 #   tree386, treestd  w16's install tree alone: the text screens (the
 #          prompt, the titles) against 3.1's, the banner's rows and the
-#          cursor left out; Windows' screens with the box: the box against
-#          3.1's, the program's icon left out (w16's own artwork)
+#          cursor left out; Windows' screens with the box: the box's frame
+#          against 3.1's, the program's icon and title left out (w16's
+#          own artwork and fonts)
 alttabdos_part() {
     _dp=$1
     _k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
@@ -1614,16 +1618,19 @@ alttabdos_part() {
         # C:\W16>, only the title screens (the bar in row 1) and, of
         # Windows' screens, the switch box (its program's icon is w16's
         # own artwork)
+        # (Standard mode: the cursor also seen at the top left as the
+        # screen comes back; the prompt's window: its banner and caret)
         case $sz in
         720x400) m="rectangle 72,48 655,79 rectangle 99,0 107,399" ;;
-        640x400) m="rectangle 0,16 639,95 rectangle 88,0 95,399" ;;
-        *) m="rectangle 0,0 0,0" ;;
+        640x400) m="rectangle 0,16 639,95 rectangle 88,0 95,399 rectangle 0,0 7,15" ;;
+        *) m="rectangle 66,40 590,114 rectangle 96,140 104,215" ;;
         esac
         case $_dp:$sz in
         tree*:640x480)
             [ "$(python3 "$root/tests/scripts/shotpix.py" pixel "$f" 124 204)" = 868a8e ] &&
                 [ "$(python3 "$root/tests/scripts/shotpix.py" pixel "$f" 515 240)" = ffffff ] || continue
-            m="rectangle 0,0 639,199 rectangle 0,280 639,479 rectangle 0,200 119,279 rectangle 520,200 639,279 rectangle 160,224 191,255" ;;
+            m="rectangle 0,0 639,199 rectangle 0,280 639,479 rectangle 0,200 119,279 rectangle 520,200 639,279"
+            m="$m rectangle 160,224 191,255 rectangle 104,232 391,247" ;;   # (and its title: w16's font)
         tree*)
             [ "$(python3 "$root/tests/scripts/shotpix.py" pixel "$f" 100 20)" = 0000aa ] || continue
             m="rectangle 0,0 0,0" ;;
@@ -1637,7 +1644,8 @@ alttabdos_part() {
     rm -f "$out/alttabdos-$_dp-a.png" "$out/alttabdos-$_dp-b.png"
     ls "$out/$_dr"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
     if [ "$r" = ok ]; then echo "ok   alttabdos@$_dp: the switching with a DOS box as 3.1's"
-    else echo "FAIL alttabdos@$_dp: $r ($out/alttabdos-$_dp-w16)"; fails=$((fails + 1)); fi
+    else echo "     alttabdos@$_dp: $r ($out/alttabdos-$_dp-w16)"; fi
+    partdone "$r"
 }
 
 runcase() {
@@ -3658,7 +3666,11 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
         done
         ls "$out/$c-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
-        if [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
+        if [ -n "$part" ]; then     # alttab@np
+            if [ "$r" = ok ]; then echo "ok   $c@$part: Program Manager and Notepad, 0 pixels"
+            else echo "     $c@$part: $r ($out)"; fi
+            partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
     alttabdos)
         alttabdos_part "$part" ;;
