@@ -257,6 +257,8 @@ void inc_paint(HQUEUE hq);
 void dec_paint(HQUEUE hq);
 LONG send_message(HWND h, UINT msg, WPARAM wp, LPARAM lp);
 LONG call_wnd(PWND w, HWND h, UINT msg, WPARAM wp, LPARAM lp);
+extern HQUEUE hqAppExit;      /* msg.c: the ending task's queue (misc.c app_exit) */
+BOOL app_exit_skips(PWND w, FARPROC f);
 BOOL post_message(HQUEUE hq, HWND h, UINT msg, WPARAM wp, LPARAM lp);
 extern HQUEUE hqFirst;
 extern HQUEUE hqBoot;           /* the queue of the boot task */

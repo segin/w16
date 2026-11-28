@@ -233,6 +233,12 @@ the installer, Apple's, comes from `$W16_QTDIR`, default
 `~/Downloads/qtw16`, which must hold `QTINSTAL.EXE`; skipped without it;
 `-m FILE` puts Microsoft's file back for bisection, `-t FILE` lays only that file of the tree over 3.1; the boot-test case
 `quicktime`, parts `over`, `tree` and `tree386`),
+`tests/acroread.sh` (Adobe Acrobat Reader 2.0, installed, from
+`$W16_ACROREAD_DIR`, default `~/Downloads/acroread`: the C:\ACROREAD files
+and optionally Setup's ACROREAD.INI; without Adobe Type Manager it shows its
+box and ends itself, on w16's tree and on 3.1 in 386 Enhanced mode, and
+Windows must go on and end without a fault; skipped without it; the
+boot-test case `acroread`),
 `tests/staroff.sh` (StarOffice 3.1's CD image, `$W16_STAROFF_ISO`, default
 `~/Downloads/staroffice/STAROFF.ISO`, mounted as a CD-ROM drive D: with
 `tests/dropin.sh`'s `DROPIN_CDROM`; Microsoft's OLE 2 libraries from it

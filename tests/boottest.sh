@@ -25,6 +25,17 @@
 #   lastexit   the shell (TK55) ends at once: WIN's ERRORLEVEL 0 and text
 #              mode 3 afterwards, as 3.1's KERNEL ends Windows through
 #              USER's ExitWindows when the last task ends (ref and w16)
+#   appexit    TK82 (tests/apps/tk82.c) as the shell: programs that end
+#              with INT 21h 4C00h (DOS3Call, INT 0 put back first) with
+#              their windows up, from a window procedure, after the
+#              message loop, under a MessageBox, hidden: no message reaches
+#              their windows after the exit call, and the windows are
+#              gone; Microsoft's 3.1 (386 Enhanced), 3.1 with w16's USER
+#              (Standard) and w16's tree (386 Enhanced): the logs the same
+#   acroread   Adobe Acrobat Reader 2.0 without ATM on w16's tree and on
+#              3.1 (tests/acroread.sh; skipped without its files,
+#              $W16_ACROREAD_DIR): it ends itself after its box, and
+#              Windows goes on and ends without a fault
 #   kexedir    TK69 (tests/apps/tk69.c) as the shell: where KERNEL finds
 #              the DLLs a program in a directory of its own imports, what
 #              LoadModule and WinExec make of OS/2 and other foreign NE,
@@ -1180,7 +1191,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit kexedir wpregs mdistyle selfload staroff win32s w32m rsrchandler exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit appexit acroread kexedir wpregs mdistyle selfload staroff win32s w32m rsrchandler exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1592,6 +1603,44 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   lastexit: the last task's end ends Windows through ExitWindows (ERRORLEVEL 0, mode 3)"
         else echo "FAIL lastexit: $r ($out/lastexit-w16)"; fails=$((fails + 1)); fi ;;
+    appexit)
+        # the user's report (2026-11-27): Acrobat Reader 2.0 ended itself
+        # with its windows up and w16's USER called its window procedure
+        # (a fault). TK82 (tests/apps/tk82.c, its cases in TK82A.EXE)
+        ax() {   # LABEL dropin.sh options...: TK82's run, its log in appexit-LABEL/c
+            _l=$1; shift
+            "$root/tests/dropin.sh" -t 120 -W TK82.END -o "$out/appexit-$_l" \
+                -f "$root/build/dos/TK82.EXE=TK82.EXE" -f "$root/build/dos/TK82A.EXE=TK82A.EXE" \
+                -i 'boot:shell=C:\TK82.EXE' "$@" > "$out/appexit-$_l.txt" 2>&1 || true
+        }
+        ax ref -r -3 -c 'WIN /3 /B' &
+        ax user -r -f "$user=WINDOWS/SYSTEM/USER.EXE" &
+        ax tree -T "$root/build/w16" -3 -c 'WIN /3 /B' &
+        wait
+        r=ok
+        for k in ref user tree; do
+            tr -d '\r' < "$out/appexit-$k/c/TK82.LOG" > "$out/appexit-$k.log" 2>/dev/null || true
+            grep -q '^T done' "$out/appexit-$k.log" ||
+                { [ "$r" = ok ] && r="TK82 did not finish ($k: $out/appexit-$k.log)"; }
+        done
+        [ "$r" != ok ] || [ "$(grep -c '^[abcd] E 1' "$out/appexit-ref.log")" = 4 ] ||
+            r="a case did not end on 3.1 ($out/appexit-ref.log)"
+        for k in user tree; do
+            [ "$r" != ok ] || cmp -s "$out/appexit-ref.log" "$out/appexit-$k.log" ||
+                r="$k: the log differs from 3.1's ($out/appexit-ref.log, appexit-$k.log)"
+            [ "$r" != ok ] || ! grep -q '^w16: exception' "$out/appexit-$k.txt" ||
+                r="$k: $(grep -m1 '^w16: exception' "$out/appexit-$k.txt")"
+        done
+        if [ "$r" = ok ]; then echo "ok   appexit: a program ending with INT 21h 4Ch, windows up: none of its window procedures called, its windows gone, as 3.1"
+        else echo "FAIL appexit: $r"; fails=$((fails + 1)); fi ;;
+    acroread)
+        # Acrobat Reader 2.0 (tests/acroread.sh; skip without $W16_ACROREAD_DIR)
+        "$root/tests/acroread.sh" -o "$out/acroread" > "$out/acroread.txt" 2>&1 || true
+        if grep -q '^FAIL' "$out/acroread.txt"; then
+            echo "FAIL acroread: $(grep -m1 '^FAIL' "$out/acroread.txt" | sed 's/^FAIL *acroread: //') ($out/acroread.txt)"; fails=$((fails + 1))
+        elif grep -q '^skip' "$out/acroread.txt"; then echo "ok   acroread: $(grep -m1 '^skip' "$out/acroread.txt")"
+        elif grep -q '^ok' "$out/acroread.txt"; then echo "ok   acroread: $(grep -m1 '^ok' "$out/acroread.txt" | sed 's/^ok *acroread: //')"
+        else echo "FAIL acroread: no result ($out/acroread.txt)"; fails=$((fails + 1)); fi ;;
     kexedir)
         # TK69 (tests/apps/tk69.c): Microsoft's KRNL386, w16's KRNL286 and
         # KRNL386 (Standard mode), the logs the same
