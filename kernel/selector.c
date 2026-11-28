@@ -111,6 +111,23 @@ u16 sel_lim16(u16 sel)
     return l > 0xFFFFUL ? 0xFFFF : (u16)l;
 }
 
+/* kstr.asm's lstrcpy and the like have no stack to spare for a call:
+   they read whether the 32-bit LSL can be used from a byte in their own
+   code segment, written here once through a data descriptor over it. */
+extern void __far str386(void);
+#pragma aux str386 "_str386"
+
+void str_init(void)
+{
+    void __far *p = (void __far *)str386;
+    u16 a;
+    if (!is386() || (a = dpmi_alloc_desc(1)) == 0)
+        return;
+    if (dpmi_set_desc(a, dpmi_get_base(FP_SEG(p)), (u32)FP_OFF(p), 0))
+        *(u8 __far *)MK_FP(a, FP_OFF(p)) = 1;
+    dpmi_free_desc(a);
+}
+
 /* LAR's view: access byte in the low byte, the flags nibble of byte 6
    (G, D, AVL) in bits 12-15; 0 when LAR fails. */
 static u16 seg_rights(u16 sel)

@@ -574,6 +574,12 @@
 #              part tree, w16's install tree alone with its WIN386 and
 #              paging file (ARCHITECTURE.md 12.17), the same; every part
 #              then starts Win32s's Freecell (its window must come up)
+#   strstack   how much of the caller's stack lstrcpy, lstrcat, lstrlen and
+#              lstrcpyn write below their return address: TK83 as the
+#              shell (tests/apps/tk83.c), its log with w16's KRNL286 (part
+#              k286) and KRNL386 (k386) the same as on 3.1 (Adobe Type
+#              Manager 3.0's installer copies a string from below its
+#              stack pointer)
 #   rsrchandler KERNEL's default resource handler given a block that holds
 #              data (Win32s's handlers fill one and call it): TK81 as the
 #              shell (tests/apps/tk81.c), its log with w16's KRNL286 (part
@@ -1185,7 +1191,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit appexit acroread kexedir wpregs mdistyle selfload staroff win32s w32m rsrchandler exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit appexit acroread kexedir wpregs mdistyle selfload staroff win32s w32m rsrchandler strstack exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -4318,13 +4324,14 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   sb16"
         else echo "FAIL sb16: $r ($out)"; fails=$((fails + 1)); fi ;;
-    nametable|dlgfocus|rsrchandler)
+    nametable|dlgfocus|rsrchandler|strstack)
         # a probe as the shell on 3.1 and with w16's KERNEL or USER: the
         # logs (TK.LOG) must be equal
         r=ok
         case $c in
         nametable) pr=TK74 p=${part:-k286} ;;
         rsrchandler) pr=TK81 p=${part:-k286} ;;
+        strstack) pr=TK83 p=${part:-k286} ;;
         *) pr=US37 p=${part:-user} ;;
         esac
         # pbrun NAME [dropin.sh options]: the probe's TK.LOG in NAME.log
@@ -6861,7 +6868,7 @@ caseparts() {
     sb16) echo "$1@dev $1@audio $1@prog $1@enh $1@cont" ;;
     bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;
     filecdr) echo "$1@k286 $1@k386 $1@userk" ;;
-    nametable|rsrchandler) echo "$1@k286 $1@k386" ;;
+    nametable|rsrchandler|strstack) echo "$1@k286 $1@k386" ;;
     installers) echo "$1@WEP1 $1@WEP2 $1@WEP3 $1@BW $1@W4 $1@JOHNNY $1@WP3 $1@MP52" ;;
     win32s) echo "$1@k386 $1@treems $1@tree" ;;
     exitexec) echo "$1@k386 $1@user $1@wincom $1@tree" ;;
@@ -6951,6 +6958,9 @@ partsummary() {
     rsrchandler)
         if [ $pbad = 0 ]; then echo "ok   rsrchandler: TK81's calls of KERNEL's default resource handler as on 3.1 (w16's KRNL286, KRNL386)"
         else echo "FAIL rsrchandler: $pfirst ($out)"; fi ;;
+    strstack)
+        if [ $pbad = 0 ]; then echo "ok   strstack: lstrcpy, lstrcat, lstrlen and lstrcpyn use as much of their caller's stack as on 3.1 (TK83; w16's KRNL286, KRNL386)"
+        else echo "FAIL strstack: $pfirst ($out)"; fi ;;
     exitexec)
         if [ $pbad = 0 ]; then echo "ok   exitexec: ExitWindowsExec's programs, tails and restarts as 3.1's (w16's KRNL386, USER, tree)"
         else echo "FAIL exitexec: $pfirst ($out)"; fi ;;

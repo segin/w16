@@ -87,6 +87,7 @@ void __cdecl kmain(bootinfo FAR *pbi)
     for (sel_shift = 0; (1u << sel_shift) < sel_inc; sel_shift++)
         ;
 
+    str_init();                         /* lstrcpy's LSL (kstr.asm) */
     dosx_init();
 #ifdef KRNL386
     k386_init();

@@ -126,7 +126,7 @@ found:
 
 /* KERNEL's own "__GP" (KERNEL.342): empty. 3.1's KERNEL lets its
    string and validation functions fault and recovers through its table
-   (35 entries); w16's check pointers before using them (string.c,
+   (35 entries); w16's check pointers before using them (kstr.asm,
    kmisc.c), so it has no ranges to list. */
 u16 gp_table[4];
 #pragma aux gp_table "__GP"

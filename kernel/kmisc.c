@@ -562,7 +562,7 @@ static int range_ok(u16 sel, u32 off, u32 n, int write)
 }
 
 /* how many bytes from p on can be read (write 0) or written (write 1)
-   before the segment's limit: 0 for a bad selector (string.c, atom.c:
+   before the segment's limit: 0 for a bad selector (atom.c:
    copying up to where 3.1's would fault, US27) */
 u32 ptr_room(const void FAR *p, int write)
 {
@@ -636,34 +636,7 @@ u16 KAPI IsBadHugeWritePtr(void FAR *p, u32 n)
     return huge_bad(p, n, 1);
 }
 
-/* lstrcpyn (KERNEL.353, SDK): copy at most n - 1 characters and a NUL;
-   returns dst. 3.1's lets a bad pointer fault and recovers (its "__GP"
-   table): what it copied before the fault stays (US27: USER's
-   DlgDirSelect into a buffer 4 bytes from a segment's end left the 4
-   bytes "FILE" there and returned 0). w16 copies as far and returns
-   NULL. */
-char FAR * KAPI lstrcpyn(char FAR *dst, const char FAR *src, u16 n)
-{
-    u16 i = 0;
-    u32 rd, wr;
-    if (!n)
-        return dst;
-    rd = ptr_room(src, 0);
-    wr = ptr_room(dst, 1);
-    for (; i + 1 < n; i++) {
-        if (i >= rd)
-            return NULL;
-        if (!src[i])
-            break;
-        if (i >= wr)
-            return NULL;
-        dst[i] = src[i];
-    }
-    if (i >= wr)
-        return NULL;
-    dst[i] = 0;
-    return dst;
-}
+/* lstrcpyn (KERNEL.353): kstr.asm */
 
 /* GetAppCompatFlags (KERNEL.354): Schulman: TDB 4Eh of the task (0: the
    current one). w16 does not fill that field yet, so 0. */
