@@ -211,6 +211,13 @@ void __cdecl shell_hot_key(struct svcregs *r)
         s->hk_pending = 0;
         return;
     }
+    if ((sh_of(v)->flags & SHELL_WINDOWED) && r->edx == HK_ALTESC) {
+        /* Alt+Esc in a window: nothing (Windows 3.1: the MS-DOS Prompt's
+         * window stayed active, the screen as it was; UNVERIFIED whether
+         * the program in it gets the keys) */
+        sh_of(v)->hk_pending = 0;
+        return;
+    }
     if (sh_of(v)->flags & SHELL_WINDOWED) {
         /* in a window (Windows 3.1: Alt+Tab from the MS-DOS Prompt's
          * window showed USER's switch box over Windows; let go, Program
