@@ -441,6 +441,20 @@ $(DOS)/TK82.EXE: $(B)/tests/start.o $(B)/tests/tk82.o tests/apps/app.lnk tests/a
 	$(WLINK) @tests/apps/tk82.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/tk82.map file { $(B)/tests/start.o $(B)/tests/tk82.o }
 
+# US40.EXE: LoadBitmap of 1-bit DIBs with a colour table not black and
+# white (CARDS.DLL's red cards); its bitmaps made by us40bmp.py
+$(B)/tests/us40.o: tests/apps/us40ref.h tests/apps/tklog.h
+$(B)/tests/us40.res: tests/apps/us40.rc tests/apps/us40bmp.py
+	@mkdir -p $(@D)
+	python3 tests/apps/us40bmp.py $(B)/tests
+	cd $(B)/tests && $(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -fo=us40.res $(CURDIR)/tests/apps/us40.rc
+$(DOS)/US40.EXE: $(B)/tests/start.o $(B)/tests/us40.o $(B)/tests/us40.res tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us40.map option resource=$(B)/tests/us40.res \
+	    file { $(B)/tests/start.o $(B)/tests/us40.o }
+dos: $(DOS)/US40.EXE
+
 # TK79.EXE: faults with a stack the fault report must not trust
 $(DOS)/TK79.EXE: $(B)/tests/start.o $(B)/tests/tk79.o tests/apps/app.lnk
 	@mkdir -p $(@D)

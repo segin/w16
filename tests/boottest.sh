@@ -568,7 +568,9 @@
 #              shell (tests/apps/tk81.c); a module table a program made
 #              (Win32s's 16-bit modules of Win32 DLLs): TK82 (tk82.c);
 #              their logs with w16's KRNL286 (part k286) and KRNL386
-#              (k386) the same as on 3.1
+#              (k386) the same as on 3.1; part user: US40 (us40.c,
+#              LoadBitmap of 1-bit DIBs in colour: CARDS.DLL's red cards)
+#              with w16's USER the same as with Microsoft's
 #   w32m       W32M.EXE (tests/win32s/w32m.c, a Win32 probe of Win32s's
 #              memory paths: virtual memory, heaps, a file mapping) on
 #              w16's tree alone with Win32s's files from the Win32s
@@ -4278,7 +4280,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         r=ok
         case $c in
         nametable) prs=TK74 p=${part:-k286} ;;
-        rsrchandler) prs="TK81 TK82" p=${part:-k286} ;;
+        rsrchandler) p=${part:-k286}; prs="TK81 TK82"; [ "$p" != user ] || prs=US40 ;;
         *) prs=US37 p=${part:-user} ;;
         esac
         # pbrun NAME [dropin.sh options]: the probe's TK.LOG in NAME.log
@@ -6820,7 +6822,8 @@ caseparts() {
     sb16) echo "$1@dev $1@audio $1@prog $1@enh $1@cont" ;;
     bigmem) echo "$1@s128 $1@s256 $1@s256ms $1@e128 $1@e256 $1@stock $1@ref" ;;
     filecdr) echo "$1@k286 $1@k386 $1@userk" ;;
-    nametable|rsrchandler) echo "$1@k286 $1@k386" ;;
+    nametable) echo "$1@k286 $1@k386" ;;
+    rsrchandler) echo "$1@k286 $1@k386 $1@user" ;;
     installers) echo "$1@WEP1 $1@WEP2 $1@WEP3 $1@BW $1@W4 $1@JOHNNY $1@WP3 $1@MP52" ;;
     win32s) echo "$1@k386 $1@treems $1@tree" ;;
     exitexec) echo "$1@k386 $1@user $1@wincom $1@tree" ;;
@@ -6908,7 +6911,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   nametable: TK74's FindResource through a name table as on 3.1 (w16's KRNL286, KRNL386)"
         else echo "FAIL nametable: $pfirst ($out)"; fi ;;
     rsrchandler)
-        if [ $pbad = 0 ]; then echo "ok   rsrchandler: TK81's calls of KERNEL's default resource handler and TK82's module table made by a program as on 3.1 (w16's KRNL286, KRNL386)"
+        if [ $pbad = 0 ]; then echo "ok   rsrchandler: TK81's calls of KERNEL's default resource handler and TK82's module table made by a program as on 3.1 (w16's KRNL286, KRNL386); US40's LoadBitmap of 1-bit DIBs in colour (w16's USER)"
         else echo "FAIL rsrchandler: $pfirst ($out)"; fi ;;
     exitexec)
         if [ $pbad = 0 ]; then echo "ok   exitexec: ExitWindowsExec's programs, tails and restarts as 3.1's (w16's KRNL386, USER, tree)"
