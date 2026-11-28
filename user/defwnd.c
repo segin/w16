@@ -379,6 +379,33 @@ void nc_paint(HWND h, HRGN rgn, BOOL active)
     (void)rgn;
 }
 
+/* WM_NCACTIVATE's painting. Observed on 3.1 (US41): the caption is
+   repainted, the menu bar and a thick frame of the default colours are
+   not (Win32s's Freecell writes "Cards Left" into its menu bar, which
+   w16's whole non-client repaint wiped when a message box took the
+   activation). The frame is repainted here when its colour changes with
+   the activation (UNVERIFIED: 3.1's default colours give it none). */
+static void nc_activate_paint(HWND h, BOOL active)
+{
+    PWND w = valid_wnd(h);
+    HDC hdc;
+    RECT cr;
+    int frame;
+    if (!w || !is_visible(w) || (w->style & WS_MINIMIZE))
+        return;
+    hdc = get_dc(h, TRUE, 0, 0);
+    cr = w->rcClient;
+    OffsetRect(&cr, -w->rcWindow.left, -w->rcWindow.top);
+    ExcludeClipRect(hdc, cr.left, cr.top, cr.right, cr.bottom);
+    frame = has_thick(w) ? GetSysColor(COLOR_ACTIVEBORDER) != GetSysColor(COLOR_INACTIVEBORDER)
+                         : GetSysColor(COLOR_ACTIVECAPTION) != GetSysColor(COLOR_INACTIVECAPTION);
+    if (frame)
+        draw_frame(hdc, w, active);
+    if (has_caption(w))
+        draw_caption(hdc, w, active);
+    release_dc(h, hdc);
+}
+
 /* ---- hit testing ---- */
 LONG nc_hittest(PWND w, POINT pt)
 {
@@ -766,7 +793,7 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         else
             w->flags &= ~WF_ACTIVEFRAME;
         if (is_visible(w))
-            nc_paint(h, 0, wp != 0);
+            nc_activate_paint(h, wp != 0);
         /* a minimised window's title under the icon: its colours follow
            (it was repainted only where something had covered it, so
            old highlighting stayed) */

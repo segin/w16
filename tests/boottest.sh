@@ -569,8 +569,9 @@
 #              (Win32s's 16-bit modules of Win32 DLLs): TK82 (tk82.c);
 #              their logs with w16's KRNL286 (part k286) and KRNL386
 #              (k386) the same as on 3.1; part user: US40 (us40.c,
-#              LoadBitmap of 1-bit DIBs in colour: CARDS.DLL's red cards)
-#              with w16's USER the same as with Microsoft's
+#              LoadBitmap of 1-bit DIBs in colour: CARDS.DLL's red cards) and
+#              US41 (us41.c, what WM_NCACTIVATE repaints: Freecell's menu
+#              bar) with w16's USER the same as with Microsoft's
 #   w32m       W32M.EXE (tests/win32s/w32m.c, a Win32 probe of Win32s's
 #              memory paths: virtual memory, heaps, a file mapping) on
 #              w16's tree alone with Win32s's files from the Win32s
@@ -4280,7 +4281,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         r=ok
         case $c in
         nametable) prs=TK74 p=${part:-k286} ;;
-        rsrchandler) p=${part:-k286}; prs="TK81 TK82"; [ "$p" != user ] || prs=US40 ;;
+        rsrchandler) p=${part:-k286}; prs="TK81 TK82"; [ "$p" != user ] || prs="US40 US41" ;;
         *) prs=US37 p=${part:-user} ;;
         esac
         # pbrun NAME [dropin.sh options]: the probe's TK.LOG in NAME.log
@@ -6911,7 +6912,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   nametable: TK74's FindResource through a name table as on 3.1 (w16's KRNL286, KRNL386)"
         else echo "FAIL nametable: $pfirst ($out)"; fi ;;
     rsrchandler)
-        if [ $pbad = 0 ]; then echo "ok   rsrchandler: TK81's calls of KERNEL's default resource handler and TK82's module table made by a program as on 3.1 (w16's KRNL286, KRNL386); US40's LoadBitmap of 1-bit DIBs in colour (w16's USER)"
+        if [ $pbad = 0 ]; then echo "ok   rsrchandler: TK81's calls of KERNEL's default resource handler and TK82's module table made by a program as on 3.1 (w16's KRNL286, KRNL386); US40's LoadBitmap of 1-bit DIBs in colour and US41's WM_NCACTIVATE (w16's USER)"
         else echo "FAIL rsrchandler: $pfirst ($out)"; fi ;;
     exitexec)
         if [ $pbad = 0 ]; then echo "ok   exitexec: ExitWindowsExec's programs, tails and restarts as 3.1's (w16's KRNL386, USER, tree)"

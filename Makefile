@@ -454,6 +454,13 @@ $(DOS)/US40.EXE: $(B)/tests/start.o $(B)/tests/us40.o $(B)/tests/us40.res tests/
 	    option map=$(B)/tests/us40.map option resource=$(B)/tests/us40.res \
 	    file { $(B)/tests/start.o $(B)/tests/us40.o }
 dos: $(DOS)/US40.EXE
+# US41.EXE: what DefWindowProc's WM_NCACTIVATE repaints (Freecell's menu bar)
+$(B)/tests/us41.o: tests/apps/us41ref.h tests/apps/tklog.h
+$(DOS)/US41.EXE: $(B)/tests/start.o $(B)/tests/us41.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us41.map file { $(B)/tests/start.o $(B)/tests/us41.o }
+dos: $(DOS)/US41.EXE
 
 # TK79.EXE: faults with a stack the fault report must not trust
 $(DOS)/TK79.EXE: $(B)/tests/start.o $(B)/tests/tk79.o tests/apps/app.lnk
