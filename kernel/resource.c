@@ -172,7 +172,7 @@ static int find_in(module FAR *m, u16 h, u16 *rp)
 /* The module and entry of a resource handle: first in the table of the
    module that owns its block (as GetExePtr finds it: also a module table
    a program made, whose resources Win32s allocates with AllocResource;
-   TK82), then in any module's. */
+   TK83), then in any module's. */
 static int find_handle(u16 h, module FAR **mp, u16 *rp)
 {
     module FAR *m = module_of_exe(h);

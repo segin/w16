@@ -1,5 +1,5 @@
 /*
- * tk82.c - a module table made by a program, not by KERNEL's loader.
+ * tk83.c - a module table made by a program, not by KERNEL's loader.
  * Found with Win32s's Freecell: Win32s's WIN32S16.DLL gives each Win32
  * DLL a 16-bit module of its own, built in memory (observed at run time,
  * its blocks dumped): a moveable block starting "NE" with no segments,
@@ -11,21 +11,25 @@
  * modules its loader made and found nothing, and Freecell said "Out of
  * memory". This probe makes such a module the same way and asks KERNEL
  * (and USER's LoadString) about it; run as the shell on 3.1 and with
- * w16's KERNEL, the logs compared (boot-test case rsrchandler, part
- * foreign):
+ * w16's KERNEL, the logs compared (boot-test case rsrchandler, parts
+ * k286 and k386):
  *   foreign: GetExePtr of the instance block, of the module's selector
  *        and handle; GetModuleUsage, GetModuleHandle by name and by
  *        handle; FindResource, SizeofResource, LoadResource (what the
  *        type's handler is called with), LockResource, the table's
- *        handle and usage words, FreeResource, LoadString
+ *        handle and usage words, FreeResource, LoadString; GetExpWinVer
+ *        and DirectResAlloc of the instance (Microsoft's USER asks the
+ *        first in LoadBitmap)
  */
 #include <windows.h>
 
-#define TK_REF "tk82ref.h"
+#define TK_REF "tk83ref.h"
 #include "tklog.h"
 
 extern WORD FAR PASCAL K_GETEXEPTR(WORD h);             /* 133 */
 extern void FAR PASCAL K_FARSETOWNER(WORD h, WORD owner); /* 403 */
+extern WORD FAR PASCAL K_GETEXPWINVER(WORD h);          /* 167 */
+extern WORD FAR PASCAL K_DIRECTRESALLOC(WORD h, WORD flags, WORD size); /* 168 */
 
 /* the module table's layout (offsets) */
 #define O_RSRC  0x48            /* after the header and 8 bytes of the
@@ -156,6 +160,13 @@ static void foreign(void)
     obs("foreign: GetModuleUsage(inst)", GetModuleUsage((HINSTANCE)inst));
     id_of("foreign: GetModuleHandle(name)", (WORD)GetModuleHandle("TKMOD"));
     id_of("foreign: GetModuleHandle(inst)", (WORD)GetModuleHandle((LPCSTR)MAKELP(0, inst)));
+    obs("foreign: GetExpWinVer(inst)", K_GETEXPWINVER(inst));
+    h = K_DIRECTRESALLOC(inst, 0, 16);
+    obs("foreign: DirectResAlloc", h != 0);
+    if (h) {
+        id_of("foreign: GetExePtr(DirectResAlloc)", K_GETEXEPTR(h));
+        GlobalFree((HGLOBAL)h);
+    }
     r = (WORD)FindResource((HINSTANCE)inst, MAKEINTRESOURCE(2), RT_RCDATA);
     obs("foreign: FindResource(inst)", r);
     obs("foreign: FindResource(modsel)",
@@ -211,8 +222,8 @@ static void foreign(void)
 
 int __cdecl tmain(void)
 {
-    out("TK82 start\r\n");
+    out("TK83 start\r\n");
     foreign();
-    out("TK82 end\r\n");
+    out("TK83 end\r\n");
     return failures;
 }

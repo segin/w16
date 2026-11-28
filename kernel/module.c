@@ -324,7 +324,7 @@ module FAR *module_of(u16 h)
    a resource table whose types have Win32s's handler, a resident name,
    its own owner (FarSetOwner), not in the module list; and a block of
    80h bytes it owns that is the DLL's 16-bit hInstance. Observed on 3.1
-   with such a module made the same way (TK82): GetExePtr of the module's
+   with such a module made the same way (TK83): GetExePtr of the module's
    selector, its handle and the instance block give the module's
    selector, GetModuleUsage and GetModuleHandle(MAKELP(0, h)) take them,
    FindResource, LoadResource (the type's handler gets the instance as
@@ -400,7 +400,7 @@ static module FAR *foreign_of(u16 sel)
 
 /* The module GetExePtr finds for h: the module of module_of, else a
    module table a program made that h is or that owns h's block, else a
-   module whose table owns h's block (a resource's: TK82 "GetExePtr
+   module whose table owns h's block (a resource's: TK83 "GetExePtr
    (resource)"). */
 module FAR *module_of_exe(u16 h)
 {

@@ -220,7 +220,7 @@ u32 KAPI KAnsiLower(u32 p)
 u16 KAPI KIsSharedSelector(u16 sel)
 {
     u16 h = GetExePtrC(sel);
-    module FAR *m = h ? module_of(h) : NULL;
+    module FAR *m = h ? module_of_exe(h) : NULL;
     return m && (m->flags & NEF_LIBRARY) ? 1 : 0;
 }
 

@@ -468,10 +468,14 @@ u16 KAPI IsWinOldApTask(u16 htask)
 
 
 /* GetExpWinVer (KERNEL.167): the expected Windows version in the NE
-   header (3Eh) of hModule or hInstance. */
+   header (3Eh) of hModule or hInstance, found as GetExePtr finds it
+   (TK83: 030Ah for the instance block of a module table a program made;
+   Microsoft's USER asks it in LoadBitmap and takes the bitmaps of a
+   module below 3.0 for Windows 2's: Win32s's CARDS.DLL's were read so
+   and Freecell said "Out of memory"). */
 u16 KAPI GetExpWinVer(u16 h)
 {
-    module FAR *m = module_of(h);
+    module FAR *m = module_of_exe(h);
     return m ? NE_HDR(m)->expver : 0;
 }
 
@@ -484,7 +488,7 @@ u16 KAPI GetExpWinVer(u16 h)
    block, as before). */
 u16 KAPI DirectResAlloc(u16 hinst, u16 flags, u16 size)
 {
-    module FAR *m = module_of(hinst);
+    module FAR *m = module_of_exe(hinst);
     u16 f = GMEM_MOVEABLE | ((flags & 0x1000) ? GMEM_DISCARDABLE : 0);
     if (!m)
         return GlobalAlloc(f, size);

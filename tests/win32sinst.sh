@@ -33,7 +33,7 @@
 # Run once Windows is back and plays: game 1 dealt, three cards to the
 # free cells (three more go home by themselves), the game resigned and
 # Freecell ended (freecell() below says what is checked). Until w16's
-# KERNEL took Win32s's own 16-bit module tables (TK82) Freecell said "Out
+# KERNEL took Win32s's own 16-bit module tables (TK83) Freecell said "Out
 # of memory" on w16's KERNEL (ARCHITECTURE.md 12.20).
 # WIN32SINST_ARGS: more tests/dropin.sh options for every part (blanks
 # split them), e.g. "-p 386 -i w16:vmmtrace=1" with DROPIN_CONF's
