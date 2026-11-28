@@ -125,7 +125,7 @@ static BOOL at_top(PWND w)
 }
 
 /* A top-level window's group, the windows owner_order moves with it, in
-   the order they end up in (3.1, US42: Alt+Tab to C's owned popup Cp
+   the order they end up in (3.1, US43: Alt+Tab to C's owned popup Cp
    sent Cp WM_WINDOWPOSCHANGING, then C with hwndInsertAfter Cp and
    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE; their WM_WINDOWPOSCHANGED in
    the same order after the activation; C brought up, Cp first). GRP
@@ -270,7 +270,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     if ((flags & SWP_HIDEWINDOW) && !(w->style & WS_VISIBLE))
         flags &= ~SWP_HIDEWINDOW;
     wp.hwnd = h;
-    /* hwndInsertAfter as the place it goes (3.1, US42): a top-level window
+    /* hwndInsertAfter as the place it goes (3.1, US43): a top-level window
        brought up goes under the switch window (#32771, always above the
        others: switch.c), one sent down under the last window */
     shown_after = after;
@@ -286,7 +286,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
             if (!last && hwndSwitch && h != hwndSwitch)
                 shown_after = hwndSwitch;
             /* a window with an icon title (shown, or hidden since it was
-               restored): under it, as it goes up first (3.1, US42) */
+               restored): under it, as it goes up first (3.1, US43) */
             if (it)
                 shown_after = it;
         } else if (after == HWND_BOTTOM) {
@@ -300,7 +300,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     }
     wp.hwndInsertAfter = shown_after;
     /* the caller's values as given: 0,0 0x0 for SWP_NOMOVE | SWP_NOSIZE
-       (3.1, US42: SetWindowPos(HWND_TOP, 0, 0, 0, 0, ...)) */
+       (3.1, US43: SetWindowPos(HWND_TOP, 0, 0, 0, 0, ...)) */
     wp.x = x;
     wp.y = y;
     wp.cx = cx;
@@ -397,7 +397,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
                 owner_order(w, after);
             changed = TRUE;
             /* (a top-level window put back where it was has not moved:
-               3.1, US42, SetWindowPos(HWND_TOP) of the window already on
+               3.1, US43, SetWindowPos(HWND_TOP) of the window already on
                top sent no WM_WINDOWPOSCHANGED) */
             zmoved = w->hwndParent != hwndDesktop || above_of(h) != was_above;
         }
@@ -405,7 +405,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     /* Alt+Esc: the window going down, its WM_WINDOWPOSCHANGING after this
        one's and its group's, its WM_WINDOWPOSCHANGED after this one's;
        Alt+Shift+Esc: the old one under this one's group, with none
-       (3.1, US42; switch.c) */
+       (3.1, US43; switch.c) */
     if (pos_companion && pos_companion != h) {
         HWND c = pos_companion, ca = pos_companion_after;
         BOOL quiet = ca != HWND_BOTTOM;
@@ -599,7 +599,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
     if (!(w = valid_wnd(h)))
         return TRUE;
     /* SetWindowPos activating it: the activation between WM_WINDOWPOSCHANGING
-       and WM_WINDOWPOSCHANGED (3.1, US42: Alt+Tab's SetWindowPos, the
+       and WM_WINDOWPOSCHANGED (3.1, US43: Alt+Tab's SetWindowPos, the
        window's WM_WINDOWPOSCHANGING, WH_CBT's HCBT_ACTIVATE, the old
        window's deactivation, the new one's activation, then its
        WM_WINDOWPOSCHANGED) */
@@ -613,7 +613,7 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
                 return TRUE;
         }
     }
-    /* the client area kept its place, its size: 0800h, 1000h (3.1, US42:
+    /* the client area kept its place, its size: 0800h, 1000h (3.1, US43:
        1803h for a window only brought up) */
     if (oldcli.left == w->rcClient.left && oldcli.top == w->rcClient.top)
         wp.flags |= 0x0800;
@@ -895,7 +895,7 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
             w->style &= ~WS_MAXIMIZE;
             w->style |= WS_MINIMIZE;
             /* its place as an icon before, unless another icon is there
-               now (3.1, US42: D minimised again while B's icon had its
+               now (3.1, US43: D minimised again while B's icon had its
                old place went to the next free one) */
             if (pl && pl->hasicon && !icon_taken(w, pl->icon))
                 pt = pl->icon;
@@ -961,7 +961,7 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 set_window_pos(h, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 /* a window the switching keys activated: the one they left,
                    while it is there to take it, else the next one (3.1,
-                   US42: D, activated by Alt+Esc from C's popup Cp,
+                   US43: D, activated by Alt+Esc from C's popup Cp,
                    minimised: Cp, at the bottom, was activated over E right
                    under D. UNVERIFIED as a rule for other activations: a
                    program started from Program Manager's Run and minimised

@@ -1,17 +1,17 @@
 /*
- * us42.c - probe US42: task switching from the keyboard (Alt+Tab with and
+ * us43.c - probe US43: task switching from the keyboard (Alt+Tab with and
  * without WIN.INI [windows] CoolSwitch, Alt+Shift+Tab, Alt+Esc,
  * Alt+Shift+Esc). Run as the shell, it is instance A; it starts four more
  * instances of itself (B to E, the letter in the command line), each a
- * task with a top-level window "US42 X" of its own class US42X and icon:
- *   B also has a hidden top-level window (US42Bh) and a visible disabled
- *     one (US42Bd), C a visible popup it owns (US42Cp), D starts
- *     minimised and, with WIN.INI [US42] close=1, destroys its window once
+ * task with a top-level window "US43 X" of its own class US43X and icon:
+ *   B also has a hidden top-level window (US43Bh) and a visible disabled
+ *     one (US43Bd), C a visible popup it owns (US43Cp), D starts
+ *     minimised and, with WIN.INI [US43] close=1, destroys its window once
  *     the switch box has been up 3 seconds (the window it shows closing
  *     meanwhile).
- * Each instance is a module of its own (US42B.EXE ... US42E.EXE, renamed
+ * Each instance is a module of its own (US43B.EXE ... US43E.EXE, renamed
  * copies: a second instance's __loadds callbacks would run on the first
- * instance's data). Every message the windows get goes to C:\US42.LOG
+ * instance's data). Every message the windows get goes to C:\US43.LOG
  * (all instances append to it), with who got it (the instance's letter,
  * 's' when sent from another task), the window's class and the parameters,
  * hwnds as class names; so do each task's WH_CBT and WH_MSGFILTER calls.
@@ -24,7 +24,7 @@
  * SystemParametersInfo (flags 0, and 3). B's title is long (how the box
  * fits it) and its background gray; each window writes "paint X" in its
  * client area (what the switching shows of a window).
- * Real keys come from tests/scripts/input/us42*.txt (tests/inputrun.sh;
+ * Real keys come from tests/scripts/input/us43*.txt (tests/inputrun.sh;
  * boot-test cases alttab and alttabdos): the log, without the lines that
  * depend on timing (paint messages, the timer's states), is compared with
  * Windows 3.1's.
@@ -52,9 +52,9 @@ static void __loadds lg(const char FAR *s)
 {
     HFILE f;
     int n = lstrlen(s);
-    f = _lopen("C:\\US42.LOG", OF_READWRITE | OF_SHARE_DENY_NONE);
+    f = _lopen("C:\\US43.LOG", OF_READWRITE | OF_SHARE_DENY_NONE);
     if (f == HFILE_ERROR)
-        f = _lcreat("C:\\US42.LOG", 0);
+        f = _lcreat("C:\\US43.LOG", 0);
     if (f == HFILE_ERROR)
         return;
     _llseek(f, 0, 2);
@@ -211,11 +211,11 @@ LRESULT FAR PASCAL __export __loadds wnd_proc(HWND h, UINT m, WPARAM wp, LPARAM 
     logmsg(InSendMessage() ? "s" : "", h, m, wp, lp);
     if (m == WM_CHAR && i >= 0) {
         if (wp == 'm') {
-            DialogBox(in[i].hi, "US42DLG", h, (DLGPROC)dlg_proc);
+            DialogBox(in[i].hi, "US43DLG", h, (DLGPROC)dlg_proc);
             return 0;
         }
         if (wp == 's') {
-            MessageBox(h, "system modal", "US42 SM", MB_OK | MB_SYSTEMMODAL);
+            MessageBox(h, "system modal", "US43 SM", MB_OK | MB_SYSTEMMODAL);
             return 0;
         }
         if (wp == 'c' || wp == 'u') {
@@ -236,7 +236,7 @@ LRESULT FAR PASCAL __export __loadds wnd_proc(HWND h, UINT m, WPARAM wp, LPARAM 
             return 0;
         }
         if (wp == 'n') {
-            MessageBox(h, "task modal", "US42 MB", MB_OK);
+            MessageBox(h, "task modal", "US43 MB", MB_OK);
             return 0;
         }
     }
@@ -256,8 +256,8 @@ LRESULT FAR PASCAL __export __loadds wnd_proc(HWND h, UINT m, WPARAM wp, LPARAM 
         HWND w;
         int n = 0;
         if (!begun) {
-            if (!FindWindow("US42B", 0) || !FindWindow("US42C", 0) || !FindWindow("US42D", 0) ||
-                !FindWindow("US42E", 0))
+            if (!FindWindow("US43B", 0) || !FindWindow("US43C", 0) || !FindWindow("US43D", 0) ||
+                !FindWindow("US43E", 0))
                 return 0;
             begun = TRUE;
             lg("BEGIN");
@@ -300,8 +300,8 @@ LRESULT FAR PASCAL __export __loadds wnd_proc(HWND h, UINT m, WPARAM wp, LPARAM 
         return 0;
     }
     if (m == WM_TIMER && wp == 2) {
-        /* D with WIN.INI [US42] close=1: gone once the switch window has
-           been up for 3 seconds (tests/scripts/input/us42close.txt) */
+        /* D with WIN.INI [US43] close=1: gone once the switch window has
+           been up for 3 seconds (tests/scripts/input/us43close.txt) */
         HWND sw = FindWindow("#32771", 0);
         if (sw && IsWindowVisible(sw)) {
             if (++in[i].up == 30 && !in[i].gone) {
@@ -390,10 +390,10 @@ static void __loadds inst_main(int i, HINSTANCE hi, int show)
     MSG m;
     in[i].task = GetCurrentTask();
     in[i].hi = hi;
-    wsprintf(cls, "US42%c", 'A' + i);
-    wsprintf(title, "US42 %c", 'A' + i);
+    wsprintf(cls, "US43%c", 'A' + i);
+    wsprintf(title, "US43 %c", 'A' + i);
     if (i == 1)
-        lstrcpy(title, "US42 B, whose title is too long to fit the switch box's width");
+        lstrcpy(title, "US43 B, whose title is too long to fit the switch box's width");
     wc.style = 0;
     wc.lpfnWndProc = wnd_proc;
     wc.cbClsExtra = wc.cbWndExtra = 0;
@@ -411,20 +411,20 @@ static void __loadds inst_main(int i, HINSTANCE hi, int show)
     in[i].flt = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)flt_proc, hi, GetCurrentTask());
     h = CreateWindow(cls, title, WS_OVERLAPPEDWINDOW, 10 + 70 * i, 10 + 60 * i, 260, 160, 0, 0, hi, 0);
     if (i == 1) {
-        wc.lpszClassName = "US42Bh";
+        wc.lpszClassName = "US43Bh";
         RegisterClass(&wc);
-        CreateWindow("US42Bh", "US42 Bh", WS_OVERLAPPEDWINDOW, 400, 300, 200, 100, 0, 0, hi, 0);
-        wc.lpszClassName = "US42Bd";
+        CreateWindow("US43Bh", "US43 Bh", WS_OVERLAPPEDWINDOW, 400, 300, 200, 100, 0, 0, hi, 0);
+        wc.lpszClassName = "US43Bd";
         RegisterClass(&wc);
-        CreateWindow("US42Bd", "US42 Bd", WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_DISABLED, 420, 20, 200, 100,
+        CreateWindow("US43Bd", "US43 Bd", WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_DISABLED, 420, 20, 200, 100,
                      0, 0, hi, 0);
     }
     ShowWindow(h, show);
     UpdateWindow(h);
     if (i == 2) {
-        wc.lpszClassName = "US42Cp";
+        wc.lpszClassName = "US43Cp";
         RegisterClass(&wc);
-        CreateWindow("US42Cp", "US42 Cp", WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, 440, 160, 180, 80,
+        CreateWindow("US43Cp", "US43 Cp", WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, 440, 160, 180, 80,
                      h, 0, hi, 0);
     }
     in[i].main = h;
@@ -432,11 +432,11 @@ static void __loadds inst_main(int i, HINSTANCE hi, int show)
         int k;
         SetTimer(h, 1, 200, 0);
         for (k = 1; k < NI; k++) {
-            wsprintf(cmd, "US42%c.EXE %c", 'A' + k, 'A' + k);
+            wsprintf(cmd, "US43%c.EXE %c", 'A' + k, 'A' + k);
             WinExec(cmd, k == 3 ? SW_SHOWMINIMIZED : SW_SHOWNORMAL);
         }
     }
-    if (i == 3 && GetProfileInt("US42", "close", 0))
+    if (i == 3 && GetProfileInt("US43", "close", 0))
         SetTimer(h, 2, 100, 0);
     while (GetMessage(&m, 0, 0, 0)) {
         TranslateMessage(&m);

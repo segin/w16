@@ -156,7 +156,7 @@ void __far __pascal __loadds KBD_EVENT(WORD ax, WORD bx, WORD si, WORD di)
             keystate[vk] ^= 1;          /* toggle */
         keystate[vk] |= 0x80;
     }
-    /* the Alt key's own press has the context bit too (3.1, US42:
+    /* the Alt key's own press has the context bit too (3.1, US43:
        WM_SYSKEYDOWN 12h with 2038h) */
     if (alt || (vk == VK_MENU && !up))
         lp |= 0x20000000L;
@@ -167,7 +167,7 @@ void __far __pascal __loadds KBD_EVENT(WORD ax, WORD bx, WORD si, WORD di)
     if (vk == VK_MENU && up && !(lp & 0x20000000L))
         msg = WM_SYSKEYUP;
     /* Alt let go after Alt+Tab or Alt+Esc: WM_KEYUP, without the context
-       bit once the switching loop has ended (3.1, US42: E038h in the
+       bit once the switching loop has ended (3.1, US43: E038h in the
        loop, also when Alt went up before the loop began; C038h to a
        window after Esc or another key had ended it) */
     if (vk == VK_MENU && !up)
@@ -669,7 +669,7 @@ HWND WINAPI GetActiveWindow(void)
 }
 
 /* WM_ACTIVATEAPP to every top-level window of queue HQ, in Z order, the
-   hidden and owned ones too (3.1, US42: B's main, disabled and hidden
+   hidden and owned ones too (3.1, US43: B's main, disabled and hidden
    windows each got it; C's owned popup before C) */
 static void activate_app(HQUEUE hq, BOOL on, HTASK other)
 {
@@ -711,7 +711,7 @@ void activate_window(HWND h, BOOL mouse)
             return;
     }
     /* the minimised flag of WM_ACTIVATE is 20h, the old window's too (3.1,
-       US42: an icon activated got 0001h with 0020h, a popup minimised and
+       US43: an icon activated got 0001h with 0020h, a popup minimised and
        so deactivated 0000h with 0020h) */
     if (old && valid_wnd(old)) {
         oldhq = PW(old)->hq;
@@ -738,7 +738,7 @@ void activate_window(HWND h, BOOL mouse)
             o = PW(o->hwndOwner);
         o->hwndLastActive = h;
     }
-    /* to the top before WM_ACTIVATEAPP (3.1, US42: the window's
+    /* to the top before WM_ACTIVATEAPP (3.1, US43: the window's
        WM_WINDOWPOSCHANGING and -CHANGED after the old one's WM_ACTIVATE);
        SetWindowPos's own activation has done it */
     if (!in_pos)
@@ -766,7 +766,7 @@ void activate_window(HWND h, BOOL mouse)
         /* an open window takes it itself, past WH_CBT (US30 cbt on 3.1,
            its SETFOCUS refused in the activation: the next SETFOCUS names
            the activated window as the old focus) */
-        /* (an icon's: the focus goes without WH_CBT too: 3.1, US42, an
+        /* (an icon's: the focus goes without WH_CBT too: 3.1, US43, an
            icon activated by Alt+Tab; the old focus got WM_KILLFOCUS with
            no HCBT_SETFOCUS) */
         focus_hooked = TRUE;

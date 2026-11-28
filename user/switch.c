@@ -2,7 +2,7 @@
  * switch.c - switching windows from the keyboard: Alt+Tab, Alt+Shift+Tab,
  * Alt+Esc, Alt+Shift+Esc, and the switch window (class #32771).
  *
- * Observed on Windows 3.1 with probe US42 (tests/apps/us42.c: five tasks'
+ * Observed on Windows 3.1 with probe US43 (tests/apps/us43.c: five tasks'
  * windows logging every message, real keys from tests/inputrun.sh;
  * boot-test case alttab; ARCHITECTURE.md 10.4):
  * - The key reaches the focus window as WM_SYSKEYDOWN; DefWindowProc sends
@@ -271,7 +271,7 @@ static void box_paint(HDC hdc)
             return;
         DrawIcon(hdc, 40, 24, icon);
         /* the title in the system font, centred on the box from 104 to
-           296, from 104 when longer, cut at 391 (3.1: "US42 C", 48 pixels,
+           296, from 104 when longer, cut at 391 (3.1: "US43 C", 48 pixels,
            at 176; a title of 378 pixels from 104, its last letter cut) */
         def_gettext(v, sizeof text, text);
         n = lstr_len(text);
@@ -392,7 +392,7 @@ void switch_windows(HWND h, WPARAM cmd, LPARAM lp)
         }
         if (!PeekMessage(&m, 0, 0, 0, PM_REMOVE | PM_NOYIELD))
             continue;
-        /* (USER's own timer, the caret's, goes by the hook: 3.1, US42) */
+        /* (USER's own timer, the caret's, goes by the hook: 3.1, US43) */
         if (m.message != WM_SYSTIMER && CallMsgFilter(&m, MSGF_NEXTWINDOW))
             continue;
         switch (m.message) {
@@ -458,11 +458,11 @@ void switch_windows(HWND h, WPARAM cmd, LPARAM lp)
     t = back ? ring_prev(cur) : ring_next(cur);
     if (!t || t == cur)
         return;
-    /* (3.1, US42: the next window's WM_WINDOWPOSCHANGING, the active
+    /* (3.1, US43: the next window's WM_WINDOWPOSCHANGING, the active
        one's and its group's going down, the activation, then their
        WM_WINDOWPOSCHANGED in that order; Alt+Shift+Esc: the active one
        under the new one's group, with no WM_WINDOWPOSCHANGED: pos.c) */
-    /* (Alt+Shift+Esc from an owned popup moved nothing: 3.1, US42, from
+    /* (Alt+Shift+Esc from an owned popup moved nothing: 3.1, US43, from
        C's popup Cp to B; from A to Cp, A got WM_WINDOWPOSCHANGING) */
     if (cur && (!back || !GetWindow(popup_of(cur), GW_OWNER))) {
         pos_companion = popup_of(cur);

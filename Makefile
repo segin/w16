@@ -3039,22 +3039,22 @@ $(DOS)/US39.EXE: $(B)/tests/start.o $(B)/tests/us39.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us39.map file { $(B)/tests/start.o $(B)/tests/us39.o }
 dos: $(DOS)/US39.EXE
-# US42: Alt+Tab, Alt+Esc and the switch box under real keys (tests/apps/us42.c)
-$(B)/tests/us42/us42-1.ico: tests/apps/us42icons.py tools/mkicons.py
-	python3 tests/apps/us42icons.py $(@D)
-$(B)/tests/us42/us42.res: tests/apps/us42.rc $(B)/tests/us42/us42-1.ico
-	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=$(B)/tests/us42 -fo=$@ $<
-$(DOS)/US42.EXE: $(B)/tests/start.o $(B)/tests/us42.o $(B)/tests/us42/us42.res tests/apps/app.lnk
+# US43: Alt+Tab, Alt+Esc and the switch box under real keys (tests/apps/us43.c)
+$(B)/tests/us43/us43-1.ico: tests/apps/us43icons.py tools/mkicons.py
+	python3 tests/apps/us43icons.py $(@D)
+$(B)/tests/us43/us43.res: tests/apps/us43.rc $(B)/tests/us43/us43-1.ico
+	$(WRC) -q -r -bt=windows -i=$(WATCOM)/h/win -i=$(B)/tests/us43 -fo=$@ $<
+$(DOS)/US43.EXE: $(B)/tests/start.o $(B)/tests/us43.o $(B)/tests/us43/us43.res tests/apps/app.lnk
 	@mkdir -p $(@D)
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
-	    option map=$(B)/tests/us42.map option resource=$(B)/tests/us42/us42.res \
-	    file { $(B)/tests/start.o $(B)/tests/us42.o }
-# its other instances' modules, US4B to US4E (US42B.EXE ... US42E.EXE): each
+	    option map=$(B)/tests/us43.map option resource=$(B)/tests/us43/us43.res \
+	    file { $(B)/tests/start.o $(B)/tests/us43.o }
+# its other instances' modules, US4B to US4E (US43B.EXE ... US43E.EXE): each
 # task a module of its own, with its own data for __loadds callbacks
-$(DOS)/US42%.EXE: $(DOS)/US42.EXE tools/nerename.py
+$(DOS)/US43%.EXE: $(DOS)/US43.EXE tools/nerename.py
 	cp $< $@
 	python3 tools/nerename.py $@ --module US4$*
-dos: $(DOS)/US42.EXE $(DOS)/US42B.EXE $(DOS)/US42C.EXE $(DOS)/US42D.EXE $(DOS)/US42E.EXE
+dos: $(DOS)/US43.EXE $(DOS)/US43B.EXE $(DOS)/US43C.EXE $(DOS)/US43D.EXE $(DOS)/US43E.EXE
 # US32S: a window spy for US32's question (tests/apps/us32s.c)
 $(B)/tests/us32s.o: tests/apps/us32ref.h tests/apps/tklog.h
 $(DOS)/US32S.EXE: $(B)/tests/start.o $(B)/tests/us32s.o tests/apps/app.lnk

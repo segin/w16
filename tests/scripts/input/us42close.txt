@@ -1,4 +1,4 @@
-; US42 (tests/apps/us42.c) as the shell, WIN.INI [US42] close=1: the
+; US43 (tests/apps/us43.c) as the shell, WIN.INI [US43] close=1: the
 ; window the Alt+Tab box shows closes while Alt is held, and another key
 ; pressed while the box is up. At the start E is active and D, an icon,
 ; is the next one: Alt+Tab shows D, which destroys its window after 3

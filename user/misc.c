@@ -571,7 +571,7 @@ void screensave_run(void)
 static BOOL spi(UINT what, UINT ui, void __far *pv, UINT ini);
 
 /* SPIF_SENDWININICHANGE after a change: WM_WININICHANGE to every top-level
-   window, lParam "Windows" (3.1, US42: SPI_SETFASTTASKSWITCH with flags 3;
+   window, lParam "Windows" (3.1, US43: SPI_SETFASTTASKSWITCH with flags 3;
    UNVERIFIED for the other actions, here alike) */
 BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
 {
@@ -660,7 +660,7 @@ static BOOL spi(UINT what, UINT ui, void __far *pv, UINT ini)
     case SPI_GETICONTITLEWRAP: *w = GetProfileInt("desktop", "IconTitleWrap", 1); return TRUE;
     case SPI_GETMENUDROPALIGNMENT: *w = 0; return TRUE;
     /* WIN.INI [windows] CoolSwitch, default 1; the set one kept, written
-       with SPIF_UPDATEINIFILE (3.1, US42: "CoolSwitch=0") */
+       with SPIF_UPDATEINIFILE (3.1, US43: "CoolSwitch=0") */
     case SPI_GETFASTTASKSWITCH: *w = fast_switch(); return TRUE;
     case SPI_SETFASTTASKSWITCH:
         set_fast_switch(ui != 0);

@@ -1,6 +1,6 @@
-; US42 (tests/apps/us42.c) as the shell: Alt+Tab, Alt+Shift+Tab, Alt+Esc
+; US43 (tests/apps/us43.c) as the shell: Alt+Tab, Alt+Shift+Tab, Alt+Esc
 ; and Alt+Shift+Esc with real keys; F12 between the steps marks them in
-; US42.LOG (a WM_KEYDOWN of 7Bh to the active window). Boot-test case
+; US43.LOG (a WM_KEYDOWN of 7Bh to the active window). Boot-test case
 ; alttab: "match" waits for the reference's screen (tests/inputrun.sh)
 match 00-start 20 1
 shot 00-start

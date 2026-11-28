@@ -399,16 +399,16 @@
 #   alttab     Alt+Tab and Alt+Esc against Windows 3.1, parts: np, Alt+Tab
 #              between Program Manager and Notepad, Notepad closed, Alt+Tab,
 #              a menu (tests/scripts/input/alttab.txt): the same; cool,
-#              nocool, close, tree: probe US42 (tests/apps/us42.c) as the
+#              nocool, close, tree: probe US43 (tests/apps/us43.c) as the
 #              shell, five tasks' windows and every message they get, the
-#              keys of tests/scripts/input/us42.txt (us42close.txt): the
+#              keys of tests/scripts/input/us43.txt (us43close.txt): the
 #              switch box, the ring, Shift+Tab, Esc, Alt+Esc, Alt+Shift+Esc,
 #              icons, a dialog, a system-modal box, CoolSwitch on and off
 #              (WIN.INI and SystemParametersInfo), the window shown closing
 #              meanwhile; w16's USER on 3.1 (tree: w16's install tree):
 #              the screens pixel for pixel (not the dialog's and the
 #              system-modal box's own; not on the tree) and the switching
-#              messages (tests/scripts/us42log.sh) as 3.1's
+#              messages (tests/scripts/us43log.sh) as 3.1's
 #   alttabdos  the same with an MS-DOS Prompt (alttab386.txt, alttabstd.txt):
 #              Alt+Tab held in the full-screen prompt (the title screens),
 #              let go on the prompt itself and on Windows, the switch box
@@ -1511,30 +1511,30 @@ woaref() {
 }
 
 # runcase CASE: one case; run in a subshell of its own (the job pool below)
-# alttab_us42 PART: the boot-test case alttab's US42 parts (US42,
-# tests/apps/us42.c, as the shell: five tasks' windows, every message
-# logged, real keys from tests/scripts/input/us42.txt or us42close.txt).
+# alttab_us43 PART: the boot-test case alttab's US43 parts (US43,
+# tests/apps/us43.c, as the shell: five tasks' windows, every message
+# logged, real keys from tests/scripts/input/us43.txt or us43close.txt).
 #   cool    Alt+Tab, Alt+Shift+Tab, Alt+Esc, Alt+Shift+Esc, Esc, a modal
 #           dialog, a system-modal box, icons, CoolSwitch turned over by
 #           SystemParametersInfo; w16's USER on 3.1 against all of 3.1's
 #   nocool  the same with WIN.INI [windows] CoolSwitch=0
 #   close   the window the box shows destroyed while Alt is held, and
-#           another key (F11) pressed with the box up (WIN.INI [US42]
+#           another key (F11) pressed with the box up (WIN.INI [US43]
 #           close=1)
-#   tree    us42.txt on w16's install tree alone against 3.1's run
+#   tree    us43.txt on w16's install tree alone against 3.1's run
 # Screens: every one pixel for pixel, but for the dialog's and the
 # system-modal box's (14-22: the dialog manager's and MessageBox's own
 # differences, not the switching's); not for tree (w16's own fonts and
-# artwork). Logs: tests/scripts/us42log.sh's lines identical.
-alttab_us42() {
+# artwork). Logs: tests/scripts/us43log.sh's lines identical.
+alttab_us43() {
     _ap=$1
-    _as=$root/tests/scripts/input/us42.txt
-    [ "$_ap" = close ] && _as=$root/tests/scripts/input/us42close.txt
-    set -- -f "$root/build/dos/US42.EXE=US42.EXE" -f "$root/build/dos/US42B.EXE=US42B.EXE" \
-        -f "$root/build/dos/US42C.EXE=US42C.EXE" -f "$root/build/dos/US42D.EXE=US42D.EXE" \
-        -f "$root/build/dos/US42E.EXE=US42E.EXE" -i 'boot:shell=C:\US42.EXE'
+    _as=$root/tests/scripts/input/us43.txt
+    [ "$_ap" = close ] && _as=$root/tests/scripts/input/us43close.txt
+    set -- -f "$root/build/dos/US43.EXE=US43.EXE" -f "$root/build/dos/US43B.EXE=US43B.EXE" \
+        -f "$root/build/dos/US43C.EXE=US43C.EXE" -f "$root/build/dos/US43D.EXE=US43D.EXE" \
+        -f "$root/build/dos/US43E.EXE=US43E.EXE" -i 'boot:shell=C:\US43.EXE'
     [ "$_ap" = nocool ] && set -- "$@" -i WIN.INI:windows:CoolSwitch=0
-    [ "$_ap" = close ] && set -- "$@" -i WIN.INI:US42:close=1
+    [ "$_ap" = close ] && set -- "$@" -i WIN.INI:US43:close=1
     _ar=alttab-$_ap-ref
     [ "$_ap" = tree ] && _ar=alttab-cool-ref
     refrun "$_ar" alttab "$root/tests/inputrun.sh" -s -b 60 -t 600 "$_as" "$out/$_ar" -r "$@"
@@ -1559,9 +1559,9 @@ alttab_us42() {
     done
     ls "$out/$_ar"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
     if [ "$r" = ok ]; then
-        sh "$root/tests/scripts/us42log.sh" "$out/$_ar/work/c/US42.LOG" > "$out/alttab-$_ap-ref.msgs" 2>/dev/null
-        sh "$root/tests/scripts/us42log.sh" "$out/alttab-$_ap-w16/work/c/US42.LOG" > "$out/alttab-$_ap-w16.msgs" 2>/dev/null
-        if [ ! -s "$out/alttab-$_ap-ref.msgs" ]; then r="no log of 3.1's ($out/$_ar/work/c/US42.LOG)"
+        sh "$root/tests/scripts/us43log.sh" "$out/$_ar/work/c/US43.LOG" > "$out/alttab-$_ap-ref.msgs" 2>/dev/null
+        sh "$root/tests/scripts/us43log.sh" "$out/alttab-$_ap-w16/work/c/US43.LOG" > "$out/alttab-$_ap-w16.msgs" 2>/dev/null
+        if [ ! -s "$out/alttab-$_ap-ref.msgs" ]; then r="no log of 3.1's ($out/$_ar/work/c/US43.LOG)"
         elif ! cmp -s "$out/alttab-$_ap-ref.msgs" "$out/alttab-$_ap-w16.msgs"; then
             r="the messages differ from 3.1's, first at line $(diff "$out/alttab-$_ap-ref.msgs" "$out/alttab-$_ap-w16.msgs" | head -1) ($out/alttab-$_ap-ref.msgs, alttab-$_ap-w16.msgs)"
         fi
@@ -3745,7 +3745,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         else echo "FAIL $c: $r ($out/$c)"; fails=$((fails + 1)); fi ;;
     tabs|alttab|helpmenus)
         if [ $c = alttab ] && [ "$part" != np ]; then
-            alttab_us42 "$part"
+            alttab_us43 "$part"
             return
         fi
         refrun $c-ref $c "$root/tests/inputrun.sh" -s -b 25 -t 200 "$root/tests/scripts/input/$c.txt" "$out/$c-ref" -r

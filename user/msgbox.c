@@ -115,7 +115,7 @@ static int box(HWND owner, LPCSTR text, LPCSTR caption, LPCSTR iconid, const cha
         extern int dialog_run(HWND dlg, HWND owner, HWND focus);
         HWND oldsm = 0;
         mb_result = 0;
-        /* MB_SYSTEMMODAL: the system-modal window meanwhile (3.1, US42:
+        /* MB_SYSTEMMODAL: the system-modal window meanwhile (3.1, US43:
            Alt+Tab and Alt+Esc did nothing while it was up) */
         if (sysmodal)
             oldsm = SetSysModalWindow(dlg);

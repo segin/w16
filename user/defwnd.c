@@ -277,7 +277,7 @@ static void draw_caption(HDC hdc, PWND w, BOOL active)
         COLORREF c = SetTextColor(hdc, syscolor[active ? COLOR_CAPTIONTEXT : COLOR_INACTIVECAPTIONTEXT]);
         tw = LOWORD(GetTextExtent(hdc, title, n));
         x = t.left + (t.right - t.left - tw) / 2;
-        /* a title too long for the caption starts a pixel in (3.1, US42's
+        /* a title too long for the caption starts a pixel in (3.1, US43's
            window B: its first letter one pixel right of w16's) */
         if (x < t.left)
             x = t.left + 1;
@@ -967,7 +967,7 @@ LRESULT WINAPI DefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             send_message(top_level(h), WM_SYSCOMMAND, SC_CLOSE, 0);
         /* Alt+Tab, Alt+Esc: the top-level window gets WM_SYSCOMMAND
            SC_PREVWINDOW, SC_NEXTWINDOW with Shift, lParam the key (3.1,
-           US42: F050h 0009h; Alt+Shift+Esc F040h 001Bh), whose
+           US43: F050h 0009h; Alt+Shift+Esc F040h 001Bh), whose
            DefWindowProc switches (switch.c) */
         else if ((wp == VK_TAB || wp == VK_ESCAPE) && (HIWORD(lp) & KF_ALTDOWN) &&
                  GetKeyState(VK_CONTROL) >= 0 && !GetSysModalWindow())

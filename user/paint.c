@@ -326,7 +326,7 @@ BOOL paint_message(HQUEUE hq, HWND hf, MSG __far *m)
     m->hwnd = h;
     /* a minimised window of a class with an icon gets WM_PAINTICON, which
        DefWindowProc answers by drawing the icon (3.1 SDK), wParam 1 (3.1,
-       US42) */
+       US43) */
     m->message = ((PW(h)->style & WS_MINIMIZE) && ((PCLS)PW(h)->cls)->hIcon) ? WM_PAINTICON : WM_PAINT;
     m->wParam = m->message == WM_PAINTICON;
     m->lParam = 0;
@@ -404,7 +404,7 @@ void update_window(HWND h, BOOL children)
            in that second WM_PAINT) */
         if (w->hq == cur_hq() || !booted) {
             /* (an icon's: WM_PAINTICON, as GetMessage's below; 3.1,
-               US42: UpdateWindow of a window shown minimised) */
+               US43: UpdateWindow of a window shown minimised) */
             BOOL icon = (w->style & WS_MINIMIZE) && ((PCLS)w->cls)->hIcon;
             w->flags |= WF_PAINTPENDING;
             send_message(h, icon ? WM_PAINTICON : WM_PAINT, icon, 0);
