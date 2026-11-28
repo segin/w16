@@ -955,11 +955,13 @@ BOOL WINAPI ShowWindow(HWND h, int cmd)
                 if (hwndFocus && (hwndFocus == h || IsChild(h, hwndFocus)))
                     set_focus(0);
                 set_window_pos(h, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                /* the window active before it, while it is there to take
-                   it, else the next one (3.1, US42: D, activated by Alt+Esc
-                   from C's popup Cp, minimised: Cp, at the bottom, was
-                   activated over E right under D; B, activated as a
-                   dialog closed, minimised: A, the next) */
+                /* a window the switching keys activated: the one they left,
+                   while it is there to take it, else the next one (3.1,
+                   US42: D, activated by Alt+Esc from C's popup Cp,
+                   minimised: Cp, at the bottom, was activated over E right
+                   under D. UNVERIFIED as a rule for other activations: a
+                   program started from Program Manager's Run and minimised
+                   gives Program Manager the activation, boot-test icons) */
                 t = hwndActivePrev;
                 if (!t || t == h || !valid_wnd(t) || !is_visible(PW(t)) ||
                     (PW(t)->style & (WS_DISABLED | WS_MINIMIZE | WS_CHILD)))

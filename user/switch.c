@@ -45,7 +45,8 @@
 #include "user.h"
 
 HWND hwndSwitch;                /* #32771 */
-BYTE switch_active;             /* the loop runs (input.c: the Alt key) */
+BYTE switch_active;             /* the loop runs */
+BYTE switch_activating;         /* its activation (input.c) */
 static int coolswitch = -1;     /* WIN.INI CoolSwitch, once read */
 static HWND shown;              /* what the switch window shows */
 static HWND drawn;              /* CoolSwitch=0: the window drawn active */
@@ -330,7 +331,9 @@ static void switch_to(HWND t, BOOL restore)
     HWND p = popup_of(t);
     if (!valid_wnd(p))
         return;
+    switch_activating++;
     SetWindowPos(p, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    switch_activating--;
     if (restore && IsIconic(p))
         PostMessage(p, WM_SYSCOMMAND, SC_RESTORE, 0);
 }

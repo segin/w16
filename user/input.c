@@ -688,7 +688,7 @@ static void activate_app(HQUEUE hq, BOOL on, HTASK other)
 
 /* SetWindowPos's activation: the Z order is its (pos.c) */
 BOOL activate_in_pos;
-HWND hwndActivePrev;            /* the window active before (pos.c) */
+HWND hwndActivePrev;            /* the window the switching keys left (pos.c) */
 
 void activate_window(HWND h, BOOL mouse)
 {
@@ -722,8 +722,8 @@ void activate_window(HWND h, BOOL mouse)
         if (!(w = valid_wnd(h)) && h)
             return;
     }
-    if (old && valid_wnd(old))
-        hwndActivePrev = old;
+    /* (kept for a window activated by Alt+Tab or Alt+Esc only: pos.c) */
+    hwndActivePrev = switch_activating && old && valid_wnd(old) ? old : 0;
     hwndActive = h;
     if (!h) {
         if (oldhq)

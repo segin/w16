@@ -340,6 +340,7 @@ LONG def_gettext(PWND w, WORD n, LPSTR buf);
 /* ---- Alt+Tab, Alt+Esc (switch.c) ---- */
 extern HWND hwndSwitch;         /* the switch window, #32771 */
 extern BYTE switch_active;      /* its loop runs */
+extern BYTE switch_activating;  /* and activates a window */
 void switch_init(void);
 void switch_windows(HWND h, WPARAM cmd, LPARAM lp);
 void switch_window(HWND cur, BOOL tobottom);
