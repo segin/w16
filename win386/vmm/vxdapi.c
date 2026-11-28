@@ -155,10 +155,26 @@ void vxdapi_v86_call(struct cregs *r, u32 idx)
     r->eflags |= EFL_CF;
 }
 
+/* the entry being called, for vxdapi_again */
+static u32 cur_index;
+
+/* the API call made again when the client runs next (its return address
+ * pushed back, CS:IP its entry): a device waiting for something while the
+ * client's VM goes on taking interrupts (SHELL's Alt+Tab title, which
+ * waits for Tab or Alt let go) */
+void vxdapi_again(struct cregs *r)
+{
+    dpmi_client_push(r, r->cs);
+    dpmi_client_push(r, r->eip);
+    r->cs = SEL_PMBP;
+    r->eip = cur_index;
+}
+
 /* A far call to entry index (PMBP_API + n) */
 void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs)
 {
     u32 n = index - PMBP_API;
+    cur_index = index;
     r->eip = retip;
     r->cs = retcs;
     if (n >= NAPIS && n - NAPIS < next_ext) {

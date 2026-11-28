@@ -274,6 +274,7 @@ void disk_pm(struct cregs *r, int vec);
 /* vxdapi.c */
 void vxdapi_get(struct cregs *r, u32 *sel, u32 *off);
 void vxdapi_call(struct cregs *r, u32 index, u32 retip, u32 retcs);
+void vxdapi_again(struct cregs *r);         /* the call made again: a device waits */
 int sel_to_seg(u32 sel);
 u32 seg_to_sel(u32 seg, u32 access);
 u32 pm_lin(u32 sel, u32 off);

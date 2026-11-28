@@ -240,6 +240,25 @@ static void present(vu32 vm)
     request(vm, 1);
 }
 
+/* Message mode (BEGIN_MESSAGE_MODE for a VM, until END_MESSAGE_MODE: the
+ * DDK): the keys typed while that VM has the keyboard are not the VM's but
+ * kept for VKD_Get_Msg_Key. SHELL reads Alt let go from here while it
+ * shows a window's title over a full-screen VM for Alt+Tab (Windows 3.1:
+ * BEGIN_MESSAGE_MODE at the Alt+Tab hot key, END_MESSAGE_MODE when it
+ * is done; the VM saw none of the keys between). AL the scan code as the
+ * keyboard sent it (80h when let go), AH 1 for an extended key: w16's */
+#define MQSIZE 64
+static vu32 msg_vm;
+static vu16 msgq[MQSIZE];
+static vu32 mq_head, mq_len;
+
+static int msg_key(vu32 b, int e0)
+{
+    if (!msg_vm || kfocus != msg_vm) return 0;
+    if (mq_len < MQSIZE) msgq[(mq_head + mq_len++) % MQSIZE] = (vu16)(b | (e0 ? 0x100 : 0));
+    return 1;
+}
+
 /* a byte from the keyboard: a hot key's, or the VM's */
 static void key_byte(vu32 b)
 {
@@ -259,7 +278,7 @@ static void key_byte(vu32 b)
         if (!e1_left) mine = hot_key(code, up);    /* with the shift state before this byte */
         track_mods(b, ext);
     }
-    if (!mine) {
+    if (!mine && !msg_key(b, ext == 1)) {
         if (ext == 1) q_put(kfocus, 0xE0);  /* the one held back */
         q_put(kfocus, b);
     }
@@ -414,15 +433,26 @@ void __cdecl vkd_service(struct vregs *r)
     case 0x06:                              /* VKD_Cancel_Hot_Key_State */
     case 0x09:                              /* VKD_Define_Paste_Mode */
     case 0x0B:                              /* VKD_Cancel_Paste */
+        return;
     case 0x0E:                              /* VKD_Flush_Msg_Key_Queue */
+        mq_head = mq_len = 0;
         return;
     case 0x08:                              /* VKD_Get_Kbd_Owner */
         r->ebx = kfocus;
         return;
-    case 0x0C:                              /* VKD_Get_Msg_Key */
-    case 0x0D:                              /* VKD_Peek_Msg_Key: no message mode yet */
-        r->eax = 0;
-        r->eflags |= VF_ZF;
+    case 0x0C:                              /* VKD_Get_Msg_Key: EBX the VM */
+    case 0x0D:                              /* VKD_Peek_Msg_Key */
+        if (!mq_len || r->ebx != msg_vm) {
+            r->eax = 0;
+            r->eflags |= VF_ZF;
+            return;
+        }
+        r->eax = msgq[mq_head];
+        r->eflags &= ~VF_ZF;
+        if (r->arg == 0x0C) {
+            mq_head = (mq_head + 1) % MQSIZE;
+            mq_len--;
+        }
         return;
     case 0x05:                              /* VKD_Reflect_Hot_Key: EAX the hot key */
         h = (struct hotkey *)r->eax;
@@ -478,6 +508,20 @@ void __cdecl vkd_control(struct vregs *r)
             for (i = 0; i < NHOT; i++) hot[i].off[id >> 5] &= ~(1u << (id & 31));
         if (kfocus == r->ebx) { kfocus = sys_vm; sync_mods(kfocus); }
         if (cmd_vm == r->ebx) cmd_d1 = 0;
+        return;
+    }
+    if (r->eax == BEGIN_MESSAGE_MODE) {
+        msg_vm = r->ebx;
+        mq_head = mq_len = 0;
+        return;
+    }
+    if (r->eax == END_MESSAGE_MODE) {
+        /* the VM's keys its own again, its shift keys as they are now */
+        if (msg_vm == r->ebx) {
+            msg_vm = 0;
+            mq_head = mq_len = 0;
+            if (kfocus == r->ebx) sync_mods(kfocus);
+        }
         return;
     }
     if (r->eax == SET_DEVICE_FOCUS && (r->edx == 0 || r->edx == VKD_ID)) {
