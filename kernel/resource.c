@@ -561,8 +561,10 @@ u32 KAPI SetResourceHandler(u16 hinst, const char FAR *type, u32 proc) /* KERNEL
    Observed, called directly: with hMem 0 and a (discarded) handle in the
    table, it reads the data into that handle and returns it; usage and
    flag 0004h are left alone. Called by LockResource with the discarded
-   handle, it reloads into that handle. Otherwise (UNVERIFIED) it
-   allocates a block as AllocResource does. 0 if the data cannot be
+   handle, it reloads into that handle. Given a block that is not
+   discarded, it returns it untouched; given a discarded one that is not
+   the table's, or 0 and none in the table, it allocates a block as
+   AllocResource does and reads into that (TK81). 0 if the data cannot be
    read. */
 u16 KAPI DefResourceHandler(u16 hmem, u16 hinst, u16 r)
 {
@@ -574,6 +576,17 @@ u16 KAPI DefResourceHandler(u16 hmem, u16 hinst, u16 r)
         return 0;
     if (!hmem)
         hmem = NAME(m, r)->handle;
+    /* Observed (TK81 "defres"): a block that holds data (not discarded)
+       comes back as it is, its contents kept: Win32s's handlers fill an
+       AllocResource block with a Win32 program's icon and then call the
+       handler they replaced (USER's, which calls this one); w16 read the
+       file's bytes over it (Win32s's own WIN32S.EXE's) and GDI got a
+       bitmap's bits pointer far past the block. A discarded block that is
+       not the table's handle is left alone, and a new one read. */
+    if (hmem && !(GlobalFlags(hmem) & GMEM_DISCARDED))
+        return hmem;
+    if (hmem && hmem != NAME(m, r)->handle)
+        hmem = 0;
     if (hmem) {
         h = GlobalReAlloc(hmem, size_of(m, r) ? size_of(m, r) : 1, 0);
         if (!h)

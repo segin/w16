@@ -1506,11 +1506,12 @@ K327:
         mov bp, sp
         mov ax, DGROUP
         mov ds, ax
+        push word [bp]                  ; caller's BP
         push word [bp + 22]             ; caller's CS
         push word [bp + 20]             ; caller's IP
         push bx                         ; error code
         call far _k327_note
-        add sp, 6
+        add sp, 8
         pop bp
         pop es
         pop ds

@@ -1,0 +1,5 @@
+/* tk81.rc - TK81.EXE's resources (tests/apps/tk81.c): one RCDATA, read
+   by KERNEL's default resource handler */
+#include <windows.h>
+
+1 RCDATA { "TK81 data\0" }

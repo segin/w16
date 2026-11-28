@@ -783,10 +783,17 @@ void __cdecl wd_report(void)
     kexit_to_dos(0xFE);
 }
 
-/* K327 (kentry.asm): note the first parameter errors on standard output */
-void __cdecl k327_note(u16 err, u16 ip, u16 cs)
+/* K327 (kentry.asm): note the first parameter errors on standard output,
+   with the caller's frame (SS:BP, BP even) and its first words above, the
+   API's arguments when the caller is a validation layer's entry, each
+   that names a selector with its base and limit */
+static u16 get_ss(void);
+#pragma aux get_ss = "mov ax, ss" value [ax] modify exact [ax];
+
+void __cdecl k327_note(u16 err, u16 ip, u16 cs, u16 bp)
 {
     static u16 count;
+    u16 i, w;
     if (++count > 8)
         return;
     kdbg("w16: parameter error ");
@@ -797,8 +804,33 @@ void __cdecl k327_note(u16 err, u16 ip, u16 cs)
     kdbghex(ip);
     where_dbg = 1;
     where(cs);
-    where_dbg = 0;
+    kdbg("\r\n  frame ");
+    kdbghex(bp);
+    bp &= ~1u;
+    for (i = 0; i < 12 && (u32)bp + 2 * i + 1 <= lsl(get_ss()); i++) {
+        w = *(const u16 FAR *)MK_FP(get_ss(), bp + 2 * i);
+        kdbg(" ");
+        kdbghex(w);
+    }
     kdbg("\r\n");
+    for (i = 2; i < 12 && (u32)bp + 2 * i + 1 <= lsl(get_ss()); i++) {
+        w = *(const u16 FAR *)MK_FP(get_ss(), bp + 2 * i);
+        if ((w & 4) && seg_ok(w)) {
+            u32 h = GlobalHandle(w);
+            kdbg("  ");
+            kdbghex(w);
+            where(w);
+            if ((u16)h) {
+                kdbg(" handle ");
+                kdbghex((u16)h);
+                kdbg(" size ");
+                kdbghex((u16)(GlobalSize((u16)h) >> 16));
+                kdbghex((u16)GlobalSize((u16)h));
+            }
+            kdbg("\r\n");
+        }
+    }
+    where_dbg = 0;
 }
 
 /* INT 21h AH=4Ch with no current task (kentry.asm): the KERNEL process
