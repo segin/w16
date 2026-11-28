@@ -740,7 +740,7 @@ static int add_item(HWND h, PLB lb, int at, LPCSTR s, DWORD data)
 
 /* The order of a sorted list box: lstrcmpi's, except that an item that
    starts with '[' (LB_DIR's directories and drives) comes after every
-   other. Observed on 3.1 (US40): "_x", "1a", "mixed.txt", "zzz", "[-b-]",
+   other. Observed on 3.1 (US42): "_x", "1a", "mixed.txt", "zzz", "[-b-]",
    "[..]", "[aaa]", "[subdir.x]", although lstrcmpi puts "[a]" before "z"
    (w16 sorted the bracketed names first). */
 static int sort_cmp(LPCSTR a, LPCSTR b)

@@ -1,13 +1,13 @@
 /*
- * us40.c - probe US40: the case of the names LB_DIR (and CB_DIR) put in a
+ * us42.c - probe US42: the case of the names LB_DIR (and CB_DIR) put in a
  * list box. Found with Adobe Type Manager 3.0's installer: it lists the
  * font disk's metric files with LB_DIR ("*.??m") and writes the names it
  * gets into ATM.INI's [Fonts] lines; on Windows 3.1 they are lower case
  * ("c:\psfonts\pfm\cob_____.pfm"), on w16 they were DOS's capitals.
  *
- * The probe makes C:\US40DIR with a file MIXED.TXT, a file NODOT and a
+ * The probe makes C:\US42DIR with a file MIXED.TXT, a file NODOT and a
  * directory SUBDIR.X (DOS keeps every name in capitals) and logs every
- * item of an unsorted list box after LB_DIR "C:\US40DIR\*.*" with
+ * item of an unsorted list box after LB_DIR "C:\US42DIR\*.*" with
  * DDL_DIRECTORY (unsorted.N: the order LB_DIR adds them in), of a sorted
  * one (dir.N), the sorted one after LB_ADDSTRING of "zzz", "[aaa]",
  * "[-b-]", "_x" and "1a" (add.N), and of a sorted combo box after CB_DIR (cb.N); then the drive items
@@ -20,7 +20,7 @@
 
 extern BOOL FAR PASCAL InitApp(HINSTANCE);
 
-#define TK_REF "us40ref.h"
+#define TK_REF "us42ref.h"
 #include "tklog.h"
 
 static void items(HWND w, const char *tag, UINT count, UINT gettext, int max)
@@ -62,12 +62,12 @@ int __cdecl tmain(void)
 {
     HINSTANCE hi = (HINSTANCE)init_regs[5];
     HWND top, lb, cb, ub;
-    out("US40 start\r\n");
+    out("US42 start\r\n");
     InitApp(hi);                        /* a message queue (no C runtime) */
-    dos_mkdir("C:\\US40DIR");
-    dos_mkdir("C:\\US40DIR\\SUBDIR.X");
-    mkfile("C:\\US40DIR\\MIXED.TXT");
-    mkfile("C:\\US40DIR\\NODOT");
+    dos_mkdir("C:\\US42DIR");
+    dos_mkdir("C:\\US42DIR\\SUBDIR.X");
+    mkfile("C:\\US42DIR\\MIXED.TXT");
+    mkfile("C:\\US42DIR\\NODOT");
     /* the boxes in a window of their own (a combo box sends its parent
        messages) */
     top = CreateWindow("STATIC", "", WS_OVERLAPPED, 0, 0, 200, 200, 0, 0, hi, NULL);
@@ -75,9 +75,9 @@ int __cdecl tmain(void)
     cb = CreateWindow("COMBOBOX", "", WS_CHILD | CBS_DROPDOWNLIST | CBS_SORT, 0, 0, 100, 100,
                       top, (HMENU)2, hi, NULL);
     ub = CreateWindow("LISTBOX", "", WS_CHILD, 0, 0, 100, 100, top, (HMENU)3, hi, NULL);
-    SendMessage(ub, LB_DIR, DDL_DIRECTORY, (LPARAM)(LPSTR)"C:\\US40DIR\\*.*");
+    SendMessage(ub, LB_DIR, DDL_DIRECTORY, (LPARAM)(LPSTR)"C:\\US42DIR\\*.*");
     items(ub, "unsorted", LB_GETCOUNT, LB_GETTEXT, 16);
-    SendMessage(lb, LB_DIR, DDL_DIRECTORY, (LPARAM)(LPSTR)"C:\\US40DIR\\*.*");
+    SendMessage(lb, LB_DIR, DDL_DIRECTORY, (LPARAM)(LPSTR)"C:\\US42DIR\\*.*");
     items(lb, "dir", LB_GETCOUNT, LB_GETTEXT, 16);
     SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)"zzz");
     SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)"[aaa]");
@@ -85,7 +85,7 @@ int __cdecl tmain(void)
     SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)"_x");
     SendMessage(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)"1a");
     items(lb, "add", LB_GETCOUNT, LB_GETTEXT, 16);
-    SendMessage(cb, CB_DIR, DDL_DIRECTORY, (LPARAM)(LPSTR)"C:\\US40DIR\\*.*");
+    SendMessage(cb, CB_DIR, DDL_DIRECTORY, (LPARAM)(LPSTR)"C:\\US42DIR\\*.*");
     items(cb, "cb", CB_GETCOUNT, CB_GETLBTEXT, 16);
     SendMessage(lb, LB_RESETCONTENT, 0, 0);
     SendMessage(lb, LB_DIR, DDL_DRIVES | DDL_EXCLUSIVE, (LPARAM)(LPSTR)"*.*");
@@ -106,6 +106,6 @@ int __cdecl tmain(void)
     out("\r\nOBS cmpi.us=");
     outhex((WORD)lstrcmpi("_a", "z"));
     out("\r\n");
-    out("US40 end\r\n");
+    out("US42 end\r\n");
     return failures;
 }

@@ -1,5 +1,5 @@
 /*
- * tk83.c - how much of its caller's stack each of KERNEL's string
+ * tk84.c - how much of its caller's stack each of KERNEL's string
  * functions uses below the return address. Found with Adobe Type
  * Manager 3.0's installer: it loads an entry's name with LoadString into
  * a buffer below its stack pointer (a function's that has returned) and
@@ -7,7 +7,7 @@
  * the stack alone, w16's wrote over it and the installer said its
  * configuration file was missing an entry with a name of stack garbage.
  *
- * Each function is called through tk83s.asm's meter, which fills the
+ * Each function is called through tk84s.asm's meter, which fills the
  * stack below it with CDh and measures the lowest byte written. Logged:
  * "OBS use:NAME=N" (bytes below the return address's slot, the smallest
  * of 8 calls: an interrupt on the same stack would only add) and the
@@ -17,7 +17,7 @@
 #include <windows.h>
 #include <dos.h>
 
-#define TK_REF "tk83ref.h"
+#define TK_REF "tk84ref.h"
 #include "tklog.h"
 
 extern DWORD __cdecl __far stackuse(FARPROC fn, WORD nargs, ...);
@@ -59,7 +59,7 @@ int __cdecl tmain(void)
     WORD ss = FP_SEG((char FAR *)src), so = FP_OFF((char FAR *)src);
     WORD r;
 
-    out("TK83 start\r\n");
+    out("TK84 start\r\n");
     meter("lstrcpy", pcpy, 4, bs, bo, ss, so, 0, &r);
     check(r == bo && lstrcmp(buf, "Disk") == 0, "lstrcpy copies");
     meter("lstrcat", pcat, 4, bs, bo, ss, so, 0, &r);
@@ -69,6 +69,6 @@ int __cdecl tmain(void)
     meter("lstrcpyn", pcpyn, 5, bs, bo, ss, so, 3, &r);
     check(r == bo && lstrcmp(buf, "Di") == 0, "lstrcpyn copies n - 1");
     meter("lstrcpy-nullsrc", pcpy, 4, bs, bo, 0, 0, 0, &r);
-    out("TK83 end\r\n");
+    out("TK84 end\r\n");
     return failures;
 }

@@ -1,4 +1,4 @@
-; tk83s.asm - TK83's stack meter (tests/apps/tk83.c).
+; tk84s.asm - TK84's stack meter (tests/apps/tk84.c).
 ;
 ; WORD __cdecl __far stackuse(FARPROC fn, WORD nargs, WORD a0, ...)
 ; fills the 1024 bytes below the stack pointer with CDh, pushes a0 ...

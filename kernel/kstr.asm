@@ -1,7 +1,7 @@
 ; kstr.asm - lstrcpy, lstrcat, lstrlen and lstrcpyn (KERNEL.88-90, 353)
 ; in assembly, with no more of the caller's stack than Windows 3.1's.
 ;
-; Observed on Windows 3.1 (TK83, tests/apps/tk83.c, Standard and 386
+; Observed on Windows 3.1 (TK84, tests/apps/tk84.c, Standard and 386
 ; Enhanced mode): below its return address lstrcpy and lstrcat write 6
 ; bytes of the caller's stack, lstrlen 2, lstrcpyn 8. Programs rely on
 ; the rest staying as it was: Adobe Type Manager 3.0's installer loads

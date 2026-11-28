@@ -14,8 +14,8 @@
 #            restart Windows (code 0042) and end it without an exception.
 #            Before the fixes the installer stopped at once with "The
 #            Installer Configuration file is missing the following entry:
-#            ':*'" (KERNEL's lstrcpy, TK83) and ATM.INI named the font
-#            files in capitals (USER's LB_DIR, US40)
+#            ':*'" (KERNEL's lstrcpy, TK84) and ATM.INI named the font
+#            files in capitals (USER's LB_DIR, US42)
 #   acro     Acrobat Reader 2.0 (from $W16_ACROREAD_DIR, as tests/acroread.sh
 #            takes it) started from File > Run with its HELP\HELP_R.PDF on
 #            the drive each side's install left, with Reader's own ATM

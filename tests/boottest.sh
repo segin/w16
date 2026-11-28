@@ -580,13 +580,13 @@
 #              part tree, w16's install tree alone with its WIN386 and
 #              paging file (ARCHITECTURE.md 12.17), the same; every part
 #              then starts Win32s's Freecell (its window must come up)
-#   lbdir      LB_DIR's names and a sorted list box's order: US40 as the
-#              shell (tests/apps/us40.c), its log with w16's USER the same
+#   lbdir      LB_DIR's names and a sorted list box's order: US42 as the
+#              shell (tests/apps/us42.c), its log with w16's USER the same
 #              as on 3.1 (Adobe Type Manager 3.0's installer writes the
 #              names it lists into ATM.INI)
 #   strstack   how much of the caller's stack lstrcpy, lstrcat, lstrlen and
-#              lstrcpyn write below their return address: TK83 as the
-#              shell (tests/apps/tk83.c), its log with w16's KRNL286 (part
+#              lstrcpyn write below their return address: TK84 as the
+#              shell (tests/apps/tk84.c), its log with w16's KRNL286 (part
 #              k286) and KRNL386 (k386) the same as on 3.1 (Adobe Type
 #              Manager 3.0's installer copies a string from below its
 #              stack pointer)
@@ -4352,8 +4352,8 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         case $c in
         nametable) pr=TK74 p=${part:-k286} ;;
         rsrchandler) pr=TK81 p=${part:-k286} ;;
-        strstack) pr=TK83 p=${part:-k286} ;;
-        lbdir) pr=US40 p=${part:-user} ;;
+        strstack) pr=TK84 p=${part:-k286} ;;
+        lbdir) pr=US42 p=${part:-user} ;;
         *) pr=US37 p=${part:-user} ;;
         esac
         # pbrun NAME [dropin.sh options]: the probe's TK.LOG in NAME.log
@@ -6981,7 +6981,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   rsrchandler: TK81's calls of KERNEL's default resource handler as on 3.1 (w16's KRNL286, KRNL386)"
         else echo "FAIL rsrchandler: $pfirst ($out)"; fi ;;
     strstack)
-        if [ $pbad = 0 ]; then echo "ok   strstack: lstrcpy, lstrcat, lstrlen and lstrcpyn use as much of their caller's stack as on 3.1 (TK83; w16's KRNL286, KRNL386)"
+        if [ $pbad = 0 ]; then echo "ok   strstack: lstrcpy, lstrcat, lstrlen and lstrcpyn use as much of their caller's stack as on 3.1 (TK84; w16's KRNL286, KRNL386)"
         else echo "FAIL strstack: $pfirst ($out)"; fi ;;
     exitexec)
         if [ $pbad = 0 ]; then echo "ok   exitexec: ExitWindowsExec's programs, tails and restarts as 3.1's (w16's KRNL386, USER, tree)"
