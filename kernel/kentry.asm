@@ -88,8 +88,9 @@ int3d_handler:
 vec_ints        db 00h, 02h, 04h, 06h, 07h, 3Eh, 75h   ; TDB 32h-4Dh
 global int21_handler
 int21_handler:
-        ; record the call (AX, BX, DX, caller CS:IP) in a ring of 16 for
-        ; the fault report (fault.c)
+        ; record the call (AX, BX, DX, caller CS:IP) in a ring of 64 for
+        ; the fault report (fault.c: the screen shows the latest, the crash
+        ; log all)
         push ds
         push bx
         push bp
@@ -98,7 +99,7 @@ int21_handler:
         mov ds, bx
         mov bx, [_i21_pos wrt DGROUP]
         add bx, 10
-        cmp bx, 160
+        cmp bx, 640
         jb .rok
         xor bx, bx
 .rok:   mov [_i21_pos wrt DGROUP], bx
@@ -1065,7 +1066,7 @@ report_stack    resb 3072
 report_stack_top:
 _rpt_active     resb 1          ; a report is running (fault.c)
 global _i21_ring, _i21_pos
-_i21_ring       resw 80         ; 16 x (ax bx dx ip cs)
+_i21_ring       resw 320        ; 64 x (ax bx dx ip cs)
 _i21_pos        resw 1
 global _i21_log, _i21_in
 _i21_log        resw 1          ; [w16] int21log: log every call (i21_note)
