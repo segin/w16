@@ -1620,7 +1620,12 @@ alttabdos_part() {
         a=$out/alttabdos-$_dp-w16/$s
         [ -f "$a" ] || { r="no $s"; break; }
         sz=$(magick identify -format '%wx%h' "$f" 2>/dev/null)
-        [ "$sz" = "$(magick identify -format '%wx%h' "$a" 2>/dev/null)" ] || { r="$s: screen $(magick identify -format '%wx%h' "$a" 2>/dev/null), not $sz"; break; }
+        if [ "$sz" != "$(magick identify -format '%wx%h' "$a" 2>/dev/null)" ]; then
+            # (the tree's own Command Prompt ends in its window: only its
+            # title screens and switch box are compared, below)
+            case $_dp in tree*) continue ;; esac
+            r="$s: screen $(magick identify -format '%wx%h' "$a" 2>/dev/null), not $sz"; break
+        fi
         # left out: the DOS prompt's cursor column and the banner's rows
         # (w16's WIN386 and DSWAP say "w16"); on the tree, whose prompt is
         # C:\W16>, only the title screens (the bar in row 1) and, of
