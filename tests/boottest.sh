@@ -1381,8 +1381,15 @@ refok() {
 # from the cache), drop them if not
 refkeep() {
     [ -f "$out/.pending-$_bt_n" ] || return 0
+    # a part (CASE@PART) reports through partdone, not fails: its result
+    # decides (a reference with 3.1's one-off timer message in it was
+    # kept by a failing alttab@cool and failed every run after it)
+    _rp=0
+    case ${_bt_c:-} in
+    *@*) [ "$(cat "$out/.part-${_bt_c%@*}-${_bt_c#*@}" 2>/dev/null)" = ok ] || _rp=1 ;;
+    esac
     while read -r _rd _rt; do
-        if [ "${fails:-1}" = 0 ]; then
+        if [ "${fails:-1}" = 0 ] && [ $_rp = 0 ]; then
             rm -rf "$_rd"; mv "$_rt" "$_rd"
             echo "$(basename "$(dirname "$_rd")") $(basename "$_rd") stored" >> "$out/refcache.log"
         else
