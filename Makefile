@@ -3010,6 +3010,13 @@ $(DOS)/US39.EXE: $(B)/tests/start.o $(B)/tests/us39.o tests/apps/app.lnk
 	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
 	    option map=$(B)/tests/us39.map file { $(B)/tests/start.o $(B)/tests/us39.o }
 dos: $(DOS)/US39.EXE
+# US40: the case of LB_DIR's names (tests/apps/us40.c)
+$(B)/tests/us40.o: tests/apps/us40ref.h tests/apps/tklog.h
+$(DOS)/US40.EXE: $(B)/tests/start.o $(B)/tests/us40.o tests/apps/app.lnk
+	@mkdir -p $(@D)
+	$(WLINK) @tests/apps/app.lnk name $@ libpath $(WATCOM)/lib286/win \
+	    option map=$(B)/tests/us40.map file { $(B)/tests/start.o $(B)/tests/us40.o }
+dos: $(DOS)/US40.EXE
 # US32S: a window spy for US32's question (tests/apps/us32s.c)
 $(B)/tests/us32s.o: tests/apps/us32ref.h tests/apps/tklog.h
 $(DOS)/US32S.EXE: $(B)/tests/start.o $(B)/tests/us32s.o tests/apps/app.lnk

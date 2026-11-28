@@ -574,6 +574,10 @@
 #              part tree, w16's install tree alone with its WIN386 and
 #              paging file (ARCHITECTURE.md 12.17), the same; every part
 #              then starts Win32s's Freecell (its window must come up)
+#   lbdir      LB_DIR's names and a sorted list box's order: US40 as the
+#              shell (tests/apps/us40.c), its log with w16's USER the same
+#              as on 3.1 (Adobe Type Manager 3.0's installer writes the
+#              names it lists into ATM.INI)
 #   strstack   how much of the caller's stack lstrcpy, lstrcat, lstrlen and
 #              lstrcpyn write below their return address: TK83 as the
 #              shell (tests/apps/tk83.c), its log with w16's KRNL286 (part
@@ -1191,7 +1195,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit appexit acroread kexedir wpregs mdistyle selfload staroff win32s w32m rsrchandler strstack exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit appexit acroread kexedir wpregs mdistyle selfload staroff win32s w32m rsrchandler strstack lbdir exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -4324,7 +4328,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   sb16"
         else echo "FAIL sb16: $r ($out)"; fails=$((fails + 1)); fi ;;
-    nametable|dlgfocus|rsrchandler|strstack)
+    nametable|dlgfocus|rsrchandler|strstack|lbdir)
         # a probe as the shell on 3.1 and with w16's KERNEL or USER: the
         # logs (TK.LOG) must be equal
         r=ok
@@ -4332,6 +4336,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         nametable) pr=TK74 p=${part:-k286} ;;
         rsrchandler) pr=TK81 p=${part:-k286} ;;
         strstack) pr=TK83 p=${part:-k286} ;;
+        lbdir) pr=US40 p=${part:-user} ;;
         *) pr=US37 p=${part:-user} ;;
         esac
         # pbrun NAME [dropin.sh options]: the probe's TK.LOG in NAME.log

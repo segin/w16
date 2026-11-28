@@ -13,8 +13,10 @@
  * box calls DlgDirList for its "Directories:" path (Windows Write's File >
  * Open showed it empty on w16, "c:\windows" on 3.1: lowercase).
  *
- * UNVERIFIED: the case of the names LB_DIR adds (as DOS gives them, in
- * capitals); the order (as found, the list box sorts if LBS_SORT).
+ * Observed on 3.1 (US40): LB_DIR adds the names in lower case
+ * ("mixed.txt", "[subdir.x]"; Adobe Type Manager 3.0's installer writes
+ * the font files' names it lists so into ATM.INI), in the order DOS finds
+ * them; a sorted box puts the bracketed ones after the rest (listbox.c).
  */
 #include "user.h"
 
@@ -136,6 +138,7 @@ LRESULT lb_dir(HWND lb, UINT attr, LPCSTR spec)
                 lstrcat(item, "]");
             } else
                 lstrcpy(item, fb.name);
+            AnsiLower(item);            /* observed (US40): in lower case */
             r = send_message(lb, LB_ADDSTRING, 0, (LPARAM)(LPSTR)item);
             if (r < 0) {
                 last = r;
