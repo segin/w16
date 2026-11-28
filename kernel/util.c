@@ -54,7 +54,22 @@ int kstrnicmp_p(const char FAR *a, const u8 FAR *pstr)
 /* KERNEL's messages go to its own standard output: handle 1 of its PSP,
    not of the running task's (where it may be a file the task opened;
    KERNEL audit, low) */
+/* (the fault report, fault.c: while set, kputs hands its text to this
+   instead: the screen's rows counted, or the crash log's pass) */
+void (__far *kputs_hook)(const char FAR *s);
+
 void kputs(const char FAR *s)
+{
+    if (!*s)
+        return;
+    if (kputs_hook)
+        kputs_hook(s);
+    else
+        kputs_out(s);
+}
+
+/* kputs to standard output, never through kputs_hook */
+void kputs_out(const char FAR *s)
 {
     regs16 r;
     if (!*s)

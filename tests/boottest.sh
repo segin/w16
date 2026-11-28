@@ -251,8 +251,16 @@
 #              expand-down, and with [w16] faultreptest
 #              making the report's own steps fault: the whole report must
 #              come out (registers, what each selector is, the stack as far
-#              as it can be read, the INT 21h calls, "back to DOS")
-#   msquery    US39 (tests/apps/us39.c) as the shell on 3.1 and on w16's
+#              as it can be read, the INT 21h calls, "back to DOS");
+#              the crash log C:\W16\W16CRASH.TXT has a header and every
+#              line of the screen's report, and the screen says so; the
+#              screen (TXTDUMP.COM's dump, DOSBox and DOSBox-X) is 50
+#              rows with the whole report on it; a second fault appends
+#              to the log, one over 64 KB is emptied first; CrashLog=0
+#              writes none; a log that cannot be written (a directory of
+#              its name, a fault in its DOS calls) leaves the screen's
+#              report whole
+#   msquery   US39 (tests/apps/us39.c) as the shell on 3.1 and on w16's
 #              USER: SetFocus on disabled and minimised windows and their
 #              children, and another task's MessageBox owned by the
 #              shell's window; the OBS lines identical. Then Microsoft
@@ -2273,30 +2281,99 @@ runcase() {
             echo "ok   msvcapps: $(grep '^\(ok\|skip\)' "$out/msvcapps.txt" | tr '\n' ' ')"
         else echo "FAIL msvcapps: no result ($out/msvcapps.txt)"; fails=$((fails + 1)); fi ;;
     faultrep)
-        # TK79's faults on w16's tree: KERNEL's report must come out whole
-        for k in S S2 P X N2 N4; do
+        # TK79's faults on w16's tree: KERNEL's report must come out whole,
+        # on the screen (80x50) and in the crash log (C:\W16\W16CRASH.TXT)
+        #   V VX  the screen (TXTDUMP.COM after WIN, nothing redirected;
+        #         VX in DOSBox-X): 50 rows, the report from the first row
+        #   A     a 70 KB log emptied, then two faults appended
+        #   Z     CrashLog=0: no log;  D: the log a directory (cannot be
+        #         written);  F: a fault in the log's first DOS call
+        fr_cases="S S2 P X N2 N4 V VX A Z D F"
+        printf 'WIN /3 /B\r\nC:\\TXTDUMP\r\n' > "$out/faultrep-GOV.BAT"
+        printf 'WIN /3 /B > C:\\OUT1.TXT\r\nWIN /S /B > C:\\OUT.TXT\r\n' > "$out/faultrep-GOA.BAT"
+        head -c 70000 /dev/zero | tr '\0' 'x' > "$out/faultrep-big.txt"
+        : > "$out/faultrep-dir.txt"
+        for k in $fr_cases; do
             set -- -T "$root/build/w16" -3 -c 'WIN /3 /B'
-            a=${k%[0-9]}
+            a=${k%[0-9]} nr=
             case $k in
             S2) set -- -T "$root/build/w16" -c 'WIN /S /B' ;;
             N2) a=S; set -- "$@" -i w16:faultreptest=3 ;;       # WHERE, STACK
             N4) a=S; set -- "$@" -i w16:faultreptest=99 ;;      # and QUIET, OEM
+            V|VX) a=S nr=DROPIN_NOREDIR=1
+                set -- "$@" -c 'C:\GOV' -f "$out/faultrep-GOV.BAT=GOV.BAT" \
+                    -f "$root/build/dos/TXTDUMP.COM=TXTDUMP.COM"
+                [ $k = VX ] && set -- "$@" -p 386 ;;
+            A) a=S nr=DROPIN_NOREDIR=1
+                set -- "$@" -c 'C:\GOA' -f "$out/faultrep-GOA.BAT=GOA.BAT" \
+                    -f "$out/faultrep-big.txt=W16/W16CRASH.TXT" ;;
+            Z) a=S; set -- "$@" -i w16:CrashLog=0 ;;
+            D) a=S; set -- "$@" -f "$out/faultrep-dir.txt=W16/W16CRASH.TXT/X" ;;
+            F) a=S; set -- "$@" -i w16:faultreptest=256 ;;      # FILE
             esac
             printf '%s' "$a" > "$out/faultrep-$k.arg"
-            "$root/tests/dropin.sh" "$@" -t 90 -o "$out/faultrep-$k" -f "$out/faultrep-$k.arg=TK79.ARG" \
+            env $nr "$root/tests/dropin.sh" "$@" -t 120 -o "$out/faultrep-$k" -f "$out/faultrep-$k.arg=TK79.ARG" \
                 -f "$root/build/dos/TK79.EXE=TK79.EXE" -i 'WIN.INI:windows:run=C:\TK79.EXE' \
                 > "$out/faultrep-$k.txt" 2>&1 &
         done
         wait
+        # fr_log REP LOG: LOG is a crash log whose last report holds every
+        # line of REP's report (from its last "w16: exception" line up to
+        # "w16: report written"), in order (the screen shows the latest of
+        # the INT 21h calls and fewer stack words and frames: the log's
+        # lines are more, the screen's among them); prints what is wrong
+        fr_log() {
+            python3 -I - "$1" "$2" <<'PY'
+import re, sys
+rd = lambda f: [l.rstrip('\r\n') for l in open(f, encoding='latin-1')]
+rep, log = rd(sys.argv[1]), rd(sys.argv[2])
+hd = [i for i, l in enumerate(log) if l.startswith('w16 crash report, ')]
+if not hd:
+    sys.exit('no header')
+if not re.match(r'w16 crash report, 1992-06-15 10:\d\d:\d\d, w16 \d+\.\d+ \(\w+\), KRNL[23]86$', log[hd[-1]]):
+    sys.exit('header: ' + log[hd[-1]])
+log = log[hd[-1]:]
+a = [i for i, l in enumerate(rep) if l.startswith('w16: exception')]
+b = [i for i, l in enumerate(rep) if l.startswith('w16: report written to C:\\W16\\W16CRASH.TXT')]
+if not a or not b:
+    sys.exit('no report, or no "w16: report written to C:\\W16\\W16CRASH.TXT"')
+j = 0
+for l in rep[a[-1]:b[0]]:
+    while j < len(log) and log[j] != l:
+        j += 1
+    if j == len(log):
+        sys.exit('not in the log: ' + l)
+    j += 1
+if not any(l.startswith('last INT 21h calls') for l in log):
+    sys.exit('no INT 21h calls in the log')
+PY
+        }
         r=ok
-        for k in S S2 P X N2 N4; do
-            f=$out/faultrep-$k.txt
+        for k in $fr_cases; do
+            f=$out/faultrep-$k.txt c=$out/faultrep-$k/c log=$out/faultrep-$k/c/W16/W16CRASH.TXT
             # the report: KERNEL's output, from the first "w16:" line
             sed -n '/^== KERNEL output/,/^== /p' "$f" > "$out/faultrep-$k.rep"
             e=000D
             case $k in P|X) e=0000 ;; esac
             ring="^last INT 21h calls"
             [ $k = N4 ] && ring="^w16: exception $e at .* SS=.* SP="    # (the raw line)
+            case $k in
+            V|VX)
+                # the screen: 50 rows, the report from the first, and its
+                # end below row 25 (more than 25 rows used, none lost)
+                s=$c/SCREEN.TXT
+                tr -d '\r' < "$s" > "$out/faultrep-$k.scr" 2>/dev/null || { r="$k: no screen dump ($f)"; break; }
+                bk=$(grep -n '^w16: back to DOS, code 00FF' "$out/faultrep-$k.scr" | head -1 | cut -d: -f1)
+                [ "$(head -1 "$out/faultrep-$k.scr")" = "rows=50 cols=80" ] &&
+                  sed -n 2p "$out/faultrep-$k.scr" | grep -q "^w16: exception $e at " &&
+                  grep -q '^last INT 21h calls' "$out/faultrep-$k.scr" &&
+                  grep -q '^w16: report written to C:\\W16\\W16CRASH.TXT$' "$out/faultrep-$k.scr" &&
+                  [ "${bk:-0}" -gt 27 ] ||
+                  { r="$k: not a 50-row screen with the whole report ($out/faultrep-$k.scr)"; break; }
+                [ -f "$log" ] && [ "$(grep -c '^w16 crash report, ' "$log")" = 1 ] ||
+                  { r="$k: no crash log ($log)"; break; }
+                continue ;;
+            esac
             for want in "^w16: exception $e at " "^ AX=.* BP=.* FL=" "^ DS=.* SS=.* SP=" \
                         "$ring" "^w16: back to DOS, code 00FF"; do
                 grep -q "$want" "$out/faultrep-$k.rep" || { r="$k: no line \"$want\" ($f)"; break; }
@@ -2317,10 +2394,25 @@ runcase() {
                   r="$k: not two faults in the report, or the stack after its fault ($f)" ;;
             N4) grep -q '^w16: and in the report: exception 000D' "$out/faultrep-$k.rep" ||
                   r="$k: no raw report after the report's fourth fault ($f)" ;;
+            A) # the 70 KB log emptied by the first fault, the second appended
+               tr -d '\r' < "$c/OUT1.TXT" 2>/dev/null | grep -q '^w16: report written to C:\\W16\\W16CRASH.TXT$' &&
+                  [ "$(grep -c '^w16 crash report, ' "$log")" = 2 ] &&
+                  [ "$(grep -c '^========' "$log")" = 1 ] &&
+                  head -1 "$log" | grep -q '^w16 crash report, ' &&
+                  [ "$(stat -c %s "$log")" -lt 70000 ] ||
+                  r="$k: not two reports appended after the 70 KB log was emptied ($log)" ;;
+            Z|D|F) ! grep -q '^w16: report written' "$out/faultrep-$k.rep" ||
+                  r="$k: \"report written\" without a log that could be written ($f)"
+                  [ $k != Z ] || [ ! -e "$log" ] || r="$k: a crash log with CrashLog=0 ($log)"
+                  [ $k != D ] || [ -d "$log" ] || r="$k: the directory W16CRASH.TXT replaced ($log)" ;;
             esac
             [ "$r" = ok ] || break
+            case $k in
+            Z|D|F|N4) ;;
+            *) m=$(fr_log "$out/faultrep-$k.rep" "$log" 2>&1) || { r="$k: crash log: $m ($log)"; break; } ;;
+            esac
         done
-        if [ "$r" = ok ]; then echo "ok   faultrep: the fault report whole with a bad SS, SP 0, an expand-down SS, and faults in the report"
+        if [ "$r" = ok ]; then echo "ok   faultrep: the fault report whole with a bad SS, SP 0, an expand-down SS, and faults in the report; 80x50 (DOSBox, DOSBox-X); the crash log whole, appended, capped, off, unwritable"
         else echo "FAIL faultrep: $r"; fails=$((fails + 1)); fi ;;
     vdmad)
         # the Virtual DMA Device: tests/vdmadprobe.sh (SBD.COM's DMA in a
