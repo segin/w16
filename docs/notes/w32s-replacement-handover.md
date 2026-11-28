@@ -1,8 +1,9 @@
 # w16's own W32S.386 (handover)
 
-Branch: `w16-w32s3`, from master at "Notes: w32s-replacement handover, test
-state". Spec: ARCHITECTURE.md 12.18 (Microsoft's W32S.386 on w16's VMM:
-stopped), 12.20 (W32S.386's device API, observed, and w16's replacement).
+Branch: `w16-w32s4`, from master at "Notes: w32s-replacement handover, test
+state" (w16-w32s3 merged). Spec: ARCHITECTURE.md 12.18 (Microsoft's W32S.386 on
+w16's VMM: stopped), 12.20 (W32S.386's device API, observed, and w16's
+replacement; Win32s's 16-bit module tables).
 
 ## Roadmap (the user's)
 
@@ -26,67 +27,73 @@ stopped), 12.20 (W32S.386's device API, observed, and w16's replacement).
   `tools/neimports.py --imports WIN32S16 .tools/ref/win31s/cdrive/WINDOWS`).
   K327's note (debuglog) prints the caller's frame and each selector
   argument's base, limit, handle and size.
-- Hand runs on installation-05 in `/mnt/build/w16-runs/w16-w32s3` (synced
+- Hand runs on installation-05 in `/mnt/build/w16-runs/w16-w32s4` (synced
   by `build/sync.sh` of the worktree: rsync, make, `build/mktree.sh`):
   `build/fct.sh NAME [dropin args]` Freecell on `build/w32t` (this build's
   tree with Win32s's files from the w16-w32s2 run's Setup result) under
-  w16's WIN386 (`-p 386 -i w16:vmmtrace=1` for the device's trace on
-  COM1, `build/NAME.com1`); W32M: `-f build/W32M.EXE=W32M.EXE -i
+  w16's WIN386 (`RUNTXT=` an input script in build/fc, `T=` seconds; `-p
+  386 -i w16:vmmtrace=1` for the device's trace on COM1,
+  `build/NAME.com1`); `build/fc31.sh NAME SCRIPT [args]` the same on the
+  Win32s reference (`R=` empty: w16's KRNL386, default Microsoft's).
+  Input scripts: build/fc/play3.src (game 1, three cards to the free
+  cells, resign; `python3 -I build/fc/gen.py X.src > X.txt` turns "at X
+  Y" into pointer moves, with `-i WIN.INI:windows:MouseSpeed=0`).
+  `build/pbrun.sh PROBE` a probe as the shell on 3.1, with w16's USER and
+  on w16's defaults, logs side by side; `build/tk83run.sh` TK83 on 3.1 and
+  w16's KRNL386. W32M: `-f build/W32M.EXE=W32M.EXE -i
   "WIN.INI:windows:run=C:\W32M.EXE"`. `build/vx6.sh NAME 31 [args]`
   Freecell on the Win32s reference with VXY (`VXY=none` without, `R=`
   empty: w16's KRNL386, `RUN=` empty: no Freecell, `T=` seconds).
 
-## State (2026-11-28)
+## State (2026-11-28, w16-w32s4)
+
+Done on w16-w32s3 (merged in master): the W32S device's relocations,
+arena, file mappings, 14h/15h; WIN386's DOS buffers; KERNEL's default
+resource handler (TK81); boot-test cases w32m and rsrchandler.
 
 Done on this branch:
-- W32S device: base relocations applied to each section it reads (Win32s
-  writes none: 04h's record [7] is the delta); the arena at 88000000h, a
-  chosen address only inside it, the memory of the system below it; 06h
-  and 07h's NT statuses; file mappings as 3.1's (0Dh numbers a mapping,
-  11h maps a view by number, 13h/12h unmap by address, 0Fh closes; views
-  share the mapping's pages; a file's contents read at 0Dh); 14h (debug
-  registers) and 15h (coprocessor state) as 3.1's.
-- WIN386: a DOS buffer of a protected-mode client need not be writable
-  from ring 3 (Win32s reads a file into PAGE_READONLY memory).
-- KERNEL: the default resource handler returns a block holding data
-  untouched (TK81). That was the k386 "stack wrap" (GDI went on past a
-  K327 for a bitmap whose bits lay past the block).
-- Tests: boot-test cases `w32m` (W32M's log on w16's device = 3.1's but
-  for addresses) and `rsrchandler` (TK81 on both kernels = 3.1's).
+- KERNEL: Win32s's 16-bit module of a Win32 DLL (a block "NE", its own
+  owner, not in the module list, with an 80h-byte instance block it owns)
+  is taken by GetExePtr, GetModuleUsage, GetModuleHandle(MAKELP(0, h)),
+  GetModuleFileName, GetExpWinVer, DirectResAlloc and the resource calls,
+  as on 3.1 (TK83;
+  `module_of_exe` in kernel/module.c). That was Freecell's "Out of
+  memory": LoadBitmap(CARDS's instance, 35h) found nothing (w16's USER), or
+  (Microsoft's USER) took the bitmaps for Windows 2's (GetExpWinVer 0).
+- USER: LoadBitmap makes a 1-bit DIB whose colours are not black and
+  white a colour bitmap (US40: Freecell's red cards were black);
+  WM_NCACTIVATE repaints the caption only, not the menu bar (US41:
+  Freecell's "Cards Left" went when a message box came up).
+- Tests: rsrchandler runs TK81 and TK83 (k286, k386) and US40 and US41
+  (part user); win32s plays Freecell in every part (game 1 dealt, three
+  cards to the free cells, three home by themselves, resigned, ended) and
+  fails without it.
 
-Where Freecell stands: on w16's tree (w16's WIN386 and W32S) and on 3.1
-with w16's KRNL386 (Microsoft's WIN386, W32S.386, USER, GDI) Freecell
-starts, makes the same 125 device calls as on 3.1, and shows its own box
-"Out of memory. Close other applications and try again." Both have w16's
-KERNEL in common. Found so far (3.1 with w16's KRNL386, USER/GDI calls
-from WIN32S16 traced with `trace=USER.*,GDI.*`, `tracefrom=WIN32S16`; a
-debug print in FindResource): WIN32S16 calls USER's LoadBitmap with
-hInstance NULL and ids 35h, 43h, 44h (CARDS.DLL's card bitmaps' numbers,
-not OBM_ ones); USER looks for them in DISPLAY's bitmaps (8035h ... are not
-there) and returns 0 three times, then Freecell's MessageBox. So Win32s
-takes CARDS.DLL's Win32 hInstance as NULL (or as no Win32 module) by the
-time CARDS loads its bitmaps: find out what of w16's KERNEL makes it so
-(what CARDS's DLL entry gets, GetModuleHandle/GetModuleFileName/GetExePtr
-answers for Win32s's module, the W32SXXXX module table that Win32s
-rewrites at run time: its resource table there holds Freecell's icons at
-00BEh/017Eh, which WIN32S.EXE's file does not have). On 3.1 itself the same
-three calls should be checked for (a USER-side trace is not possible
-under Microsoft's KERNEL; a VXY-free way: TOOLHELP NotifyRegister in a
-helper program, or run Freecell with w16's KRNL386 but a probe DLL).
+Where Freecell stands: it plays on w16's tree (w16's WIN386, W32S,
+KERNEL, USER, GDI) as on 3.1 and on 3.1 with w16's KRNL386: the screens
+of the play script equal 3.1's but for w16's caption buttons and
+message-box icon. A game was not played to the end (winning needs a long
+script); dealing, moves, the auto-moves home, an illegal move's message
+box, resigning and the exit all match.
 
 Open (next steps, in order):
-1. Freecell's "Out of memory" (above).
-2. Exceptions: routing a fault in Win32 code to Win32s (on 3.1 the next
-   call after a fault is 14h with the faulting registers in the CONTEXT);
-   W32M's exception section hangs on 3.1 itself.
-3. K327 (HandleParamError) with an error code: 3.1's makes the API return
+1. Exceptions: routing a fault in Win32 code to Win32s (on 3.1 the next
+   call after a fault is 14h with the faulting registers in the CONTEXT;
+   what 3.1's W32S.386 does to the client between the fault and that call
+   is not observed: VXY's fault hook runs in front of W32S.386's). W32M's
+   exception section hangs on 3.1 itself, so it gives no reference yet: a
+   Win32 probe whose exception is simpler (an int 3, or a read of address
+   0 inside a frame of its own) might.
+2. K327 (HandleParamError) with an error code: 3.1's makes the API return
    0 to its caller (GDI's Rectangle on a bad DC returns 0); called from an
    application it ends the task silently (TK41, 9.x). w16's returns to the
-   caller, so a Microsoft module's validation goes on with the bad
-   parameter. The mechanism is still not observed.
-4. Committed Win32 pages are backed at once; w16's pager could back them
-   (large reservations).
-5. Tests: the win32s case's Freecell lines become checks once it runs.
+   caller. Freecell no longer needs it (the k386 stack wrap was TK81's).
+3. Committed Win32 pages are backed at once (3.1 maps a committed page
+   on first touch, 12.18); a lazy commit needs a not-present PTE state
+   the device's own ring-0 writes (section reads, relocations, mapping
+   copies) do not fault on, and w16's pager to page them out.
+4. A whole game of Freecell to its win (a long script), Solitaire-style
+   drags (Freecell moves by clicks only), and other Win32s programs.
 
 ## Test state
 
