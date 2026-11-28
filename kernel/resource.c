@@ -152,24 +152,40 @@ static u16 find_type(module FAR *m, const char FAR *type)
     return 0;
 }
 
-/* The module and entry of a resource handle in any module's table. */
+/* The entry of a resource handle in module m's table. */
+static int find_in(module FAR *m, u16 h, u16 *rp)
+{
+    u16 t, k;
+    for (t = m->rsrc_ready ? type_first(m) : 0; t; t = type_next(m, t))
+        for (k = 0; k < TYPE(m, t)->count; k++) {
+            /* (not a module still loading: its handle words are the
+               file's; KERNEL audit, medium 11) */
+            u16 r = t + sizeof(ne_rsrc_type) + k * sizeof(ne_rsrc_name);
+            if (NAME(m, r)->handle && (NAME(m, r)->handle & ~1u) == h) {
+                *rp = r;
+                return 1;
+            }
+        }
+    return 0;
+}
+
+/* The module and entry of a resource handle: first in the table of the
+   module that owns its block (as GetExePtr finds it: also a module table
+   a program made, whose resources Win32s allocates with AllocResource;
+   TK82), then in any module's. */
 static int find_handle(u16 h, module FAR **mp, u16 *rp)
 {
-    module FAR *m;
-    u16 t, k;
+    module FAR *m = module_of_exe(h);
     h &= ~1u;
+    if (m && find_in(m, h, rp)) {
+        *mp = m;
+        return 1;
+    }
     for (m = module_first; m; m = m->next)
-        for (t = m->rsrc_ready ? type_first(m) : 0; t; t = type_next(m, t))
-            for (k = 0; k < TYPE(m, t)->count; k++) {
-                /* (not a module still loading: its handle words are
-                   the file's; KERNEL audit, medium 11) */
-                u16 r = t + sizeof(ne_rsrc_type) + k * sizeof(ne_rsrc_name);
-                if (NAME(m, r)->handle && (NAME(m, r)->handle & ~1u) == h) {
-                    *mp = m;
-                    *rp = r;
-                    return 1;
-                }
-            }
+        if (find_in(m, h, rp)) {
+            *mp = m;
+            return 1;
+        }
     return 0;
 }
 
@@ -390,7 +406,7 @@ static u16 nametable_id(module FAR *m, const char FAR *name, u16 type)
 
 u16 KAPI FindResource(u16 hinst, const char FAR *name, const char FAR *type) /* KERNEL.60 */
 {
-    module FAR *m = module_of(hinst);
+    module FAR *m = module_of_exe(hinst);
     u16 t, k, tid, nid = 0;
     if (!m || (t = find_type(m, type)) == 0)
         return 0;
@@ -414,7 +430,7 @@ u16 KAPI FindResource(u16 hinst, const char FAR *name, const char FAR *type) /* 
      becomes the handle. */
 u16 KAPI LoadResource(u16 hinst, u16 r)                        /* KERNEL.61 */
 {
-    module FAR *m = module_of(hinst);
+    module FAR *m = module_of_exe(hinst);
     ne_rsrc_name FAR *n;
     u16 t, h;
 
@@ -512,7 +528,7 @@ u16 KAPI FreeResource(u16 h)                                   /* KERNEL.63 */
    (UNVERIFIED for the failure value). */
 u16 KAPI AccessResource(u16 hinst, u16 r)                      /* KERNEL.64 */
 {
-    module FAR *m = module_of(hinst);
+    module FAR *m = module_of_exe(hinst);
     if (!m || !r || !type_of(m, r))
         return 0xFFFF;
     return res_open(m, r);
@@ -522,7 +538,7 @@ u16 KAPI AccessResource(u16 hinst, u16 r)                      /* KERNEL.64 */
    rounded up to the alignment); 0 for hRsrc 0. */
 u32 KAPI SizeofResource(u16 hinst, u16 r)                      /* KERNEL.65 */
 {
-    module FAR *m = module_of(hinst);
+    module FAR *m = module_of_exe(hinst);
     if (!m || !r || !type_of(m, r))
         return 0;
     return size_of(m, r);
@@ -534,7 +550,7 @@ u32 KAPI SizeofResource(u16 hinst, u16 r)                      /* KERNEL.65 */
    is, else fixed or moveable as the resource; the table is not changed. */
 u16 KAPI AllocResource(u16 hinst, u16 r, u32 size)             /* KERNEL.66 */
 {
-    module FAR *m = module_of(hinst);
+    module FAR *m = module_of_exe(hinst);
     if (!m || !r || !type_of(m, r))
         return 0;
     if (!size)
@@ -547,7 +563,7 @@ u16 KAPI AllocResource(u16 hinst, u16 r, u32 size)             /* KERNEL.66 */
    the module has no such type. Types as in FindResource. */
 u32 KAPI SetResourceHandler(u16 hinst, const char FAR *type, u32 proc) /* KERNEL.67 */
 {
-    module FAR *m = module_of(hinst);
+    module FAR *m = module_of_exe(hinst);
     u16 t;
     u32 old;
     if (!m || (t = find_type(m, type)) == 0)
@@ -568,7 +584,7 @@ u32 KAPI SetResourceHandler(u16 hinst, const char FAR *type, u32 proc) /* KERNEL
    read. */
 u16 KAPI DefResourceHandler(u16 hmem, u16 hinst, u16 r)
 {
-    module FAR *m = module_of(hinst);
+    module FAR *m = module_of_exe(hinst);
     u16 h, sel;
     int fresh = 0;
 

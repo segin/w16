@@ -565,8 +565,10 @@
 #              then starts Win32s's Freecell (its window must come up)
 #   rsrchandler KERNEL's default resource handler given a block that holds
 #              data (Win32s's handlers fill one and call it): TK81 as the
-#              shell (tests/apps/tk81.c), its log with w16's KRNL286 (part
-#              k286) and KRNL386 (k386) the same as on 3.1
+#              shell (tests/apps/tk81.c); a module table a program made
+#              (Win32s's 16-bit modules of Win32 DLLs): TK82 (tk82.c);
+#              their logs with w16's KRNL286 (part k286) and KRNL386
+#              (k386) the same as on 3.1
 #   w32m       W32M.EXE (tests/win32s/w32m.c, a Win32 probe of Win32s's
 #              memory paths: virtual memory, heaps, a file mapping) on
 #              w16's tree alone with Win32s's files from the Win32s
@@ -4271,12 +4273,13 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         else echo "FAIL sb16: $r ($out)"; fails=$((fails + 1)); fi ;;
     nametable|dlgfocus|rsrchandler)
         # a probe as the shell on 3.1 and with w16's KERNEL or USER: the
-        # logs (TK.LOG) must be equal
+        # logs (TK.LOG) must be equal (rsrchandler: two probes, each part
+        # runs both)
         r=ok
         case $c in
-        nametable) pr=TK74 p=${part:-k286} ;;
-        rsrchandler) pr=TK81 p=${part:-k286} ;;
-        *) pr=US37 p=${part:-user} ;;
+        nametable) prs=TK74 p=${part:-k286} ;;
+        rsrchandler) prs="TK81 TK82" p=${part:-k286} ;;
+        *) prs=US37 p=${part:-user} ;;
         esac
         # pbrun NAME [dropin.sh options]: the probe's TK.LOG in NAME.log
         pbrun() {
@@ -4292,14 +4295,19 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         user) set -- -r -f "$user=WINDOWS/SYSTEM/USER.EXE" ;;
         *) set -- ;;
         esac
-        pbrun "$c-$p-ref" -r
-        pbrun "$c-$p-w16" "$@"
-        for l in ref w16; do
-            grep -q "^$pr end" "$out/$c-$p-$l.log" || { r="$p: $pr did not end ($l: $out/$c-$p-$l.log)"; break; }
+        for pr in $prs; do
+            [ "$r" = ok ] || break
+            # (a case of one probe keeps its old log names)
+            case $prs in *" "*) n="$c-$pr-$p" ;; *) n="$c-$p" ;; esac
+            pbrun "$n-ref" -r
+            pbrun "$n-w16" "$@"
+            for l in ref w16; do
+                grep -q "^$pr end" "$out/$n-$l.log" || { r="$p: $pr did not end ($l: $out/$n-$l.log)"; break; }
+            done
+            if [ "$r" = ok ] && ! diff "$out/$n-ref.log" "$out/$n-w16.log" > "$out/$n.diff"; then
+                r="$p: $pr $(grep -m1 '^>' "$out/$n.diff") ($out/$n.diff)"
+            fi
         done
-        if [ "$r" = ok ] && ! diff "$out/$c-$p-ref.log" "$out/$c-$p-w16.log" > "$out/$c-$p.diff"; then
-            r="$p: $(grep -m1 '^>' "$out/$c-$p.diff") ($out/$c-$p.diff)"
-        fi
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   $c"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
@@ -6900,7 +6908,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   nametable: TK74's FindResource through a name table as on 3.1 (w16's KRNL286, KRNL386)"
         else echo "FAIL nametable: $pfirst ($out)"; fi ;;
     rsrchandler)
-        if [ $pbad = 0 ]; then echo "ok   rsrchandler: TK81's calls of KERNEL's default resource handler as on 3.1 (w16's KRNL286, KRNL386)"
+        if [ $pbad = 0 ]; then echo "ok   rsrchandler: TK81's calls of KERNEL's default resource handler and TK82's module table made by a program as on 3.1 (w16's KRNL286, KRNL386)"
         else echo "FAIL rsrchandler: $pfirst ($out)"; fi ;;
     exitexec)
         if [ $pbad = 0 ]; then echo "ok   exitexec: ExitWindowsExec's programs, tails and restarts as 3.1's (w16's KRNL386, USER, tree)"
