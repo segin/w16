@@ -78,3 +78,14 @@ Inputs on installation-05: /mnt/build/w16-atm-in (DISK1.IMG, DISK2.IMG),
 ATM fonts). An installed drive to boot from: run `tests/atm.sh -o DIR install`
 and use DIR/install-w16/work/c with DROPIN_COVER (replace the tree's own
 binaries in its W16 directory with the build's first).
+
+## Test state (branch after merging master, 2026-11-28)
+
+make test passes. Full boot test: 200 ok, failures k286 and k286x (fixed
+since: kstr.asm had been assembled with 386 near conditional jumps, an
+invalid opcode on DOSBox-X's 286; k286 passes again), lzexpand (quirks:
+eof, zero, long matches; fails the same way on a clean master build) and
+bigmem (bigmem-refe: TK63 did not end on Microsoft's side: that reference
+timed out under the full run's load and was cached as it was, so the
+reruns read the failed log; with BOOTTEST_REFRESH=1 it passes). atm:
+install ok, acro xfail.
