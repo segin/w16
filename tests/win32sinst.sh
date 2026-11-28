@@ -30,10 +30,11 @@
 #          internals of Microsoft's VMM, 12.18); now w16's WIN386 loads its own
 #          W32S device for that line (12.20) and Windows restarts: a check
 # Every part then starts Win32s's Freecell (a Win32 program) from File >
-# Run once Windows is back and reports whether its window came up (at
-# least 40,000 pixels of its green, 008000h, in the shot freecellrun):
-# "open" lines, not failures yet (on w16's KERNEL Win32s now starts and
-# loads the program, which then faults: ARCHITECTURE.md 12.20).
+# Run once Windows is back and plays: game 1 dealt, three cards to the
+# free cells (three more go home by themselves), the game resigned and
+# Freecell ended (freecell() below says what is checked). Until w16's
+# KERNEL took Win32s's own 16-bit module tables (TK82) Freecell said "Out
+# of memory" on w16's KERNEL (ARCHITECTURE.md 12.20).
 # WIN32SINST_ARGS: more tests/dropin.sh options for every part (blanks
 # split them), e.g. "-p 386 -i w16:vmmtrace=1" with DROPIN_CONF's
 # serial1=file for the VMM's trace; WIN32SINST_SCRIPT: another input
@@ -89,7 +90,8 @@ run() {
     rm -rf "$out/$p"
     # shellcheck disable=SC2086
     "$root/tests/inputrun.sh" -s -b 90 -t "${WIN32SINST_SECS:-1500}" \
-        "${WIN32SINST_SCRIPT:-$root/tests/scripts/win32s/setup.txt}" "$out/$p" -c 'WIN /3' "$@" \
+        "${WIN32SINST_SCRIPT:-$root/tests/scripts/win32s/setup.txt}" "$out/$p" -c 'WIN /3' \
+        -i 'WIN.INI:windows:MouseSpeed=0' "$@" \
         ${WIN32SINST_ARGS:-} > "$out/$p.txt" 2>&1 || true
 }
 
@@ -107,13 +109,35 @@ installed() {
     echo ok
 }
 
-# PART: Freecell's window in its shot, reported ("open": not yet a
-# failure; w16's KERNEL does not start it yet, ARCHITECTURE.md 12.18)
+# count SHOT COLOUR [GEOMETRY]: pixels of COLOUR in the part's shot (in
+# the crop GEOMETRY)
+count() {
+    magick "$out/$p/$1.png" ${3:+-crop $3 +repage} -fill black +opaque "$2" -fill white -opaque "$2" \
+        -format '%[fx:int(mean*w*h+0.5)]' info: 2>/dev/null || echo 0
+}
+
+# PART: Freecell played (tests/scripts/win32s/setup.txt, after the
+# restart): its window (shot freecellrun: 40,000 pixels of its green,
+# 00AA55h in DOSBox's shot, 008000h in DOSBox-X's), game 1 dealt
+# (freecelldeal: 80,000 pixels of the cards' white; 3.1 97,832), three
+# cards moved to the free cells and three gone home by themselves
+# (freecellmoved: 10,000 white pixels in each of the two rows of cells;
+# 3.1 11,504 and 11,444), the game resigned and Freecell ended
+# (freecellend: none of its green left). Measured on 3.1 (Microsoft's
+# KERNEL) and with w16's KRNL386 alike. Prints "ok" or what failed.
 freecell() {
-    m=$(magick "$out/$1/freecellrun.png" -fill black +opaque '#008000' -fill white -opaque '#008000' \
-        -format '%[fx:int(mean*w*h+0.5)]' info: 2>/dev/null || echo 0)
-    if [ "$m" -ge 40000 ]; then echo "ok   $1: Freecell ran"
-    else echo "open $1: Freecell did not come up ($m pixels of its green in freecellrun.png)"; fi
+    p=$1
+    g=$(( $(count freecellrun '#00AA55') + $(count freecellrun '#008000') ))
+    [ "$g" -ge 40000 ] || { echo "its window did not come up ($g pixels of its green in freecellrun.png)"; return; }
+    w=$(count freecelldeal white)
+    [ "$w" -ge 80000 ] || { echo "game 1 was not dealt ($w white pixels in freecelldeal.png)"; return; }
+    c=$(count freecellmoved white 286x95+0+42)
+    h=$(count freecellmoved white 288x95+352+42)
+    [ "$c" -ge 10000 ] && [ "$h" -ge 10000 ] ||
+        { echo "the cards did not move ($c and $h white pixels in freecellmoved.png's free and home cells)"; return; }
+    e=$(( $(count freecellend '#00AA55') + $(count freecellend '#008000') ))
+    [ "$e" -lt 1000 ] || { echo "Freecell did not end ($e pixels of its green in freecellend.png)"; return; }
+    echo ok
 }
 
 for p in $parts; do
@@ -121,24 +145,30 @@ for p in $parts; do
     k386)
         run k386 -3 "$@"
         r=$(installed k386 WINDOWS)
-        freecell k386
+        f=$(freecell k386)
         if [ "$r" = ok ]; then echo "ok   k386: Win32s installed and Windows restarted, with w16's KRNL386"
-        else echo "FAIL k386: $r ($out/k386)"; fails=$((fails + 1)); fi ;;
+        else echo "FAIL k386: $r ($out/k386)"; fails=$((fails + 1)); fi
+        if [ "$f" = ok ]; then echo "ok   k386: Freecell dealt, moved cards and ended"
+        else echo "FAIL k386: Freecell: $f ($out/k386)"; fails=$((fails + 1)); fi ;;
     treems)
         w386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/WIN386.EXE
         if [ ! -f "$w386" ]; then echo "ok   treems: skipped (no $w386)"; continue; fi
         run treems -T "$root/build/w16" -3 -f "$w386=W16/SYSTEM/WIN386.EXE" \
             -i '386Enh:PagingFile=C:\W16\WIN386.SWP' "$@"
         r=$(installed treems W16)
-        freecell treems
+        f=$(freecell treems)
         if [ "$r" = ok ]; then echo "ok   treems: Win32s installed and Windows restarted on w16's tree with Microsoft's WIN386"
-        else echo "FAIL treems: $r ($out/treems)"; fails=$((fails + 1)); fi ;;
+        else echo "FAIL treems: $r ($out/treems)"; fails=$((fails + 1)); fi
+        if [ "$f" = ok ]; then echo "ok   treems: Freecell dealt, moved cards and ended"
+        else echo "FAIL treems: Freecell: $f ($out/treems)"; fails=$((fails + 1)); fi ;;
     tree)
         run tree -T "$root/build/w16" -3 "$@"
         r=$(installed tree W16)
-        freecell tree
+        f=$(freecell tree)
         if [ "$r" = ok ]; then echo "ok   tree: Win32s installed on w16's tree alone"
-        else echo "FAIL tree: $r ($out/tree)"; fails=$((fails + 1)); fi ;;
+        else echo "FAIL tree: $r ($out/tree)"; fails=$((fails + 1)); fi
+        if [ "$f" = ok ]; then echo "ok   tree: Freecell dealt, moved cards and ended (w16's W32S)"
+        else echo "FAIL tree: Freecell: $f ($out/tree)"; fails=$((fails + 1)); fi ;;
     *) echo "FAIL win32s: unknown part $p"; fails=$((fails + 1)) ;;
     esac
 done

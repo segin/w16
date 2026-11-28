@@ -562,7 +562,8 @@
 #              same (ExitWindowsExec in w16's USER and WIN.COM: exitexec);
 #              part tree, w16's install tree alone with its WIN386 and
 #              paging file (ARCHITECTURE.md 12.17), the same; every part
-#              then starts Win32s's Freecell (its window must come up)
+#              then plays Win32s's Freecell: game 1 dealt, cards moved,
+#              resigned and ended
 #   rsrchandler KERNEL's default resource handler given a block that holds
 #              data (Win32s's handlers fill one and call it): TK81 as the
 #              shell (tests/apps/tk81.c); a module table a program made
@@ -4377,7 +4378,7 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         p=${part:-k386}
         "$root/tests/win32sinst.sh" -o "$out/win32s-$p" "$p" > "$out/win32s-$p.txt" 2>&1 || true
         if grep -q '^skip' "$out/win32s-$p.txt"; then r=ok
-        elif grep -q "^ok   $p" "$out/win32s-$p.txt"; then r=ok
+        elif grep -q "^ok   $p" "$out/win32s-$p.txt" && ! grep -q "^FAIL" "$out/win32s-$p.txt"; then r=ok
         else r="$p: $(grep -m1 FAIL "$out/win32s-$p.txt" || echo 'no result') ($out/win32s-$p.txt)"; fi
         if [ -n "$part" ]; then partdone "$r"
         elif [ "$r" = ok ]; then echo "ok   win32s"
@@ -6918,7 +6919,7 @@ partsummary() {
         if [ $pbad = 0 ]; then echo "ok   exitexec: ExitWindowsExec's programs, tails and restarts as 3.1's (w16's KRNL386, USER, tree)"
         else echo "FAIL exitexec: $pfirst ($out)"; fi ;;
     win32s)
-        if [ $pbad = 0 ]; then echo "ok   win32s: Win32s 1.30c's Setup installs and Windows restarts with w16's KRNL386, on w16's tree with Microsoft's WIN386 and on w16's tree alone with w16's W32S (or skipped without its disks; Freecell's start is reported as open)"
+        if [ $pbad = 0 ]; then echo "ok   win32s: Win32s 1.30c's Setup installs and Windows restarts with w16's KRNL386, on w16's tree with Microsoft's WIN386 and on w16's tree alone with w16's W32S (or skipped without its disks), and Freecell deals, moves cards and ends in each"
         else echo "FAIL win32s: $pfirst ($out)"; fi ;;
     installers)
         if [ $pbad = 0 ]; then echo "ok   installers: each installer at hand installed the same files on w16's tree as on 3.1 (those missing skipped)"
