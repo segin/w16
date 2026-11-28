@@ -402,8 +402,27 @@
 #   tabs       Notepad from File > Run, text typed with tabs, closed
 #              (tests/scripts/input/tabs.txt); w16's USER and GDI on
 #              Microsoft's KRNL286 against all-Microsoft: identical screens
-#   alttab     Alt+Tab between Program Manager and Notepad, Notepad closed,
-#              Alt+Tab, a menu (tests/scripts/input/alttab.txt): the same
+#   alttab     Alt+Tab and Alt+Esc against Windows 3.1, parts: np, Alt+Tab
+#              between Program Manager and Notepad, Notepad closed, Alt+Tab,
+#              a menu (tests/scripts/input/alttab.txt): the same; cool,
+#              nocool, close, tree: probe US43 (tests/apps/us43.c) as the
+#              shell, five tasks' windows and every message they get, the
+#              keys of tests/scripts/input/us43.txt (us43close.txt): the
+#              switch box, the ring, Shift+Tab, Esc, Alt+Esc, Alt+Shift+Esc,
+#              icons, a dialog, a system-modal box, CoolSwitch on and off
+#              (WIN.INI and SystemParametersInfo), the window shown closing
+#              meanwhile; w16's USER on 3.1 (tree: w16's install tree):
+#              the screens pixel for pixel (not the dialog's and the
+#              system-modal box's own; not on the tree) and the switching
+#              messages (tests/scripts/us43log.sh) as 3.1's
+#   alttabdos  the same with an MS-DOS Prompt (alttab386.txt, alttabstd.txt):
+#              Alt+Tab held in the full-screen prompt (the title screens),
+#              let go on the prompt itself and on Windows, the switch box
+#              in Windows showing the prompt, Alt+Tab and Alt+Esc from the
+#              prompt's window; parts std (Standard mode, the task
+#              switcher), e386 (386 Enhanced, DOSBox-X), w386 (w16's
+#              WIN386 too), treestd and tree386 (w16's install tree:
+#              its title screens and the switch box against 3.1's)
 #   helpmenus  Program Manager's Help menu by Alt+H and by a click, then
 #              Notepad's (tests/scripts/input/helpmenus.txt): the same
 #   pmclose    Program Manager's system box double-clicked: the Exit dialog in
@@ -1215,7 +1234,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit appexit acroread atm kexedir wpregs mdistyle selfload staroff win32s w32m rsrchandler strstack lbdir exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit appexit acroread atm kexedir wpregs mdistyle selfload staroff win32s w32m rsrchandler strstack lbdir exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab alttabdos helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1508,6 +1527,159 @@ woaref() {
 }
 
 # runcase CASE: one case; run in a subshell of its own (the job pool below)
+# alttab_us43 PART: the boot-test case alttab's US43 parts (US43,
+# tests/apps/us43.c, as the shell: five tasks' windows, every message
+# logged, real keys from tests/scripts/input/us43.txt or us43close.txt).
+#   cool    Alt+Tab, Alt+Shift+Tab, Alt+Esc, Alt+Shift+Esc, Esc, a modal
+#           dialog, a system-modal box, icons, CoolSwitch turned over by
+#           SystemParametersInfo; w16's USER on 3.1 against all of 3.1's
+#   nocool  the same with WIN.INI [windows] CoolSwitch=0
+#   close   the window the box shows destroyed while Alt is held, and
+#           another key (F11) pressed with the box up (WIN.INI [US43]
+#           close=1)
+#   tree    us43.txt on w16's install tree alone against 3.1's run
+# Screens: every one pixel for pixel, but for the dialog's and the
+# system-modal box's (14-22: the dialog manager's and MessageBox's own
+# differences, not the switching's); not for tree (w16's own fonts and
+# artwork). Logs: tests/scripts/us43log.sh's lines identical.
+alttab_us43() {
+    _ap=$1
+    _as=$root/tests/scripts/input/us43.txt
+    [ "$_ap" = close ] && _as=$root/tests/scripts/input/us43close.txt
+    set -- -f "$root/build/dos/US43.EXE=US43.EXE" -f "$root/build/dos/US43B.EXE=US43B.EXE" \
+        -f "$root/build/dos/US43C.EXE=US43C.EXE" -f "$root/build/dos/US43D.EXE=US43D.EXE" \
+        -f "$root/build/dos/US43E.EXE=US43E.EXE" -i 'boot:shell=C:\US43.EXE'
+    [ "$_ap" = nocool ] && set -- "$@" -i WIN.INI:windows:CoolSwitch=0
+    [ "$_ap" = close ] && set -- "$@" -i WIN.INI:US43:close=1
+    _ar=alttab-$_ap-ref
+    [ "$_ap" = tree ] && _ar=alttab-cool-ref
+    refrun "$_ar" alttab "$root/tests/inputrun.sh" -s -b 60 -t 600 "$_as" "$out/$_ar" -r "$@"
+    if [ "$_ap" = tree ]; then
+        # (no -E: the tree's screens, its fonts and artwork, never equal
+        # 3.1's, and each "match" would wait its whole time)
+        "$root/tests/inputrun.sh" -s -b 60 -t 600 "$_as" "$out/alttab-$_ap-w16" \
+            -T "$root/build/w16" "$@" > "$out/alttab-$_ap-w16.txt" 2>&1 || true
+    else
+        "$root/tests/inputrun.sh" -s -b 60 -t 600 -E "$out/$_ar" "$_as" "$out/alttab-$_ap-w16" \
+            -r -f "$user=WINDOWS/SYSTEM/USER.EXE" "$@" > "$out/alttab-$_ap-w16.txt" 2>&1 || true
+    fi
+    r=ok
+    for f in "$out/$_ar"/[0-9]*.png; do
+        s=$(basename "$f")
+        [ -f "$out/alttab-$_ap-w16/$s" ] || { r="no $s"; break; }
+        [ "$_ap" = tree ] && continue
+        case $s in 1[4-9]-*|2[0-2]-*) continue ;; esac
+        n=$(magick compare -metric AE "$out/alttab-$_ap-w16/$s" "$f" "$out/alttab-$_ap-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+        n=${n%% *}
+        [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
+    done
+    ls "$out/$_ar"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
+    if [ "$r" = ok ]; then
+        sh "$root/tests/scripts/us43log.sh" "$out/$_ar/work/c/US43.LOG" > "$out/alttab-$_ap-ref.msgs" 2>/dev/null
+        sh "$root/tests/scripts/us43log.sh" "$out/alttab-$_ap-w16/work/c/US43.LOG" > "$out/alttab-$_ap-w16.msgs" 2>/dev/null
+        if [ ! -s "$out/alttab-$_ap-ref.msgs" ]; then r="no log of 3.1's ($out/$_ar/work/c/US43.LOG)"
+        elif ! cmp -s "$out/alttab-$_ap-ref.msgs" "$out/alttab-$_ap-w16.msgs"; then
+            r="the messages differ from 3.1's, first at line $(diff "$out/alttab-$_ap-ref.msgs" "$out/alttab-$_ap-w16.msgs" | head -1) ($out/alttab-$_ap-ref.msgs, alttab-$_ap-w16.msgs)"
+        fi
+    fi
+    if [ "$r" = ok ]; then echo "ok   alttab@$_ap: the switching as 3.1's, screens and messages"
+    else echo "     alttab@$_ap: $r ($out/alttab-$_ap-w16)"; fi
+    partdone "$r"
+}
+
+# alttabdos_part PART: the boot-test case alttabdos (an MS-DOS Prompt in
+# the switching; tests/scripts/input/alttab386.txt, alttab386t.txt on the
+# tree, alttabstd.txt).
+#   e386   386 Enhanced mode (DOSBox-X), w16's USER on 3.1: every screen
+#          against 3.1's (the DOS cursor's cell left out)
+#   w386   the same with w16's WIN386 too (SHELL's full-screen titles)
+#   std    Standard mode (the task switcher, DSWAP), w16's USER on 3.1
+#   tree386, treestd  w16's install tree alone: the text screens (the
+#          prompt, the titles) against 3.1's, the banner's rows and the
+#          cursor left out; Windows' screens with the box: the box's frame
+#          against 3.1's, the program's icon and title left out (w16's
+#          own artwork and fonts)
+alttabdos_part() {
+    _dp=$1
+    _k386=$root/.tools/ref/win31/cdrive/WINDOWS/SYSTEM/KRNL386.EXE
+    case $_dp in
+    std|treestd)
+        _ds=$root/tests/scripts/input/alttabstd.txt _dr=alttabdos-std-ref
+        refrun $_dr alttabdos env INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 250 "$_ds" "$out/$_dr" \
+            -r -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP'
+        if [ $_dp = std ]; then
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -b 30 -t 250 "$_ds" "$out/alttabdos-$_dp-w16" -r \
+                -i 'NonWindowsApp:SwapDisk=C:\WINDOWS\TEMP' -f "$user=WINDOWS/SYSTEM/USER.EXE" \
+                > "$out/alttabdos-$_dp-w16.txt" 2>&1 || true
+        else
+            INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 50 -t 250 "$_ds" "$out/alttabdos-$_dp-w16" \
+                -T "$root/build/w16" -i 'NonWindowsApp:SwapDisk=C:\W16' > "$out/alttabdos-$_dp-w16.txt" 2>&1 || true
+        fi ;;
+    *)
+        _ds=$root/tests/scripts/input/alttab386.txt _dr=alttabdos-386-ref
+        set -- -p 386 -c "WIN /3 /B"
+        refrun $_dr alttabdos env DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 \
+            "$root/tests/inputrun.sh" -s -b 200 -t 400 "$_ds" "$out/$_dr" -r "$@" -f "$_k386=WINDOWS/SYSTEM/KRNL386.EXE"
+        case $_dp in
+        e386) set -- -r "$@" -f "$_k386=WINDOWS/SYSTEM/KRNL386.EXE" -f "$user=WINDOWS/SYSTEM/USER.EXE" ;;
+        w386) set -- -r "$@" -f "$_k386=WINDOWS/SYSTEM/KRNL386.EXE" -f "$user=WINDOWS/SYSTEM/USER.EXE" \
+                  -f "$root/build/win386/WIN386.EXE=WINDOWS/SYSTEM/WIN386.EXE" ;;
+        tree386) set -- -T "$root/build/w16" -3 "$@"
+                 _ds=$root/tests/scripts/input/alttab386t.txt ;;
+        esac
+        DROPIN_NOREDIR=1 INPUTRUN_KEYDELAY=150 INPUTRUN_STAY=1 "$root/tests/inputrun.sh" -s -b 200 -t 400 "$_ds" \
+            "$out/alttabdos-$_dp-w16" "$@" > "$out/alttabdos-$_dp-w16.txt" 2>&1 || true ;;
+    esac
+    r=ok
+    for f in "$out/$_dr"/[0-9]*.png; do
+        s=$(basename "$f")
+        a=$out/alttabdos-$_dp-w16/$s
+        [ -f "$a" ] || { r="no $s"; break; }
+        sz=$(magick identify -format '%wx%h' "$f" 2>/dev/null)
+        if [ "$sz" != "$(magick identify -format '%wx%h' "$a" 2>/dev/null)" ]; then
+            # (the tree's own Command Prompt ends in its window: only its
+            # title screens and switch box are compared, below)
+            case $_dp in tree*) continue ;; esac
+            r="$s: screen $(magick identify -format '%wx%h' "$a" 2>/dev/null), not $sz"; break
+        fi
+        # left out: the DOS prompt's cursor column and the banner's rows
+        # (w16's WIN386 and DSWAP say "w16"); on the tree, whose prompt is
+        # C:\W16>, only the title screens (the bar in row 1) and, of
+        # Windows' screens, the switch box (its program's icon is w16's
+        # own artwork)
+        # (Standard mode: the cursor also seen at the top left as the
+        # screen comes back; the prompt's window: its banner and caret)
+        case $sz in
+        720x400) m="rectangle 72,48 655,79 rectangle 99,0 107,399" ;;
+        640x400) m="rectangle 0,16 639,95 rectangle 88,0 95,399 rectangle 0,0 7,15" ;;
+        *) m="rectangle 66,40 590,114 rectangle 96,140 104,215" ;;
+        esac
+        case $_dp:$sz in
+        tree*:640x480)
+            [ "$(python3 "$root/tests/scripts/shotpix.py" pixel "$f" 124 204)" = 868a8e ] &&
+                [ "$(python3 "$root/tests/scripts/shotpix.py" pixel "$f" 515 240)" = ffffff ] || continue
+            m="rectangle 0,0 639,199 rectangle 0,280 639,479 rectangle 0,200 119,279 rectangle 520,200 639,279"
+            # (and its title and the pointer over it: w16's font, its place)
+            m="$m rectangle 160,224 191,255 rectangle 104,232 391,262" ;;
+        tree*)
+            # the bar and the screen, not the title's text (the tree's
+            # program is "Command Prompt")
+            [ "$(python3 "$root/tests/scripts/shotpix.py" pixel "$f" 100 20)" = 0000aa ] || continue
+            m="rectangle 18,16 701,31" ;;
+        esac
+        magick "$f" -fill black -draw "$m" "$out/alttabdos-$_dp-a.png"
+        magick "$a" -fill black -draw "$m" "$out/alttabdos-$_dp-b.png"
+        n=$(magick compare -metric AE "$out/alttabdos-$_dp-b.png" "$out/alttabdos-$_dp-a.png" "$out/alttabdos-$_dp-${s%.png}-diff.png" 2>&1 >/dev/null || true)
+        n=${n%%[. ]*}
+        [ "${n:-1}" = 0 ] || { r="$s: $n pixels differ"; break; }
+    done
+    rm -f "$out/alttabdos-$_dp-a.png" "$out/alttabdos-$_dp-b.png"
+    ls "$out/$_dr"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
+    if [ "$r" = ok ]; then echo "ok   alttabdos@$_dp: the switching with a DOS box as 3.1's"
+    else echo "     alttabdos@$_dp: $r ($out/alttabdos-$_dp-w16)"; fi
+    partdone "$r"
+}
+
 runcase() {
     c=${1%@*} part=
     case $1 in *@*) part=${1#*@} ;; esac
@@ -3599,6 +3771,10 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
         if [ "$r" = ok ]; then echo "ok   $c: Notepad in front and active"
         else echo "FAIL $c: $r ($out/$c)"; fails=$((fails + 1)); fi ;;
     tabs|alttab|helpmenus)
+        if [ $c = alttab ] && [ "$part" != np ]; then
+            alttab_us43 "$part"
+            return
+        fi
         refrun $c-ref $c "$root/tests/inputrun.sh" -s -b 25 -t 200 "$root/tests/scripts/input/$c.txt" "$out/$c-ref" -r
         "$root/tests/inputrun.sh" -e "$out/$c-ref/boot.png" -E "$out/$c-ref" -M "$([ $c != helpmenus ] && echo rectangle 0,0 0,0 || echo rectangle 14,42 20,61)" -b 25 -t 200 "$root/tests/scripts/input/$c.txt" "$out/$c-w16" -r \
             -f "$user=WINDOWS/SYSTEM/USER.EXE" -f "$gdi=WINDOWS/SYSTEM/GDI.EXE" > "$out/$c-w16.txt" 2>&1 || true
@@ -3617,8 +3793,14 @@ print('ok' if navy(np) and not navy(pm) else 'notepad %s, progman %s' % (np, pm)
             [ "$n" = 0 ] || { r="$s: $n pixels differ"; break; }
         done
         ls "$out/$c-ref"/[0-9]*.png > /dev/null 2>&1 || [ "$r" != ok ] || r="no screens"
-        if [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
+        if [ -n "$part" ]; then     # alttab@np
+            if [ "$r" = ok ]; then echo "ok   $c@$part: Program Manager and Notepad, 0 pixels"
+            else echo "     $c@$part: $r ($out)"; fi
+            partdone "$r"
+        elif [ "$r" = ok ]; then echo "ok   $c: 0 pixels"
         else echo "FAIL $c: $r ($out)"; fails=$((fails + 1)); fi ;;
+    alttabdos)
+        alttabdos_part "$part" ;;
     writefonts)
         s=$root/tests/scripts/input/writefonts.txt
         r=ok
@@ -6979,6 +7161,8 @@ caseparts() {
     exittree) echo "$1@e386 $1@e386ms $1@std" ;;
     cmdprompt) echo "$1@e386 $1@std" ;;
     swapesc) echo "$1@k386 $1@k286 $1@mswoa" ;;
+    alttab) echo "$1@np $1@cool $1@nocool $1@close $1@tree" ;;
+    alttabdos) echo "$1@std $1@e386 $1@w386 $1@treestd $1@tree386" ;;
     runbrowse) echo "$1@cmp $1@all" ;;
     missingdll) echo "$1@pm $1@tk59 $1@tree" ;;
     runassoc) echo "$1@probe $1@pm $1@pmk286 $1@pmk386 $1@tree $1@dir" ;;

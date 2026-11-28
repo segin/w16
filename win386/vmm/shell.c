@@ -90,6 +90,7 @@ struct shev { u32 own1, own2, vm; u16 hwnd, zero; u32 data; u16 msg; u8 rest[0x4
 #pragma pack()
 #define NEVENTS 32
 static struct shev *evs;
+static struct shev *sw_rec;             /* the last switching key's record (event 41Eh) */
 static u32 ev_next;
 
 static int is_command(const char *p);
@@ -125,6 +126,17 @@ static const struct hk hks[] = {
 };
 static u32 switch_key;                  /* the switching key being acted on (function 10h) */
 static u32 switch_wnd;                  /* function 10h's first ECX */
+/* Alt+Tab held in a full-screen VM: function 10h's titles (below) */
+static struct vm *sw_vm;                /* the VM it was pressed in */
+static u32 sw_calls;                    /* function 10h calls so far */
+static int sw_wait;                     /* a call waits (made again: vxdapi_again) */
+static u32 sw_tabs, sw_base;            /* Tab presses (the hot key again), at the call */
+static int sw_esc;                      /* Esc pressed (Alt+Esc's hot key) */
+static u32 sw_ebx, sw_ecx;              /* the window shown */
+static u16 sw_screen[80 * 25];          /* the VM's text screen under the title */
+static int sw_saved;
+static u8 sw_cursor;                    /* CRTC 0Ah as it was */
+static int sw_to_windows;               /* let go on a Windows window (function 0Ch) */
 
 static void define_hot_keys(void)
 {
@@ -149,6 +161,12 @@ void __cdecl shell_hot_key(struct svcregs *r)
 {
     struct vm *v = vm_focus;
     r->eflags &= ~EFL_CF;
+    /* Tab again while the title shows, or Esc (function 10h) */
+    if (sw_vm && switch_key == HK_ALTTAB) {
+        if (r->edx == HK_ALTTAB) sw_tabs++;
+        else if (r->edx == HK_ALTESC) sw_esc = 1;
+        return;
+    }
     if (v == &sysvm || !sh_of(v)) return;
     trace("SHELL: hot key %d in VM %d\n", r->edx, v->id);
     if (sh_of(v)->hk_pending) return;   /* the key repeated */
@@ -194,8 +212,45 @@ void __cdecl shell_hot_key(struct svcregs *r)
         s->hk_pending = 0;
         return;
     }
+    if ((sh_of(v)->flags & SHELL_WINDOWED) && r->edx == HK_ALTESC) {
+        /* Alt+Esc in a window: nothing (Windows 3.1: the MS-DOS Prompt's
+         * window stayed active, the screen as it was; UNVERIFIED whether
+         * the program in it gets the keys) */
+        sh_of(v)->hk_pending = 0;
+        return;
+    }
+    if (sh_of(v)->flags & SHELL_WINDOWED) {
+        /* in a window (Windows 3.1: Alt+Tab from the MS-DOS Prompt's
+         * window showed USER's switch box over Windows; let go, Program
+         * Manager active): the keys are Windows', as Ctrl+Esc's above -
+         * the System VM gets the keyboard, Alt down and the key's press,
+         * and USER switches. UNVERIFIED how Windows 3.1 does it */
+        static const u8 alt_down = 0x38;
+        struct svcregs k;
+        struct shvm *s = sh_of(v);
+        u32 hk = r->ebx;
+        focus3(&sysvm, 0, 1);
+        vm_set_focus(&sysvm);
+        memset(&k, 0, sizeof(k));
+        k.esi = (u32)&alt_down;
+        k.ecx = 1;
+        vxd_service_call(0x000D, 0x07, &k);     /* VKD_Force_Keys */
+        memset(&k, 0, sizeof(k));
+        k.eax = hk;
+        k.ebx = VMH(&sysvm);
+        k.ecx = 4;                              /* Alt (w16's SS_ALT) */
+        vxd_service_call(0x000D, 0x05, &k);     /* VKD_Reflect_Hot_Key */
+        s->hk_pending = 0;
+        return;
+    }
     switch_key = r->edx;
-    if (r->edx == HK_ALTTAB) vxd_send(BEGIN_MESSAGE_MODE, v, 0, 0, 0);
+    if (r->edx == HK_ALTTAB) {
+        vxd_send(BEGIN_MESSAGE_MODE, v, 0, 0, 0);
+        sw_vm = v;
+        sw_calls = sw_tabs = 0;
+        sw_wait = sw_esc = 0;
+        sw_to_windows = 0;
+    }
     vm_set_focus(&sysvm);
     {
         struct shvm *s = sh_of(v);
@@ -245,6 +300,7 @@ static void post_now(struct vm *sys, void *arg)
     e->hwnd = (u16)s->hwnd;
     e->data = a->data;
     e->msg = (u16)a->msg;
+    if (a->msg == 0x41E) sw_rec = e;    /* (function 0Ch) */
     args[0] = (u16)s->hwnd;
     args[1] = (u16)a->msg;
     args[2] = (u16)a->wparam;
@@ -538,6 +594,108 @@ static void destroy(struct vm *v)
     vm_destroy(v);
 }
 
+/* Alt+Tab held in a full-screen VM (Windows 3.1, VXSH and screens,
+ * tests/scripts/input/alttabvxs.txt and alttab386.txt): WINOA386 offers
+ * the windows in turn with function 10h (EBX FFFFFFFFh and the window in
+ * ECX for a Windows one, EBX the VM for its own; ES:DI the title). The
+ * first call shows its title and answers EAX 1 at once; each later call
+ * waits, the last title still shown, until Tab is pressed again (its
+ * title shown, EAX 1) or Alt let go: EAX 0, EBX and ECX the window
+ * shown, EDX 1, the devices' focus first to its VM (the System VM for a
+ * Windows window, the VM itself for its own title) and message mode
+ * ended. Esc pressed answers as Alt let go (3.1: Program Manager's title
+ * shown, Esc: EBX FFFFFFFFh, ECX its window, Windows came up). The
+ * screen: 80 x 25 text, light gray, the title white on blue in row 1,
+ * columns 1-78, from column (81 - length) / 2 ("Program Manager" from 33,
+ * "MS-DOS Prompt" from 34), no cursor. w16 shows it in the VGA's text
+ * memory, the VM's screen kept and put back before the focus moves */
+static void sw_show(struct cregs *r)
+{
+    u16 *t = (u16 *)phys_to_lin(0xB8000);
+    const char *p = (const char *)cl_ptr(r->es, r->edi, 1, 0) ? (const char *)pm_lin(r->es, r->edi) : "";
+    u32 i, n, x;
+    if (!sw_saved) {
+        for (i = 0; i < 80 * 25; i++) sw_screen[i] = t[i];
+        outb(0x3D4, 0x0A);
+        sw_cursor = (u8)inb(0x3D5);
+        sw_saved = 1;
+    }
+    outb(0x3D4, 0x0A);
+    outb(0x3D5, sw_cursor | 0x20);          /* no cursor */
+    for (i = 0; i < 80 * 25; i++) t[i] = 0x7020;
+    for (i = 1; i <= 78; i++) t[80 + i] = 0x1F20;
+    for (n = 0; n < 78 && p[n]; n++)
+        ;
+    x = (81 - n) / 2;
+    for (i = 0; i < n; i++) t[80 + x + i] = 0x1F00 | (u8)p[i];
+    sw_ebx = r->ebx;
+    sw_ecx = CX(r);
+}
+
+static void sw_restore(void)
+{
+    u16 *t = (u16 *)phys_to_lin(0xB8000);
+    u32 i;
+    if (!sw_saved) return;
+    for (i = 0; i < 80 * 25; i++) t[i] = sw_screen[i];
+    outb(0x3D4, 0x0A);
+    outb(0x3D5, sw_cursor);
+    sw_saved = 0;
+}
+
+static void alt_tab_title(struct cregs *r)
+{
+    struct vm *v = sw_vm;
+    int up = 0;
+    if (!sw_wait) {
+        if (sw_calls++ == 0) {
+            sw_show(r);
+            r->eax = 1;
+            SETW(r->edx, 0);
+            return;
+        }
+        sw_wait = 1;
+        sw_base = sw_tabs;
+    }
+    if (sw_tabs != sw_base) {
+        sw_wait = 0;
+        sw_show(r);
+        r->eax = 1;
+        SETW(r->edx, 0);
+        return;
+    }
+    /* Alt let go: its release among the VM's message-mode keys (VKD) */
+    for (;;) {
+        struct svcregs k;
+        memset(&k, 0, sizeof(k));
+        k.ebx = VMH(v);
+        vxd_service_call(0x000D, 0x0C, &k);     /* VKD_Get_Msg_Key */
+        if (k.eflags & EFL_ZF) break;
+        if ((k.eax & 0xFF) == 0xB8) up = 1;
+        if ((k.eax & 0xFF) == 0x01) sw_esc = 1;
+    }
+    if (!up && !sw_esc) {
+        vxdapi_again(r);
+        return;
+    }
+    sw_wait = 0;
+    sw_restore();
+    {
+        struct vm *to = sw_ebx == 0xFFFFFFFFu ? NULL : vm_of(sw_ebx);
+        focus3(to ? to : &sysvm, r->edi, 1);
+    }
+    vxd_send(END_MESSAGE_MODE, v, 0, 0, 0);
+    if (sh_of(v)) sh_of(v)->hk_pending = 0;     /* its keys again */
+    r->eax = 0;
+    r->ebx = sw_ebx;
+    SETW(r->ecx, sw_ecx);
+    SETW(r->edx, 1);
+    sw_to_windows = sw_ebx == 0xFFFFFFFFu;
+    sw_vm = 0;
+    switch_key = 0;
+    switch_wnd = 0;
+}
+
 void shell_api(struct cregs *r)
 {
     u32 fn = DX(r);
@@ -654,15 +812,35 @@ void shell_api(struct cregs *r)
     }
     case 0x0C:                          /* an event record back */
         /* EAX 1 (after a switching key, Windows 3.1): the devices' focus
-         * and the execution focus to the System VM, EAX 1 back */
-        if (AX(r) == 1) {
+         * and the execution focus to the System VM, EAX 1 back. (After
+         * Alt+Tab let go on a Windows window Microsoft's WINOA386 passes
+         * EAX 0 here under w16's SHELL, 1 under 3.1's: UNVERIFIED why;
+         * the System VM's either way, as on 3.1) */
+        if (AX(r) == 1 || (sw_to_windows && (struct shev *)r->edi == sw_rec)) {
+            sw_to_windows = 0;
+            sw_rec = NULL;
             focus3(&sysvm, 0, 1);
             vm_set_focus(&sysvm);
             r->eax = 1;
-        } else
+        } else {
+            /* EAX 0: back to the record's VM (+08h), which goes on
+             * (Windows 3.1, VXSH: Alt+Tab let go on the VM's own title,
+             * the devices' focus to it and Resume_VM) */
+            struct shev *e = (struct shev *)r->edi;
+            struct vm *b = e == sw_rec ? vm_of(e->vm) : NULL;
+            /* (only a switching key's record: others come back with EAX
+             * 0 too, a message's (SHELL_Message: its box would go behind
+             * the VM) or an ended program's) */
+            if (b && sh_of(b) && !sh_of(b)->ended_posted && b->id) set_focus(b, 0);
+            sw_rec = NULL;
             r->eax = 0;
+        }
         return;
     case 0x10:                          /* after event 41Eh: which key */
+        if (switch_key == HK_ALTTAB && sw_vm) {
+            alt_tab_title(r);
+            return;
+        }
         /* Windows 3.1 (VXSH): EBX FFFFFFFFh first: Alt+Tab EAX 1, EDX 0
          * (WINOA386 calls again with EBX the VM: the devices' focus to the
          * System VM, message mode ended (control 11h), EAX 0, EDX 1);

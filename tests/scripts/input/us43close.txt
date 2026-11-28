@@ -1,0 +1,35 @@
+; US43 (tests/apps/us43.c) as the shell, WIN.INI [US43] close=1: the
+; window the Alt+Tab box shows closes while Alt is held, and another key
+; pressed while the box is up. At the start E is active and D, an icon,
+; is the next one: Alt+Tab shows D, which destroys its window after 3
+; seconds; then Tab once more, Alt let go (tests/inputrun.sh: "match"
+; waits for the reference's screen, boot-test case alttab)
+sleep 2
+key F12
+keydown alt
+key Tab
+match 01-box 20 1
+shot 01-box
+; (D's timer: 3 seconds of the box)
+sleep 3.5
+match 02-gone 20 1
+shot 02-gone
+key Tab
+match 03-next 20 1
+shot 03-next
+keyup alt
+match 04-after 20 1
+shot 04-after
+key F12
+; F11 while the box is up
+keydown alt
+key Tab
+sleep 0.7
+key F11
+match 05-f11 20 1
+shot 05-f11
+keyup alt
+match 06-f11 20 1
+shot 06-f11
+key F12
+sleep 1

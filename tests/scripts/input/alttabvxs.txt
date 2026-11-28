@@ -1,0 +1,39 @@
+; tests/vxsrun.sh: SHELL's calls while Alt+Tab is held in the full-screen
+; MS-DOS Prompt (ARCHITECTURE.md 12, WINOA386): the prompt from Program
+; Manager's Main group; Alt held, Tab, Tab (the prompt's own title), Alt
+; let go (the prompt stays); Alt held, Tab, Esc, let go; Alt held, Tab,
+; let go (Windows)
+sleep 4
+key Right
+key Right
+key Right
+key Right
+sleep 1
+key Return
+sleep 15
+shot 01-full
+keydown alt
+key Tab
+sleep 3
+shot 02-t1
+key Tab
+sleep 3
+shot 03-t2
+keyup alt
+sleep 6
+shot 04-same
+keydown alt
+key Tab
+sleep 3
+key Escape
+sleep 3
+shot 05-esc
+keyup alt
+sleep 6
+shot 06-after
+keydown alt
+key Tab
+sleep 3
+keyup alt
+sleep 6
+shot 07-windows

@@ -1,0 +1,197 @@
+; US43 (tests/apps/us43.c) as the shell: Alt+Tab, Alt+Shift+Tab, Alt+Esc
+; and Alt+Shift+Esc with real keys; F12 between the steps marks them in
+; US43.LOG (a WM_KEYDOWN of 7Bh to the active window). Boot-test case
+; alttab: "match" waits for the reference's screen (tests/inputrun.sh)
+match 00-start 20 1
+shot 00-start
+key F12
+; one Alt+Tab, Alt held
+keydown alt
+key Tab
+match 01-box 20 1
+shot 01-box
+keyup alt
+match 02-one 20 1
+shot 02-one
+key F12
+; Tab twice
+keydown alt
+key Tab
+sleep 0.5
+key Tab
+match 03-box2 20 1
+shot 03-box2
+keyup alt
+match 04-two 20 1
+shot 04-two
+key F12
+; round the ring: Tab six times, a shot after each
+keydown alt
+key Tab
+match 05-r1 20 1
+shot 05-r1
+key Tab
+match 05-r2 20 1
+shot 05-r2
+key Tab
+match 05-r3 20 1
+shot 05-r3
+key Tab
+match 05-r4 20 1
+shot 05-r4
+key Tab
+match 05-r5 20 1
+shot 05-r5
+key Tab
+match 05-r6 20 1
+shot 05-r6
+; back with Shift+Tab
+keydown shift
+key Tab
+keyup shift
+match 05-r7 20 1
+shot 05-r7
+keyup alt
+match 06-ring 20 1
+shot 06-ring
+key F12
+; Esc while Alt is held: cancelled
+keydown alt
+key Tab
+sleep 0.7
+key Escape
+match 07-esc 20 1
+shot 07-esc
+keyup alt
+match 08-esc 20 1
+shot 08-esc
+key F12
+; Alt+Shift+Tab alone
+keydown alt
+keydown shift
+key Tab
+match 09-shtab 20 1
+shot 09-shtab
+keyup shift
+keyup alt
+match 10-shtab 20 1
+shot 10-shtab
+key F12
+; quick Alt+Tab
+key alt+Tab
+match 11-quick 20 1
+shot 11-quick
+key F12
+; Alt+Esc six times
+key alt+Escape
+match 12-e1 20 1
+shot 12-e1
+key alt+Escape
+match 12-e2 20 1
+shot 12-e2
+key alt+Escape
+match 12-e3 20 1
+shot 12-e3
+key alt+Escape
+match 12-e4 20 1
+shot 12-e4
+key alt+Escape
+match 12-e5 20 1
+shot 12-e5
+key alt+Escape
+match 12-e6 20 1
+shot 12-e6
+key F12
+; Alt+Shift+Escape twice
+key alt+shift+Escape
+match 13-se1 20 1
+shot 13-se1
+key alt+shift+Escape
+match 13-se2 20 1
+shot 13-se2
+key F12
+; a modal dialog: Alt+Tab with it up
+key m
+match 14-dlg 20 1
+shot 14-dlg
+keydown alt
+key Tab
+match 15-dlgbox 20 1
+shot 15-dlgbox
+key Tab
+match 15-dlgbox2 20 1
+shot 15-dlgbox2
+keyup alt
+match 16-dlg 20 1
+shot 16-dlg
+keydown alt
+key Tab
+match 17-dlgback 20 1
+shot 17-dlgback
+keyup alt
+match 18-dlgback 20 1
+shot 18-dlgback
+key Escape
+sleep 1
+key F12
+; a system-modal box: Alt+Tab and Alt+Esc
+key s
+match 19-sm 20 1
+shot 19-sm
+keydown alt
+key Tab
+match 20-smbox 20 1
+shot 20-smbox
+keyup alt
+match 21-sm 20 1
+shot 21-sm
+key alt+Escape
+match 22-smesc 20 1
+shot 22-smesc
+key Return
+sleep 1
+key F12
+; icons: the active window minimised, then Alt+Esc and Alt+Tab among
+; the icons
+key z
+match 25-min 20 1
+shot 25-min
+key alt+Escape
+match 26-ie1 20 1
+shot 26-ie1
+key alt+Escape
+match 26-ie2 20 1
+shot 26-ie2
+key z
+sleep 1
+key alt+Escape
+match 26-ie3 20 1
+shot 26-ie3
+keydown alt
+key Tab
+match 27-ibox 20 1
+shot 27-ibox
+keyup alt
+match 28-itab 20 1
+shot 28-itab
+key F12
+; CoolSwitch turned over (SPI_SETFASTTASKSWITCH, flags 0), Alt+Tab held,
+; then back with flags 3
+key c
+sleep 0.5
+keydown alt
+key Tab
+match 29-spi 20 1
+shot 29-spi
+keyup alt
+sleep 1
+key u
+sleep 0.5
+keydown alt
+key Tab
+match 30-spi 20 1
+shot 30-spi
+keyup alt
+sleep 1
+key F12
+sleep 1

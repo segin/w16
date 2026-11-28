@@ -726,6 +726,8 @@ void destroy_abandoned(HWND h)
         hwndFocus = 0;
     if (h == hwndActive)
         hwndActive = 0;
+    if (h == hwndActivePrev)    /* (its handle can come back as another window) */
+        hwndActivePrev = 0;
     free_place(h);
     purge_window_msgs(w->hq, h);
     unlink_window(w);

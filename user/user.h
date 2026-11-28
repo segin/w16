@@ -288,6 +288,7 @@ extern WORD __far input_pending;
 void set_cursor_shape(HCURSOR h);
 void set_focus(HWND h);
 void activate_window(HWND h, BOOL mouse);
+extern HWND hwndActivePrev;    /* the window active before the active one */
 
 /* ---- painting, DCs (paint.c, dc.c) ---- */
 void dc_init(void);
@@ -333,6 +334,19 @@ void calc_client(PWND w);
 /* ---- default window procedure, frames (defwnd.c, nc.c) ---- */
 LONG def_window_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp);
 void nc_paint(HWND h, HRGN rgn, BOOL active);
+void nc_draw(HDC hdc, PWND w, BOOL active);
+LONG def_gettext(PWND w, WORD n, LPSTR buf);
+
+/* ---- Alt+Tab, Alt+Esc (switch.c) ---- */
+extern HWND hwndSwitch;         /* the switch window, #32771 */
+extern BYTE switch_active;      /* its loop runs */
+extern BYTE switch_activating;  /* and activates a window */
+void switch_init(void);
+void switch_windows(HWND h, WPARAM cmd, LPARAM lp);
+void switch_window(HWND cur, BOOL tobottom);
+int  fast_switch(void);         /* CoolSwitch */
+void set_fast_switch(BOOL on);
+void redraw_icon_title(HWND h);         /* pos.c */
 LONG nc_hittest(PWND w, POINT pt);
 void nc_calcsize(PWND w, RECT *rc);
 

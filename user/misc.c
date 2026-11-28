@@ -568,7 +568,28 @@ void screensave_run(void)
     WinExec(path, SW_SHOWNORMAL);
 }
 
+static BOOL spi(UINT what, UINT ui, void __far *pv, UINT ini);
+
+/* SPIF_SENDWININICHANGE after a change: WM_WININICHANGE to every top-level
+   window, lParam "Windows" (3.1, US43: SPI_SETFASTTASKSWITCH with flags 3;
+   UNVERIFIED for the other actions, here alike) */
 BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
+{
+    static const char sect[] = "Windows";
+    BOOL r = spi(what, ui, pv, ini);
+    if (r && (ini & SPIF_SENDWININICHANGE)) {
+        switch (what) {
+        case SPI_SETBEEP: case SPI_SETMOUSE: case SPI_SETBORDER: case SPI_SETKEYBOARDSPEED:
+        case SPI_SETSCREENSAVETIMEOUT: case SPI_SETSCREENSAVEACTIVE: case SPI_SETKEYBOARDDELAY:
+        case SPI_SETFASTTASKSWITCH:
+            SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, (LPARAM)(LPCSTR)sect);
+            break;
+        }
+    }
+    return r;
+}
+
+static BOOL spi(UINT what, UINT ui, void __far *pv, UINT ini)
 {
     WORD __far *w;
     LOGFONT none;
@@ -638,7 +659,14 @@ BOOL WINAPI SystemParametersInfo(UINT what, UINT ui, void __far *pv, UINT ini)
     case SPI_ICONVERTICALSPACING: *w = sysmet[SM_CYICONSPACING]; return TRUE;
     case SPI_GETICONTITLEWRAP: *w = GetProfileInt("desktop", "IconTitleWrap", 1); return TRUE;
     case SPI_GETMENUDROPALIGNMENT: *w = 0; return TRUE;
-    case SPI_GETFASTTASKSWITCH: *w = 1; return TRUE;
+    /* WIN.INI [windows] CoolSwitch, default 1; the set one kept, written
+       with SPIF_UPDATEINIFILE (3.1, US43: "CoolSwitch=0") */
+    case SPI_GETFASTTASKSWITCH: *w = fast_switch(); return TRUE;
+    case SPI_SETFASTTASKSWITCH:
+        set_fast_switch(ui != 0);
+        if (ini & SPIF_UPDATEINIFILE)
+            write_int("CoolSwitch", ui != 0);
+        return TRUE;
     case SPI_GETICONTITLELOGFONT: {
         /* US2 found nothing written with uiParam 0 (UNVERIFIED content) */
         if (ui < sizeof(LOGFONT))

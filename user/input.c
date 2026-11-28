@@ -133,6 +133,9 @@ static void push_event(WORD msg, WORD wp, DWORD lp)
         set_wakebit(hqInput, (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) ? QS_MOUSE : QS_KEY);
 }
 
+static BYTE __far alt_switched;       /* Alt+Tab or Alt+Esc since Alt went down */
+BYTE __far switch_ended;              /* and its switching loop has ended (switch.c) */
+
 /* KEYBOARD's event procedure: AL = virtual key, AH bit 7 = released,
    BL = scan code, BH bit 0 = extended key (DDK) */
 void __far __pascal __loadds KBD_EVENT(WORD ax, WORD bx, WORD si, WORD di)
@@ -153,7 +156,9 @@ void __far __pascal __loadds KBD_EVENT(WORD ax, WORD bx, WORD si, WORD di)
             keystate[vk] ^= 1;          /* toggle */
         keystate[vk] |= 0x80;
     }
-    if (alt)
+    /* the Alt key's own press has the context bit too (3.1, US43:
+       WM_SYSKEYDOWN 12h with 2038h) */
+    if (alt || (vk == VK_MENU && !up))
         lp |= 0x20000000L;
     if (vk == VK_MENU || alt || vk == VK_F10)
         msg = up ? WM_SYSKEYUP : WM_SYSKEYDOWN;
@@ -161,6 +166,19 @@ void __far __pascal __loadds KBD_EVENT(WORD ax, WORD bx, WORD si, WORD di)
         msg = up ? WM_KEYUP : WM_KEYDOWN;
     if (vk == VK_MENU && up && !(lp & 0x20000000L))
         msg = WM_SYSKEYUP;
+    /* Alt let go after Alt+Tab or Alt+Esc: WM_KEYUP, without the context
+       bit once the switching loop has ended (3.1, US43: E038h in the
+       loop, also when Alt went up before the loop began; C038h to a
+       window after Esc or another key had ended it) */
+    if (vk == VK_MENU && !up)
+        alt_switched = switch_ended = 0;
+    else if (!up && alt && (vk == VK_TAB || vk == VK_ESCAPE))
+        alt_switched = 1;
+    if (vk == VK_MENU && up && alt_switched) {
+        msg = WM_KEYUP;
+        if (switch_ended)
+            lp &= ~0x20000000L;
+    }
     push_event(msg, vk, lp);
 }
 
@@ -650,10 +668,35 @@ HWND WINAPI GetActiveWindow(void)
     return hwndActive;
 }
 
+/* WM_ACTIVATEAPP to every top-level window of queue HQ, in Z order, the
+   hidden and owned ones too (3.1, US43: B's main, disabled and hidden
+   windows each got it; C's owned popup before C) */
+static void activate_app(HQUEUE hq, BOOL on, HTASK other)
+{
+    HWND t, next;
+    for (t = PW(hwndDesktop)->hwndChild; t; t = next) {
+        PWND tw = valid_wnd(t);
+        if (!tw)
+            break;
+        next = tw->hwndNext;
+        if (tw->hq == hq && t != hwndSwitch)
+            send_message(t, WM_ACTIVATEAPP, on, MAKELONG(other, 0));
+        if (next && !valid_wnd(next))
+            break;
+    }
+}
+
+/* SetWindowPos's activation: the Z order is its (pos.c) */
+BOOL activate_in_pos;
+HWND hwndActivePrev;            /* the window the switching keys left (pos.c) */
+
 void activate_window(HWND h, BOOL mouse)
 {
     HWND old = hwndActive;
+    HQUEUE oldhq = 0, newhq;
     PWND w = valid_wnd(h);
+    BOOL in_pos = activate_in_pos;
+    activate_in_pos = FALSE;
     if (h == old)
         return;
     if (h && !w)
@@ -667,30 +710,52 @@ void activate_window(HWND h, BOOL mouse)
         if (cbt_hook(HCBT_ACTIVATE, (WPARAM)h, (LPARAM)(void __far *)&ca) || !(w = valid_wnd(h)))
             return;
     }
+    /* the minimised flag of WM_ACTIVATE is 20h, the old window's too (3.1,
+       US43: an icon activated got 0001h with 0020h, a popup minimised and
+       so deactivated 0000h with 0020h) */
     if (old && valid_wnd(old)) {
+        oldhq = PW(old)->hq;
         send_message(old, WM_NCACTIVATE, FALSE, 0);
-        send_message(old, WM_ACTIVATE, WA_INACTIVE, MAKELONG(h, 0));
-        if (!h || PW(old)->hq != w->hq)
-            send_message(old, WM_ACTIVATEAPP, FALSE, 0);
+        if (valid_wnd(old))
+            send_message(old, WM_ACTIVATE, WA_INACTIVE,
+                         MAKELONG(h, (PW(old)->style & WS_MINIMIZE) ? 0x20 : 0));
+        if (!(w = valid_wnd(h)) && h)
+            return;
     }
+    /* (kept for a window activated by Alt+Tab or Alt+Esc only: pos.c) */
+    hwndActivePrev = switch_activating && old && valid_wnd(old) ? old : 0;
     hwndActive = h;
     if (!h) {
+        if (oldhq)
+            activate_app(oldhq, FALSE, 0);
         hqInput = 0;
         return;
     }
-    hqInput = w->hq;
+    hqInput = newhq = w->hq;
     {   /* the owner's last active popup (GetLastActivePopup) */
         PWND o = w;
         while (o->hwndOwner && valid_wnd(o->hwndOwner))
             o = PW(o->hwndOwner);
         o->hwndLastActive = h;
     }
-    set_window_pos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    if (!old || !valid_wnd(old) || PW(old)->hq != w->hq)
-        send_message(h, WM_ACTIVATEAPP, TRUE, 0);
+    /* to the top before WM_ACTIVATEAPP (3.1, US43: the window's
+       WM_WINDOWPOSCHANGING and -CHANGED after the old one's WM_ACTIVATE);
+       SetWindowPos's own activation has done it */
+    if (!in_pos)
+        set_window_pos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    if (oldhq != newhq) {
+        HTASK ot = oldhq ? q_of(oldhq)->task : 0, nt = newhq ? q_of(newhq)->task : 0;
+        if (oldhq)
+            activate_app(oldhq, FALSE, nt);
+        activate_app(newhq, TRUE, ot);
+    }
+    if (!(w = valid_wnd(h)) || hwndActive != h)
+        return;
     send_message(h, WM_NCACTIVATE, TRUE, 0);
+    if (!(w = valid_wnd(h)))
+        return;
     send_message(h, WM_ACTIVATE, mouse ? WA_CLICKACTIVE : WA_ACTIVE,
-                 MAKELONG(old, (w->style & WS_MINIMIZE) ? 1 : 0));
+                 MAKELONG(old, (w->style & WS_MINIMIZE) ? 0x20 : 0));
     /* the focus stays inside the active window or goes: an icon made
        active keeps none (DefWindowProc gives it the focus only when not
        minimised), and the keys go to the icon as WM_SYSKEYDOWN. It used
@@ -701,8 +766,10 @@ void activate_window(HWND h, BOOL mouse)
         /* an open window takes it itself, past WH_CBT (US30 cbt on 3.1,
            its SETFOCUS refused in the activation: the next SETFOCUS names
            the activated window as the old focus) */
-        if (!(w->style & WS_MINIMIZE))
-            focus_hooked = TRUE;
+        /* (an icon's: the focus goes without WH_CBT too: 3.1, US43, an
+           icon activated by Alt+Tab; the old focus got WM_KILLFOCUS with
+           no HCBT_SETFOCUS) */
+        focus_hooked = TRUE;
         set_focus((w->style & WS_MINIMIZE) ? 0 : h);
         focus_hooked = FALSE;
     }

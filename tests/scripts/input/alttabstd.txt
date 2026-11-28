@@ -1,0 +1,41 @@
+; Alt+Tab with an MS-DOS Prompt in Standard mode (boot-test case
+; alttabdos): COMMAND.COM from File > Run, Alt+Tab held in it (the task
+; switcher's title screen), let go (Windows); in Windows Alt+Tab held
+; (the switch box shows the prompt), let go (the prompt back), EXIT,
+; then Exit Windows
+click 1
+sleep 1
+shot 00-before
+key alt+f
+sleep 1
+key r
+sleep 2
+type COMMAND.COM
+key Return
+sleep 15
+shot 01-dos
+keydown alt
+key Tab
+sleep 3
+shot 02-title
+keyup alt
+sleep 15
+shot 03-win
+keydown alt
+key Tab
+sleep 2
+shot 04-box
+keyup alt
+sleep 15
+shot 05-dos
+type exit
+key Return
+sleep 15
+shot 06-back
+key alt+f
+sleep 1
+key x
+sleep 2
+key Return
+sleep 10
+shot 07-exit
