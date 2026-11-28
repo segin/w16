@@ -169,6 +169,12 @@ Setup from its disk images below `$W16_WIN32S_SRC`, default
 `.tools/win32s/src`, laid out as DISK1-DISK3: on 3.1 with w16's KRNL386 it
 must install and restart Windows, on w16's tree reach Setup's screen;
 skipped without the images; the boot-test case `win32s`),
+`tests/win32s/w32mrun.sh [-o OUTDIR] [-x] [ref|tree]` (W32M.EXE, w16's
+Win32 memory probe, on the Win32s reference install and on w16's tree
+with Win32s's files copied from it and w16's W32S device, the logs
+compared with addresses relative to the first reservation's by
+`tests/win32s/w32mcmp.py`; skipped without `.tools/ref/win31s`; the
+boot-test case `w32m`),
 `tests/lzexpand/lzscen.sh` (w16's LZEXPAND.DLL against Microsoft's, the
 probe's log section by section; the boot-test case `lzexpand` runs it),
 `tests/ver/vscen.sh` (w16's VER.DLL against Microsoft's, the probe's log
