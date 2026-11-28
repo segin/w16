@@ -55,7 +55,7 @@ export SETTASKQUEUE.34 resident
 export GETTASKQUEUE.35 resident
 export GETCURRENTTASK.36 resident
 export GETCURRENTPDB.37 resident
-export LOADMODULE.45 resident
+export LOADMODULE.45=KLOADMODULE resident
 export FREEMODULE.46 resident
 export GETMODULEHANDLE.47 resident
 export GETMODULEUSAGE.48 resident

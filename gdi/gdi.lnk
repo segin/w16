@@ -9,7 +9,7 @@ option start=gdi_libentry
 option quiet
 option map
 option heapsize=10000
-segment type code fixed preload
+segment type code moveable preload
 segment type data moveable preload
 library windows.lib
 import FARSETOWNER KERNEL.403

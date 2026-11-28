@@ -1089,6 +1089,37 @@ FAULTENTRY 0Ch
 FAULTENTRY 0Dh
 FAULTENTRY 0Eh
 
+; ---- KERNEL.45, LoadModule's exported entry ----
+; Adobe Type Manager's ATMSYS.DRV hooks LoadModule to see GDI load
+; (ARCHITECTURE.md 11.13). Observed at run time (black box): it compares
+; the first 5 bytes at the address GetProcAddress(KERNEL, 45) gives with
+; its own copy of them and, when they are equal, writes a far jump to its
+; hook over them; its hook runs those 5 bytes itself and jumps to the
+; entry + 5. So the entry starts with exactly these 5 bytes, a far Pascal
+; frame (as the SDK's far procedures have: an odd BP frame, the caller's
+; DS saved), and what follows them is w16's own code, which must work
+; whether it is reached through them or from the hook: it calls w16's C
+; LoadModule (loader.c) with the same two arguments. LoadLibrary and the
+; boot's loads come through here too (LoadLibrary passes -1 as the
+; parameter block: Pietrek, Windows Internals, ch. 3).
+global KLOADMODULE
+extern LOADMODULE               ; loader.c: u16 KAPI LoadModule(name, params)
+KLOADMODULE:
+        db 45h                  ; inc bp
+        db 55h                  ; push bp
+        db 8Bh, 0ECh            ; mov bp, sp
+        db 1Eh                  ; push ds
+        push word [bp + 12]             ; lpModuleName
+        push word [bp + 10]
+        push word [bp + 8]              ; lpParameterBlock
+        push word [bp + 6]
+        call far LOADMODULE
+        lea sp, [bp - 2]
+        pop ds
+        pop bp
+        dec bp
+        retf 8
+
 fault_common:
         push bp
         mov bp, sp

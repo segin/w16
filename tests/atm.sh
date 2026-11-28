@@ -24,14 +24,16 @@
 #            $W16_ACROREAD_DIR/FONTS and their .PFM and .MMM files in
 #            FONTS/PFM, put in the Windows directory and listed in
 #            ATM.INI's [Fonts] and [MMFonts] as Reader's Setup does).
-#            Windows 3.1 shows the document. On w16 Reader says "Adobe
-#            Type Manager was not found.": ATMSYS.DRV patches KERNEL's
-#            LoadModule to catch GDI's load and then patches GDI
-#            (Schulman, Undocumented Windows ch. 9); it reads w16's
-#            LoadModule through a data alias (AllocSelector,
-#            PrestoChangoSelector) and leaves it alone, and with
-#            Microsoft's KERNEL it does not take w16's GDI either. The
-#            first screens are compared: "xfail" while they differ
+#            Both sides must show the document: its links, red text in a
+#            Type 1 face that ATM draws, are counted in the document pane
+#            (w16 within 10% of 3.1; OUTDIR/acro-cmp.png has the two
+#            screens side by side). Before ATM's interoperability
+#            interface (ARCHITECTURE.md 11.13: LoadModule's and
+#            CreateDC's entries, the first instructions of the GDI
+#            functions it hooks) Reader said "Adobe Type Manager was not
+#            found." on w16. Not compared yet: the page's place (w16
+#            shows no vertical scroll bar and no status bar there) and
+#            the spacing of ATM's text
 #
 # The disks are never in the repository: $W16_ATM_DIR (default
 # ~/Downloads/atm) must hold DISK1.IMG and DISK2.IMG, the two 1.44 MB
@@ -155,10 +157,22 @@ acro)
     if [ ! -f "$a" ] || [ ! -f "$b" ]; then echo "FAIL atm acro: no screens ($out/acro-ref, acro-w16)"; rc=1
     elif grep -q '^w16: exception' "$out/acro-w16/work/c/OUT.TXT" 2>/dev/null; then
         echo "FAIL atm acro: $(grep -m1 '^w16: exception' "$out/acro-w16/work/c/OUT.TXT")"; rc=1
-    elif [ "$(compare -metric AE "$a" "$b" null: 2>&1 || true)" = 0 ]; then
-        echo "ok   atm acro: Acrobat Reader 2.0 shows its help document with ATM as on 3.1"
     else
-        echo "xfail atm acro: Reader says \"Adobe Type Manager was not found.\" on w16 (ATMSYS.DRV does not patch w16's LoadModule or GDI); 3.1 shows the document ($out/acro-ref, acro-w16)"
+        # the document's links, red text in its Type 1 face drawn through
+        # ATM, counted in the document pane: the page sits elsewhere on
+        # w16 (ARCHITECTURE.md 11.13), so counts are compared, not pixels
+        red() { convert "$1" -crop 490x380+148+70 +repage -fill white +opaque red \
+                    -fill black -opaque red -negate -format '%[fx:round(w*h*mean)]' info: 2>/dev/null ||
+                    echo 0; }
+        convert "$a" "$b" +append "$out/acro-cmp.png" 2>/dev/null || :
+        ra=$(red "$a") rb=$(red "$b")
+        if [ "$ra" -lt 1000 ]; then
+            echo "FAIL atm acro: 3.1 shows no document ($a)"; rc=1
+        elif [ $((rb * 10)) -lt $((ra * 9)) ] || [ $((rb * 10)) -gt $((ra * 11)) ]; then
+            echo "FAIL atm acro: Reader shows no document through ATM on w16 ($rb red pixels of link text, 3.1 $ra; $out/acro-cmp.png)"; rc=1
+        else
+            echo "ok   atm acro: Acrobat Reader 2.0 shows its help document through ATM as on 3.1 ($rb red pixels of link text, 3.1 $ra; $out/acro-cmp.png)"
+        fi
     fi ;;
 *) echo "atm.sh: no part $p" >&2; exit 2 ;;
 esac

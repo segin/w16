@@ -1611,7 +1611,21 @@ static int empty_name(const char FAR *name)
     return 1;
 }
 
+/* LoadLibrary is LoadModule with the parameter block -1 (Pietrek,
+   Windows Internals, ch. 3), through LoadModule's exported entry
+   (kentry.asm KLOADMODULE), as programs that hook LoadModule expect
+   (ARCHITECTURE.md 11.13); the boot's loads come here too (winboot.c
+   boot_load: 3.1's LoadNewExe calls LoadModule, Pietrek ch. 1) */
+extern void __far KLOADMODULE(void);
+#pragma aux KLOADMODULE "*"
+typedef u16 (__far __pascal *lm_entry)(const char FAR *name, void FAR *params);
+
 u16 KAPI LoadLibrary(const char FAR *name)                     /* KERNEL.95 */
+{
+    return ((lm_entry)KLOADMODULE)(name, (void FAR *)-1L);
+}
+
+static u16 load_library(const char FAR *name)
 {
     u16 err, r;
     module FAR *m;
@@ -1956,7 +1970,7 @@ static u16 load_module(const char FAR *name, void FAR *params, int oldapp)
     int not_ne, is_pe, outer;
 
     if (params == (void FAR *)-1L)
-        return LoadLibrary(name);
+        return load_library(name);
     m = find_loaded(name);
     if (m && ((m->flags & NEF_LIBRARY) || m == module_first)) {
         uses(m, 1);

@@ -1,91 +1,70 @@
-# Adobe Type Manager 3.0 on w16: handover (2026-11-28)
+# Adobe Type Manager 3.0 on w16: handover (2026-11-28, branch atm2)
 
 ## Where it stands
 
-- Fixed and tested: ATM 3.0's installer runs on w16's tree and installs the
-  same files, ATM.INI and SYSTEM.INI as on Windows 3.1 (boot-test case `atm`,
-  part install; `tests/atm.sh`). Causes found on the way: KERNEL's lstrcpy
-  used more of its caller's stack than 3.1's (TK84, case `strstack`), USER's
-  LB_DIR gave capitals and sorted bracketed items first (US42, case `lbdir`).
-- Not working: ATM itself. After the restart ATMSYS.DRV loads as the system
-  driver and loads the real SYSTEM.DRV, but ATM never hooks anything, and
-  Acrobat Reader 2.0 says "Adobe Type Manager was not found." (part acro
-  reports `xfail`; on 3.1 Reader shows HELP_R.PDF).
+- ATM 3.0 installs on w16 as on 3.1 (boot-test case `atm`, part install;
+  `tests/atm.sh`), and now runs: ATMSYS.DRV hooks w16's KERNEL LoadModule,
+  sees GDI load, hooks w16's GDI, loads ATM32.DLL when USER creates the
+  display's DC, and Acrobat Reader 2.0 shows its help document with its
+  Type 1 text drawn through ATM (part acro: a real check now, the red link
+  text counted in the document pane against 3.1's).
+- The interface ATM checks, how it was observed, what w16 carries and
+  what w16's code behind it does: ARCHITECTURE.md 11.13 (an
+  interoperability interface, the user's decision: minimal bytes learnt at
+  run time only; never disassemble, dump or read ATM's or Microsoft's
+  code). In short: LoadModule's export starts `inc bp/push bp/mov bp,sp/
+  push ds` (kentry.asm KLOADMODULE; LoadLibrary goes through it with -1);
+  CreateDC's export is 3.1's layout (gdi/atm.asm: jmp short over three
+  far calls whose operands GDI calls through, then a far procedure
+  `mov ax,DGROUP` + that frame); every GDI export begins with 5+ bytes of
+  movable whole instructions (stubs changed, EnumFontFamilies split from
+  EnumFonts); GDI's code segments moveable.
 
-## What ATMSYS.DRV does at load (observed with `[w16] trace=KERNEL.*`,
-`tracefrom=ATMSYS`, `traceret=1`)
+## Open (next steps)
 
-GetVersion; GetPrivateProfileString(boot, atm.system.drv); LoadLibrary
-(system.drv); GetProcAddress of SYSTEM's exports; ATM.INI [Settings]
-LanguageCode; WIN.INI [Intl] sLanguage; FindResource/LoadResource/
-LockResource of one of its own RCDATA resources; GetModuleHandle("KERNEL");
-GetProcAddress(KERNEL, 45 = LoadModule); AllocSelector(0);
-PrestoChangoSelector(LoadModule's code selector, new) (a data alias of
-KERNEL's code); FreeSelector. Nothing after: on w16 it writes nothing
-(LoadModule's bytes unchanged afterwards, checked with a probe that dumps
-w16's own code). Note: with `trace=KERNEL.*` GetProcAddress returns a trace
-thunk, so traced runs show ATMSYS reading the thunk, not LoadModule.
+1. Reader's page on w16 sits 9 px lower and to the right: Reader's
+   vertical scroll bar and its status bar ("1 of 18", "100%") are missing
+   on w16 (USER or Reader's layout; not looked into: another agent works
+   in USER). Compare atmtest/acro-cmp.png.
+2. ATM's text spacing differs slightly from 3.1's (same glyphs, other
+   advances; GDI's GetCharWidth/GetTextExtent/ExtTextOut with ATM's
+   realized fonts, the DDK's device-font interface). ™ (99h) shows another
+   glyph, also in Reader's outline pane (a raster face: GDI's mapping).
+3. Not checked: ATM's Control Panel (ATMCNTRL.EXE) showing ATM on, Type 1
+   text in Write or other programs, printing (ATM hooks StartDoc..AbortDoc).
+4. Two other pairs of GDI exports share their code (CreateBitmap and
+   CreateUserBitmap, RealizeDefaultPalette and IsDCCurrentPalette); ATM
+   hooks neither.
 
-Schulman (Undocumented Windows ch. 9): ATM patches KERNEL's LoadModule,
-watches for the load of GDI and then patches GDI.
+## Tools (in commit ba4595f, removed after it; restore with git show)
 
-## Tried (none made ATMSYS patch)
+KERNEL `[w16]` settings, all investigation aids: `aliasoracle=1..3` (a data
+alias of the last GetProcAddress'd procedure limited below it and grown a
+byte per GP fault: how far a check reads; KERNEL's code and GDI's module
+table compared before/after a hook; =3 logs GetProcAddress by name and the
+GDI.53 import), `steptrace=MODULE` (its LibMain step by step to
+C:\STEP.BIN: a word count, then 32 bytes a step, CS IP flags AX BX CX DX
+SI DI BP SP SS DS ES and two words at SS:SP) with `steptraceload=FILE` (a boot
+load, calls out of MODULE skipped: LSTEP.BIN), `steptracebait=1|SEG:OFF`
+(the procedure at CreateDC's first call operand: BSTEP.BIN),
+`steptracenp=1` (MODULE's code segments made not present while USER loads;
+the not-present fault starts a trace wherever its code is entered:
+NSTEP.BIN). Stepping KERNEL/GDI/driver code itself hangs or takes too long:
+skip it. DOSBox-X has no debug-register watchpoints (DPMI 0B00h set, never
+hit). Re-running a LibMain in the same boot hung (ATMSYS).
 
-w16's LoadModule export given a stub entry (then calling the C LoadModule),
-with the boot's loads going through it (winboot.c's boot_load calling the
-export with lpParameterBlock -1, which w16 treats as LoadLibrary):
-`B8 dgroup 45 55 8B EC 1E 8E D8`, `8C D8 90 45 55 8B EC 1E 8E D8`,
-`90 90 90 45 ...` (did not boot: DS), `1E 58 90 45 55 8B EC 1E 8E D8`,
-`45 55 8B EC 1E B8 dgroup 8E D8`. Also: 3.1 with Microsoft's KERNEL and
-w16's GDI: ATM not found either, so GDI has a check of its own.
-The experiment code was not committed (KLOADMODULE in a kpatch.asm, the
-export line `LOADMODULE.45=KLOADMODULE` in kernel.lnk).
+Hand runs on installation-05: /mnt/build/w16-runs/w16-atm2 (build/arun.sh
+NAME [dropin args]: the installed drive build/atminst/c (w16 tree) or, with
+INST=build/atminst/ref WD=WINDOWS, 3.1 with w16's KRNL386 (`SIDE=-r` for
+Microsoft's); ACRO=1 adds Reader and its fonts; `-f
+build/dos/GDI.EXE=WINDOWS/SYSTEM/GDI.EXE` w16's GDI on 3.1). Inputs:
+/mnt/build/w16-atm-in, /mnt/build/w16-acro-in/acroread; installed drives
+from the w16-atm run's build/atmtest.
 
-## Next step (approved: interoperability, learned at run time only)
+## Test state
 
-w16 may carry the minimal bytes ATMSYS is observed to check, with w16's own
-code behind them. Never disassemble, hex-dump or read Microsoft's KERNEL or
-Adobe's ATMSYS.DRV / ATM16.DLL code (nor ATMSYS's RCDATA, which may hold
-code bytes). A plan:
-
-1. Read extent oracle: w16 owns PrestoChangoSelector. When its source is
-   the code selector holding LoadModule, give the alias a limit just past
-   LoadModule's entry and, in KERNEL's exception 0Dh handler, when DS or ES
-   of the faulting context is that alias, raise its limit by one byte and
-   restart the instruction (count the raises). The final limit is the
-   highest byte read: with a compare that stops at the first difference it
-   tells how many leading bytes matched.
-2. Fast trials in one session: boot w16's tree without ATMSYS as the system
-   driver and let a probe LoadLibrary("ATMSYS.DRV") / FreeLibrary in a loop
-   (its LibMain repeats the check), changing LoadModule's entry bytes
-   between calls through an alias (w16's own code), one byte position at a
-   time, keeping the value that makes the read extent grow. A [w16] setting
-   or a KERNEL debug export can report the extent and whether ATMSYS wrote
-   (compare the entry before and after).
-3. Once ATMSYS writes its patch, see where it jumps and what it expects of
-   the code after the patched bytes (the hook later calls the original), and
-   make w16's entry carry exactly those bytes, then its code. Route the
-   loads ATM must see (the boot's GDI at least) through the export entry.
-4. Then the same for GDI (its check runs when GDI loads): its exported
-   font/text entries already start `B8 seg 45 55 89 E5 1E 8E D8` (OpenWatcom
-   encodes mov bp,sp as 89 E5, MASM as 8B EC).
-5. Turn part acro of `tests/atm.sh` into a real check; document the
-   interface in ARCHITECTURE.md (what is checked, how observed, what w16
-   carries). Stop and report if more than a minimal sequence is needed.
-
-Inputs on installation-05: /mnt/build/w16-atm-in (DISK1.IMG, DISK2.IMG),
-/mnt/build/w16-acro-in/acroread (Reader, with FONTS/ holding Reader's own
-ATM fonts). An installed drive to boot from: run `tests/atm.sh -o DIR install`
-and use DIR/install-w16/work/c with DROPIN_COVER (replace the tree's own
-binaries in its W16 directory with the build's first).
-
-## Test state (branch after merging master, 2026-11-28)
-
-make test passes. Full boot test: 200 ok, failures k286 and k286x (fixed
-since: kstr.asm had been assembled with 386 near conditional jumps, an
-invalid opcode on DOSBox-X's 286; k286 passes again), lzexpand (quirks:
-eof, zero, long matches; fails the same way on a clean master build) and
-bigmem (bigmem-refe: TK63 did not end on Microsoft's side: that reference
-timed out under the full run's load and was cached as it was, so the
-reruns read the failed log; with BOOTTEST_REFRESH=1 it passes). atm:
-install ok, acro xfail.
+Branch atm2 at 32af8f3: make test passes; boot-test cases atm (install ok,
+acro ok: 3455 red pixels of link text, 3.1 3406), acroread, appexit,
+strstack, lbdir, gdi, gdik, gdifont, writefonts, kernel, k286, k386 ok.
+Full boot test: 203 ok, 1 failure, lzexpand (quirks: eof, zero, long
+matches), which fails the same way on a clean master build.
