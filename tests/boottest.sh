@@ -36,6 +36,12 @@
 #              3.1 (tests/acroread.sh; skipped without its files,
 #              $W16_ACROREAD_DIR): it ends itself after its box, and
 #              Windows goes on and ends without a fault
+#   atm        Adobe Type Manager 3.0's installer on w16's tree and on 3.1
+#              (tests/atm.sh; skipped without its disk images,
+#              $W16_ATM_DIR): the same fonts, ATM.INI and SYSTEM.INI, and
+#              Windows restarted with ATMSYS.DRV; then Acrobat Reader 2.0
+#              with ATM (xfail: on w16 Reader does not find ATM, whose
+#              ATMSYS.DRV leaves w16's LoadModule and GDI unpatched)
 #   kexedir    TK69 (tests/apps/tk69.c) as the shell: where KERNEL finds
 #              the DLLs a program in a directory of its own imports, what
 #              LoadModule and WinExec make of OS/2 and other foreign NE,
@@ -1195,7 +1201,7 @@ cplinicmp() {
     _b=$(sed 's/^\(color schemes=\)w16 Default/\1Windows Default/' "$2"; echo .)
     [ "$_a" = "$_b" ]
 }
-cases=${*:-kernel dosx dosxaudit appexit acroread kexedir wpregs mdistyle selfload staroff win32s w32m rsrchandler strstack lbdir exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
+cases=${*:-kernel dosx dosxaudit appexit acroread atm kexedir wpregs mdistyle selfload staroff win32s w32m rsrchandler strstack lbdir exitexec pestart kcmdline k286 k386 k386all k386e k386cad k386hung lastexit odstring wincom allw16 user userk gdi gdik usergdi gdiaudit gdimeta gdidib gdiconv gdifont gdisubst winoldap winoldapk winoldapw wincomswap winprompt shell shellk tree allw16full input allw16input allw16bootinput allw16nolock exitwin exittree runfront runfrontk about dragoff dragoffk pmdrop tabs alttab helpmenus sbmenu sbdrag mmerge holdbtn edithandle capcursor trackmove gpuser deskver icons winfile runbrowse pmitems pmarrange w16groups ddescen scrnsave zipsetup pmclose write w16write writefonts w16winfile cardfile control cplclick cpclose mousespeed missingdll runassoc runpe olecli olesvr ddeml lzexpand ver drivers quicktime timer mmsystem sb16 toolhelp treek386 mouse mouseall woados woadosbat swapdos swapalt swapall swapesc pmkeys kbd kbdall kbdwrite kbdwoados kbdsnap comm commdlg mdimax uaudit lbclip lbdraw combo menutab editwrap edit32k commuser commall termclose sysdrv sysdrvall sysdrvwoados sysboot sysclock sysprobe sound soundtime soundrec soundbeep soundboot treealone vga vgaboot vgaall vgawoados vgaprobe trails win386 win386input win386cad win386close win386hung win386dos win386dosw win386switch win386two win386exitbox win386w16dos win386tree win386pad win386woa win386plain win386audit win386doscad win386dosprobe win386dospif win386hdd win386idle vmtasksoak win386xms win386memload win386mcb win386exit win386dpmi vsd vdmad memsvc vmprobe win386vxc msvc msvcapps faultrep msquery cvdos msvccl bigmem filecdr nametable dlgfocus installers}
 user=$root/build/dos/USER.EXE
 gdi=$root/build/dos/GDI.EXE
 # Notepad's caret in the kbtype script's 01-typed (16,119) and 02-edited
@@ -1637,6 +1643,17 @@ runcase() {
         done
         if [ "$r" = ok ]; then echo "ok   appexit: a program ending with INT 21h 4Ch, windows up: none of its window procedures called, its windows gone, as 3.1"
         else echo "FAIL appexit: $r"; fails=$((fails + 1)); fi ;;
+    atm)
+        # Adobe Type Manager 3.0 and Acrobat Reader 2.0 with it (tests/atm.sh;
+        # skip without $W16_ATM_DIR's disk images)
+        "$root/tests/atm.sh" -o "$out/atm" > "$out/atm.txt" 2>&1 || true
+        if grep -q '^FAIL' "$out/atm.txt"; then
+            echo "FAIL atm: $(grep -m1 '^FAIL' "$out/atm.txt" | sed 's/^FAIL *atm *//') ($out/atm.txt)"; fails=$((fails + 1))
+        elif grep -q '^skip atm:' "$out/atm.txt"; then echo "ok   atm: $(grep -m1 '^skip' "$out/atm.txt")"
+        elif grep -q '^ok   atm install' "$out/atm.txt"; then
+            echo "ok   atm: $(grep -m1 '^ok   atm install' "$out/atm.txt" | sed 's/^ok *atm install: //')"
+            grep '^xfail' "$out/atm.txt" | sed 's/^xfail atm acro:/xfail atm (acro):/' || true
+        else echo "FAIL atm: no result ($out/atm.txt)"; fails=$((fails + 1)); fi ;;
     acroread)
         # Acrobat Reader 2.0 (tests/acroread.sh; skip without $W16_ACROREAD_DIR)
         "$root/tests/acroread.sh" -o "$out/acroread" > "$out/acroread.txt" 2>&1 || true

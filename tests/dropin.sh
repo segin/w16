@@ -67,6 +67,10 @@
 # DROPIN_CDROM=ISO: the ISO 9660 image ISO mounted as D:, a CD-ROM drive
 # (DOSBox's imgmount -t iso, with its MSCDEX), as a user mounts a CD
 # (tests/staroff.sh); not with DROPIN_DDRIVE
+# DROPIN_FLOPPY="IMG [IMG...]": copies of these 1.44 MB disk images
+# mounted as floppy drive B:, the first one in the drive (DOSBox-X swaps
+# in the next one from its Drive menu, as a user swaps disks; paths
+# without blanks); DROPIN_FLOPPYA the same for drive A: (tests/atm.sh)
 # DROPIN_COVER=DIR: DIR's files copied over the scratch C: drive (DIR's
 # top level is C:\), before -f's files and -i's settings: an application
 # installed before, kept outside the repository (hand runs of StarOffice)
@@ -276,6 +280,25 @@ if [ -n "${DROPIN_CDROM:-}" ]; then
     [ -z "${DROPIN_DDRIVE:-}" ] || { echo "DROPIN_CDROM and DROPIN_DDRIVE both want D:" >&2; exit 2; }
     cdrom=$(cd "$(dirname "$DROPIN_CDROM")" && pwd)/$(basename "$DROPIN_CDROM")
 fi
+# floppy LETTER IMG...: copies of the images, and the imgmount line
+floppies=
+rm -rf "$work/floppy"
+floppy() {
+    _l=$1; shift
+    [ $# -gt 0 ] || return 0
+    mkdir -p "$work/floppy"
+    _m="imgmount $_l"
+    for _img in "$@"; do
+        cp "$_img" "$work/floppy/$_l$(basename "$_img")"
+        _m="$_m \"$work/floppy/$_l$(basename "$_img")\""
+    done
+    floppies="$floppies
+$_m -t floppy"
+}
+# shellcheck disable=SC2086
+floppy a ${DROPIN_FLOPPYA:-}
+# shellcheck disable=SC2086
+floppy b ${DROPIN_FLOPPY:-}
 mkdir -p "$work/clock"
 cp "$root/build/dos/CLOCKSET.COM" "$work/clock/" || { echo "missing $root/build/dos/CLOCKSET.COM (make dos)" >&2; exit 2; }
 common="[dosbox]
@@ -293,7 +316,7 @@ D:\\CLOCKSET
 mount -u d
 mount c \"$work/c\"${DROPIN_DDRIVE:+
 mount d \"$work/d\"}${cdrom:+
-imgmount d \"$cdrom\" -t iso}
+imgmount d \"$cdrom\" -t iso}$floppies
 c:
 cd \\$wdir
 $cmd$redir

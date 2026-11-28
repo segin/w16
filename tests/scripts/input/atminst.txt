@@ -1,0 +1,36 @@
+; Adobe Type Manager 3.0's installer (tests/atm.sh): started from Program
+; Manager's File > Run in C:\INSTALL\ATM\DISK1 (the disks' files), its
+; main dialog's Install, the prompt for Font Disk 1 answered with
+; C:\INSTALL\ATM\DISK2, then "ATM has been installed successfully. You
+; must restart Windows now." and Restart Windows; Windows comes back with
+; ATMSYS.DRV as its system driver. Before the fix the installer stopped
+; at once: "The Installer Configuration file is missing the following
+; entry: ':*'" (KERNEL's lstrcpy wrote over the stack below its caller)
+key alt+f
+sleep 1
+key r
+sleep 2
+typex c:\install\atm\disk1\install.exe
+key Return
+sleep 20
+settle 120 8
+shot 01-main
+key Return
+sleep 20
+settle 300 10
+shot 02-disk2
+typex c:\install\atm\disk2
+key Return
+sleep 60
+settle 600 15
+shot 03-done
+key Return
+sleep 30
+settle 180 10
+shot 04-restarted
+key alt+F4
+sleep 3
+settle 20 2
+shot 05-exitbox
+key Return
+waitexit 60

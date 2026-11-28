@@ -53,6 +53,10 @@
 #     key KEYS          xdotool key names, e.g. alt+f Escape Return
 #     keydown KEYS / keyup KEYS  press or release keys only (a key held
 #                       while others are typed, e.g. Alt for Alt+keypad)
+#     typex TEXT        type TEXT exactly ("type" adds a blank after a
+#                       single word: a path typed into a box with it named
+#                       a directory "DISK2 " to Adobe Type Manager's
+#                       installer)
 #     type TEXT         type text (key and type: INPUTRUN_KEYDELAY ms between
 #                       keys, default 50; xdotool's 12 lost keys under load,
 #                       on Microsoft's side as on w16's: DOSBox took them in
@@ -485,6 +489,7 @@ tr -d '\r' < "$script" | while read -r cmd a b; do
     keydown) xdotool keydown --window "\$wid" \$a \$b ;;
     keyup) xdotool keyup --window "\$wid" \$a \$b ;;
     type) xdotool type --delay ${INPUTRUN_KEYDELAY:-50} --window "\$wid" "\$a \$b" ;;
+    typex) xdotool type --delay ${INPUTRUN_KEYDELAY:-50} --window "\$wid" "\$a\${b:+ \$b}" ;;
     sleep) sleep "\$a" ;;
     waitexit) waitexit "\$a" ;;
     shot) shot "\$a" ;;

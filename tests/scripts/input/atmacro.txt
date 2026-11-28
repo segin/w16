@@ -1,0 +1,13 @@
+; Acrobat Reader 2.0 with Adobe Type Manager 3.0 (tests/atm.sh): started
+; from Program Manager's File > Run with its help document; on 3.1 it
+; shows the document's first page, on w16 (2026-11-28) the box "Adobe
+; Type Manager was not found."
+key alt+f
+sleep 1
+key r
+sleep 2
+typex c:\acroread\acroread.exe c:\acroread\help\help_r.pdf
+key Return
+sleep 20
+settle 180 8
+shot 01-reader

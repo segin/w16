@@ -239,6 +239,20 @@ and optionally Setup's ACROREAD.INI; without Adobe Type Manager it shows its
 box and ends itself, on w16's tree and on 3.1 in 386 Enhanced mode, and
 Windows must go on and end without a fault; skipped without it; the
 boot-test case `acroread`),
+`tests/atm.sh [-o OUTDIR] [install] [acro]` (Adobe Type Manager 3.0's
+installer from its two disk images in `$W16_ATM_DIR`, default
+`~/Downloads/atm` (DISK1.IMG, DISK2.IMG, read with mtools), run from
+C:\INSTALL\ATM\DISK1 on w16's tree and on 3.1 in 386 Enhanced mode, the
+fonts, ATM.INI and SYSTEM.INI compared and Windows restarted with
+ATMSYS.DRV; then Acrobat Reader 2.0 from `$W16_ACROREAD_DIR`, whose
+`FONTS/` must hold Reader's own ATM fonts (ZX______, ZY______, ZD______
+.PFB, their .PFM and .MMM in `FONTS/PFM`), with its help document on each
+side's installed drive: `xfail` while w16 does not run ATM; skipped
+without the images; the boot-test case `atm`),
+`tests/dropin.sh`'s `DROPIN_FLOPPY="IMG ..."` mounts copies of disk
+images as floppy drive B: (`DROPIN_FLOPPYA` as A:), and
+`tests/inputrun.sh`'s `typex TEXT` types text exactly (`type` adds a
+blank after a single word),
 `tests/staroff.sh` (StarOffice 3.1's CD image, `$W16_STAROFF_ISO`, default
 `~/Downloads/staroffice/STAROFF.ISO`, mounted as a CD-ROM drive D: with
 `tests/dropin.sh`'s `DROPIN_CDROM`; Microsoft's OLE 2 libraries from it
