@@ -627,6 +627,11 @@ $(DOS)/VIDMODE.COM: tests/dos/vidmode.asm
 	@mkdir -p $(@D)
 	$(NASM) -f bin -o $@ $<
 dos: $(DOS)/VIDMODE.COM
+# TXTDUMP.COM: the text screen to C:\SCREEN.TXT (boot-test faultrep)
+$(DOS)/TXTDUMP.COM: tests/dos/txtdump.asm
+	@mkdir -p $(@D)
+	$(NASM) -f bin -o $@ $<
+dos: $(DOS)/TXTDUMP.COM
 # CLOCKSET.COM: DOS's date and time set to a fixed moment (tests/dropin.sh,
 # before WIN: screens never show the host's clock)
 $(DOS)/CLOCKSET.COM: tests/dos/clockset.asm
@@ -2711,6 +2716,9 @@ $(B)/w16ver.h: VERSION FORCE
 FORCE:
 $(B)/user/u_deskver.o: $(B)/w16ver.h
 $(B)/user/u_deskver.o: UUCFLAGS += -i=$(B)
+# KERNEL's crash log names the version in its header (kernel/fault.c)
+$(B)/kernel/fault.o $(B)/kernel386/fault.o: $(B)/w16ver.h
+$(B)/kernel/fault.o $(B)/kernel386/fault.o: KCFLAGS += -i=$(B)
 $(B)/user/uentry.o: user/uentry.asm
 	@mkdir -p $(@D)
 	$(NASM) $(NFLAGS) -o $@ $<
