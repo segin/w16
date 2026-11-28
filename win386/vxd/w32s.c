@@ -457,7 +457,7 @@ static int file_read(const char *path, vu32 off, vu32 n, vu32 to)
  * number, 11h maps a view of it, 13h and 12h unmap a view, 0Fh closes it.
  * Every view of a mapping shows the same memory (W32M: a write through one
  * view is read through the other). w16's keeps a mapping's contents in
- * pages of its own (a reservation in the memory of the system), filled
+ * pages of its own (a reservation), filled
  * from the file when the mapping is made (3.1 reads each page from the
  * file when it is first touched, through a duplicate of the program's DOS
  * handle kept until 0Fh: Win32s copies an NLS file's view between 11h and
@@ -528,6 +528,23 @@ static void task_psp_out(vu32 old)
 {
     if (old) dos(0x5000, old, 0, 0, NULL);
 }
+
+/* the debug registers, and the coprocessor's state saved (FNSAVE, which
+ * reinitialises it, then FRSTOR: the client keeps its state) */
+static vu32 get_dr0(void);
+static vu32 get_dr1(void);
+static vu32 get_dr2(void);
+static vu32 get_dr3(void);
+static vu32 get_dr6(void);
+static vu32 get_dr7(void);
+#pragma aux get_dr0 = "mov eax, dr0" value [eax] modify exact [eax];
+#pragma aux get_dr1 = "mov eax, dr1" value [eax] modify exact [eax];
+#pragma aux get_dr2 = "mov eax, dr2" value [eax] modify exact [eax];
+#pragma aux get_dr3 = "mov eax, dr3" value [eax] modify exact [eax];
+#pragma aux get_dr6 = "mov eax, dr6" value [eax] modify exact [eax];
+#pragma aux get_dr7 = "mov eax, dr7" value [eax] modify exact [eax];
+static void fpu_save(void *p);
+#pragma aux fpu_save = "fnsave [eax]" "frstor [eax]" parm [eax] modify exact [];
 
 #define CF_SET(c)   ((c)->eflags |= VF_CF)
 #define CF_CLR(c)   ((c)->eflags &= ~VF_CF)
@@ -699,7 +716,11 @@ void __cdecl w32s_api(struct vregs *r)
             if (!dup) size = 0;
         }
         n = (size + PAGE - 1) & ~(PAGE - 1);
-        if (f && n && (f->store = virtual_alloc(0, n, 0x80003000u, 0x04)) != 0) {
+        /* the paging file's pages are Win32 memory (3.1: W32M's views
+         * came after the mapping's size in the arena), a file's are the
+         * system's (3.1: the first NLS view where the next reservation
+         * would have gone) */
+        if (f && n && (f->store = virtual_alloc(0, n, dup ? 0x80003000u : 0x3000u, 0x04)) != 0) {
             f->used = 1;
             f->dos = dup;
             f->size = size;
@@ -816,10 +837,27 @@ void __cdecl w32s_api(struct vregs *r)
         c->eax = 0;
         break;
     }
+    case 0x14:                          /* a thread's debug registers for a CONTEXT (Win32s
+                                           builds an exception's context: ESI the CONTEXT,
+                                           Win32; EDX its Dr0 (linear), ECX 0 to get them
+                                           (3.1: Dr0-Dr3 0, Dr6 FFFF0FF0h, Dr7 400h, the
+                                           processor's), 1 to set them (UNVERIFIED: kept) */
+        if ((c->ecx & 0xFF) == 0 && c->edx) {
+            vu32 *d = (vu32 *)c->edx;
+            d[0] = get_dr0(); d[1] = get_dr1(); d[2] = get_dr2(); d[3] = get_dr3();
+            d[4] = get_dr6(); d[5] = get_dr7();
+        }
+        c->eax = 0x14;                  /* (3.1: EAX as it came) */
+        break;
+    case 0x15:                          /* the coprocessor's state for a CONTEXT: EDX 1 saves
+                                           it at the CONTEXT's FloatSave (ESI + 1Ch, Win32;
+                                           3.1: control word 037Fh after Windows's FNINIT)
+                                           and keeps it; EDX 0: nothing seen (UNVERIFIED) */
+        if (c->edx == 1 && c->esi) fpu_save((void *)(W32LIN(c->esi) + 0x1C));
+        c->eax = 0x15;
+        break;
     case 0x0B:                          /* (at a process's end: UNVERIFIED) */
-    case 0x14:                          /* an exception's context (UNVERIFIED: nothing given yet) */
-    case 0x15:
-    case 0x1F:                          /* (once at a process's start) */
+    case 0x1F:                          /* (once at a process's start: nothing seen changed) */
         c->eax = 0;
         break;
     case 0x0A:                          /* (no effect seen) */
