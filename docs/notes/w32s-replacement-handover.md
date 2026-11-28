@@ -90,4 +90,15 @@ Open (next steps, in order):
 
 ## Test state
 
-See the end of this file once the branch's test runs are done.
+2026-11-28, at "Docs: 12.20 the device API's mappings ...", on installation-05:
+- `tools/remote-test.sh -n w16-w32s3-t` with make test and the cases
+  win32s pestart vmprobe ver memsvc bigmem toolhelp win386 win386dos
+  win386two win386tree msvc msvccl win386dpmi kernel k386 w32m
+  rsrchandler: make test passes, 18 ok. In win32s, k386, treems and tree
+  are ok; Freecell's lines are still open in all three ("Out of memory").
+- Full boot test (`-n w16-w32s3-f`): 197 ok, 2 failures.
+  - lzexpand quirks: fails the same way on master.
+  - toolhelp ref3 "group e did not finish" in its Microsoft run: failed
+    twice in that run directory, but toolhelp passes on this branch in a
+    fresh directory (`-n w16-w32s3-th`) as on master (`-n w16-w32s3-m`):
+    the directory's state, not the code.
