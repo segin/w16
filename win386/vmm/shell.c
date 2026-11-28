@@ -90,6 +90,7 @@ struct shev { u32 own1, own2, vm; u16 hwnd, zero; u32 data; u16 msg; u8 rest[0x4
 #pragma pack()
 #define NEVENTS 32
 static struct shev *evs;
+static struct shev *sw_rec;             /* the last switching key's record (event 41Eh) */
 static u32 ev_next;
 
 static int is_command(const char *p);
@@ -299,6 +300,7 @@ static void post_now(struct vm *sys, void *arg)
     e->hwnd = (u16)s->hwnd;
     e->data = a->data;
     e->msg = (u16)a->msg;
+    if (a->msg == 0x41E) sw_rec = e;    /* (function 0Ch) */
     args[0] = (u16)s->hwnd;
     args[1] = (u16)a->msg;
     args[2] = (u16)a->wparam;
@@ -814,8 +816,9 @@ void shell_api(struct cregs *r)
          * Alt+Tab let go on a Windows window Microsoft's WINOA386 passes
          * EAX 0 here under w16's SHELL, 1 under 3.1's: UNVERIFIED why;
          * the System VM's either way, as on 3.1) */
-        if (AX(r) == 1 || sw_to_windows) {
+        if (AX(r) == 1 || (sw_to_windows && (struct shev *)r->edi == sw_rec)) {
             sw_to_windows = 0;
+            sw_rec = NULL;
             focus3(&sysvm, 0, 1);
             vm_set_focus(&sysvm);
             r->eax = 1;
@@ -824,10 +827,12 @@ void shell_api(struct cregs *r)
              * (Windows 3.1, VXSH: Alt+Tab let go on the VM's own title,
              * the devices' focus to it and Resume_VM) */
             struct shev *e = (struct shev *)r->edi;
-            struct vm *b = evs && e >= evs && e < evs + NEVENTS ? vm_of(e->vm) : NULL;
-            /* (not a VM whose program has ended: its record comes
-             * back that way too before it is destroyed) */
+            struct vm *b = e == sw_rec ? vm_of(e->vm) : NULL;
+            /* (only a switching key's record: others come back with EAX
+             * 0 too, a message's (SHELL_Message: its box would go behind
+             * the VM) or an ended program's) */
             if (b && sh_of(b) && !sh_of(b)->ended_posted && b->id) set_focus(b, 0);
+            sw_rec = NULL;
             r->eax = 0;
         }
         return;
