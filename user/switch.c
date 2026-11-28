@@ -40,7 +40,8 @@
  * - With a system-modal window up, nothing (the keys are the box's).
  * The switch window exists from the start, hidden, above all other
  * windows (WM_WINDOWPOSCHANGING's hwndInsertAfter is it for a window
- * brought to the top: pos.c).
+ * brought to the top: pos.c); w16 links it into the Z order only while
+ * it shows (switch_init).
  */
 #include "user.h"
 
@@ -69,12 +70,17 @@ void set_fast_switch(BOOL on)
     coolswitch = on != 0;
 }
 
-/* the switch window, made at start-up behind every window made later
-   (WS_EX_TOPMOST keeps the others under it), hidden */
+/* the switch window, made at start-up, hidden. 3.1 keeps it hidden above
+   every window (a window brought up reports it as hwndInsertAfter: pos.c);
+   w16 keeps it out of the Z order while hidden: a hidden window first in
+   it changed what Write, Program Manager and Write's font dialog drew
+   (boot-test cases write, mdimax, writefonts) */
 void switch_init(void)
 {
     hwndSwitch = create_window(WS_EX_TOPMOST, MAKEINTRESOURCE(32771), NULL, WS_POPUP,
                                0, 0, 0, 0, 0, 0, hInstUser, NULL);
+    if (valid_wnd(hwndSwitch))
+        unlink_window(PW(hwndSwitch));
 }
 
 /* the window that stands for H in the ring: its top-level owner */
@@ -178,6 +184,8 @@ static void box_hide(void)
     if (valid_wnd(hwndSwitch) && (PW(hwndSwitch)->style & WS_VISIBLE))
         set_window_pos(hwndSwitch, 0, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE |
                        SWP_NOZORDER | SWP_NOACTIVATE);
+    if (valid_wnd(hwndSwitch))
+        unlink_window(PW(hwndSwitch));
 }
 
 /* the switch window over RC, on top, its paint this task's */

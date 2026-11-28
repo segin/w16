@@ -281,6 +281,10 @@ BOOL set_window_pos(HWND h, HWND after, int x, int y, int cx, int cy, UINT flags
             for (s = parent->hwndChild; s && s != h && (PW(s)->exstyle & WS_EX_TOPMOST); s = PW(s)->hwndNext)
                 last = s;
             shown_after = last;
+            /* (the switch window, out of w16's Z order while hidden:
+               switch.c) */
+            if (!last && hwndSwitch && h != hwndSwitch)
+                shown_after = hwndSwitch;
             /* a window with an icon title (shown, or hidden since it was
                restored): under it, as it goes up first (3.1, US42) */
             if (it)
