@@ -1630,10 +1630,13 @@ alttabdos_part() {
             [ "$(python3 "$root/tests/scripts/shotpix.py" pixel "$f" 124 204)" = 868a8e ] &&
                 [ "$(python3 "$root/tests/scripts/shotpix.py" pixel "$f" 515 240)" = ffffff ] || continue
             m="rectangle 0,0 639,199 rectangle 0,280 639,479 rectangle 0,200 119,279 rectangle 520,200 639,279"
-            m="$m rectangle 160,224 191,255 rectangle 104,232 391,247" ;;   # (and its title: w16's font)
+            # (and its title and the pointer over it: w16's font, its place)
+            m="$m rectangle 160,224 191,255 rectangle 104,232 391,262" ;;
         tree*)
+            # the bar and the screen, not the title's text (the tree's
+            # program is "Command Prompt")
             [ "$(python3 "$root/tests/scripts/shotpix.py" pixel "$f" 100 20)" = 0000aa ] || continue
-            m="rectangle 0,0 0,0" ;;
+            m="rectangle 18,16 701,31" ;;
         esac
         magick "$f" -fill black -draw "$m" "$out/alttabdos-$_dp-a.png"
         magick "$a" -fill black -draw "$m" "$out/alttabdos-$_dp-b.png"
